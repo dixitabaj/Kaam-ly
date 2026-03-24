@@ -505,7 +505,7 @@ export const classifyImage = async (file) => {
 export const updateTaskStatus = async (taskId, status) => {
   try {
     const response = await fetch(
-      `http://127.0.0.1:8000/api/taskStatus/update/${taskId}`,
+      `http://127.0.0.1:8000/api/task/${taskId}/status`,
       {
         method: "PATCH",
         headers: {
@@ -1113,3 +1113,29 @@ export const postReport = (reportData) =>
     headers: authH(),
     body: JSON.stringify(reportData),
   });
+
+  export const autoCancelExpiredTasks = async () => {
+  try {
+    const response = await fetch(`http://localhost:8000/api/tasks/auto-cancel-expired`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!response.ok) throw new Error("Auto-cancel failed");
+    return await response.json();
+  } catch (err) {
+    console.error("Auto-cancel expired tasks failed:", err);
+  }
+};
+
+export const autoCancelConfirmedUnpaidTasks = async () => {
+  try {
+    const response = await fetch(`http://localhost:8000/api/tasks/auto-cancel-confirmed-unpaid`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!response.ok) throw new Error("Auto-cancel confirmed unpaid failed");
+    return await response.json();
+  } catch (err) {
+    console.error("Auto-cancel confirmed unpaid tasks failed:", err);
+  }
+};

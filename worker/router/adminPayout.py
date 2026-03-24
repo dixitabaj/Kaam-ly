@@ -8,10 +8,13 @@ import hmac
 import hashlib
 import base64
 import httpx
+import json
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from bson import ObjectId
 from worker.config.database import collection_task, collection_worker
+from worker.router import notifications
+from worker.manager import websocket_manager
 
 router = APIRouter(prefix="/api", tags=["admin-payouts"])  # ← fixed prefix
 
@@ -203,4 +206,227 @@ async def bulk_payout(sandbox: bool = True):
         "succeeded": succeeded,
         "failed":    failed,
         "results":   results
+    }
+
+"""
+Add these routes to your existing payout.py (admin_payout.py).
+They handle the customer refund queue — fetching pending refunds
+and marking them as processed with customer + worker notifications.
+"""
+
+# ── Add these imports at the top of your payout.py (if not already present) ──
+# from fastapi import APIRouter, HTTPException
+# from bson import ObjectId
+# from datetime import datetime
+# from worker.config.database import collection_task, collection_worker
+# from ..router import notifications          ← your existing notifications module
+# from ..manager import websocket_manager    ← your existing WS manager
+# import json
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /api/refunds/pending
+# Returns all cancelled tasks that had a payment and need a refund processed
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/refunds/pending")
+def get_pending_refunds():
+    # Single clean query using $or instead of nested $in with $exists
+    tasks = list(collection_task.find({
+        "status":        "cancelled",
+        "paymentStatus": "paid",
+        "refundAmount":  {"$gt": 0},
+        "$or": [
+            {"refund_status": "pending_refund"},
+            {"refund_status": {"$exists": False}},
+        ]
+    }))
+
+    result = []
+    for task in tasks:
+        task_id     = str(task["_id"])
+        customer_id = task.get("userId")
+        worker_id   = task.get("assignedWorkerId")
+
+        customer = None
+        if customer_id:
+            try:
+                from ..config import database as db
+                customer = db.collection_user.find_one({"_id": ObjectId(customer_id)})
+            except Exception:
+                pass
+
+        worker = None
+        if worker_id:
+            try:
+                worker = collection_worker.find_one({"_id": ObjectId(worker_id)})
+            except Exception:
+                pass
+
+        result.append({
+            "task_id":        task_id,
+            "task_name":      task.get("taskName") or task.get("taskDescrip", "Unnamed Task"),
+            "customer_id":    customer_id,
+            "customer_name":  f"{customer.get('firstName','')} {customer.get('lastName','')}".strip() if customer else "Unknown",
+            "customer_email": customer.get("email", "") if customer else "",
+            "total_cost":     task.get("totalCost", 0),
+            "refund_amount":  task.get("refundAmount", 0),
+            "penalty_amount": task.get("penaltyAmount", 0),
+            "cancel_reason":  task.get("cancelReason", ""),
+            "cancelled_at":   str(task.get("cancelledAt", "")),
+            "refund_status":  task.get("refund_status", "pending_refund"),
+            "refunded_at":    str(task.get("refunded_at", "")) if task.get("refunded_at") else None,
+            "worker_name":    f"{worker.get('firstName','')} {worker.get('lastName','')}".strip() if worker else "Unknown",
+        })
+
+    total_owed = sum(r["refund_amount"] for r in result if r["refund_status"] != "refunded")
+    return {"count": len(result), "total_owed": total_owed, "refunds": result}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /api/refunds/{task_id}/mark-refunded
+# Admin calls this after manually processing the refund in eSewa.
+# Notifies the customer (FCM + email) and worker via WebSocket + FCM.
+# ─────────────────────────────────────────────────────────────────────────────
+@router.post("/refunds/{task_id}/mark-refunded")
+async def mark_refund_processed(task_id: str):
+    """
+    Mark a cancelled task's refund as processed.
+    - Updates refund_status → "refunded"
+    - Notifies the customer via FCM push + email
+    - Notifies the worker via FCM push + WebSocket
+    """
+    try:
+        obj_id = ObjectId(task_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid task ID")
+
+    task = collection_task.find_one({"_id": obj_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if task.get("refund_status") == "refunded":
+        raise HTTPException(status_code=400, detail="Refund already processed")
+
+    if task.get("status") != "cancelled":
+        raise HTTPException(status_code=400, detail="Task is not cancelled")
+
+    if not task.get("refundAmount") or task.get("refundAmount", 0) <= 0:
+        raise HTTPException(status_code=400, detail="No refund amount recorded for this task")
+
+    now           = datetime.utcnow()
+    refund_amount = task.get("refundAmount", 0)
+    penalty       = task.get("penaltyAmount", 0)
+    total_cost    = task.get("totalCost", 0)
+    task_name     = task.get("taskName", "your task")
+    customer_id   = str(task.get("userId", ""))
+    worker_id     = str(task.get("assignedWorkerId", ""))
+
+    # ── Update task in DB ──
+    collection_task.update_one(
+        {"_id": obj_id},
+        {"$set": {
+            "refund_status": "refunded",
+            "refunded_at":   now,
+            "refunded_by":   "admin",
+        }}
+    )
+
+    # ── Fetch customer document ──
+    customer = None
+    try:
+        customer = collection_task.database["users"].find_one({"_id": ObjectId(customer_id)})
+    except Exception:
+        pass
+
+    # ── Fetch worker document ──
+    worker = None
+    try:
+        worker = collection_worker.find_one({"_id": ObjectId(worker_id)})
+    except Exception:
+        pass
+
+    # ── Notify customer ──
+    if customer:
+        if penalty > 0:
+            # Partial refund (late cancellation penalty applied)
+            customer_body = (
+                f"Your refund of NPR {refund_amount:.2f} for '{task_name}' has been processed. "
+                f"(NPR {penalty:.2f} was retained as a late cancellation fee for the worker.)"
+            )
+        else:
+            # Full refund
+            customer_body = (
+                f"Your full refund of NPR {refund_amount:.2f} for '{task_name}' has been processed. "
+                f"The amount will reflect in your eSewa account shortly."
+            )
+
+        try:
+            await notifications.notify_with_fallback(
+                userId=customer_id,
+                title="Refund Processed ✅",
+                body=customer_body,
+                token=customer.get("fcmToken"),
+                email=customer.get("email"),
+                is_worker=False,
+                data={
+                    "event_type":    "refund_processed",
+                    "task_id":       task_id,
+                    "refund_amount": str(refund_amount),
+                },
+            )
+        except Exception as e:
+            print(f"[REFUND] Customer notification failed: {e}")
+
+        # WebSocket to customer
+        try:
+            await websocket_manager.manager.send_to_user(customer_id, json.dumps({
+                "type":          "refund_processed",
+                "taskId":        task_id,
+                "taskName":      task_name,
+                "refundAmount":  refund_amount,
+            }))
+        except Exception as e:
+            print(f"[REFUND] Customer WebSocket failed: {e}")
+
+    # ── Notify worker ──
+    if worker:
+        if penalty > 0:
+            worker_body = (
+                f"Admin has processed the customer refund for '{task_name}'. "
+                f"Your cancellation penalty of NPR {penalty:.2f} has been credited to your earnings."
+            )
+        else:
+            worker_body = (
+                f"The customer refund for cancelled task '{task_name}' has been fully processed. "
+                f"No penalty was applied."
+            )
+
+        try:
+            await notifications.notify_with_fallback(
+                userId=worker_id,
+                title="Refund Issued to Customer 🔔",
+                body=worker_body,
+                token=worker.get("fcmToken"),
+                email=worker.get("email"),
+                is_worker=True,
+            )
+        except Exception as e:
+            print(f"[REFUND] Worker notification failed: {e}")
+
+        # WebSocket to worker
+        try:
+            await websocket_manager.manager.send_to_user(worker_id, json.dumps({
+                "type":          "refund_processed",
+                "taskId":        task_id,
+                "taskName":      task_name,
+                "penaltyAmount": penalty,
+            }))
+        except Exception as e:
+            print(f"[REFUND] Worker WebSocket failed: {e}")
+
+    return {
+        "success":       True,
+        "message":       "Refund marked as processed. Customer and worker notified.",
+        "task_id":       task_id,
+        "refund_amount": refund_amount,
+        "penalty_amount": penalty,
+        "refunded_at":   now.isoformat(),
     }

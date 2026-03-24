@@ -5,7 +5,7 @@ import {
   MapPin, Clock, Award, MessageCircle, ChevronRight,
   TrendingUp, TrendingDown, Filter, Tag
 } from 'lucide-react';
-import { fetchWorkerById, getReviewsById, getPriceByTask } from '../../api/api';
+import { fetchWorkerById, getReviewsById, getPriceByTask, fetchCustomerById } from '../../api/api';
 import FacebookChatBox from '../../components/MessageBox/MessageBox';
 import BookingNavbar from '../../components/Navbar/Navbar';
 import './WorkerDescription.css';
@@ -33,10 +33,9 @@ export default function WorkerDescription() {
     navigate(`/chat/${encodeURIComponent(senderId)}/${encodeURIComponent(workerId)}`);
   };
 
-  /* ── Send booking request — uses worker state, no filteredTaskers ── */
+  /* ── Send booking request ── */
   const handleSendBookingRequest = () => {
     if (!worker) return;
-
     const workerData = {
       id:           workerId,
       name:         worker.name,
@@ -50,7 +49,6 @@ export default function WorkerDescription() {
       profileImage: worker.profileImage,
       avatar:       getInitials(worker.name),
     };
-
     localStorage.setItem('selectedWorker', JSON.stringify(workerData));
     navigate('/taskDescription');
   };
@@ -60,27 +58,39 @@ export default function WorkerDescription() {
     const fetchWorkerData = async () => {
       try {
         setLoading(true);
-        const data   = await fetchWorkerById(workerId);
-        const review = await getReviewsById(workerId);
-        const taskPrices = await getPriceByTask( data.taskType, workerId);
+        const data       = await fetchWorkerById(workerId);
+        const review     = await getReviewsById(workerId);
+        const taskPrices = await getPriceByTask(data.taskType, workerId);
 
-        const reviewsData    = Array.isArray(review) ? review : (review.reviews || []);
-        const sortedReviews  = reviewsData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const reviewsData   = Array.isArray(review) ? review : (review.reviews || []);
+        const sortedReviews = reviewsData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+        // ── Enrich reviews with customer names ──
+        const enrichedReviews = await Promise.all(
+          sortedReviews.map(async (rev) => {
+            try {
+              const customer = await fetchCustomerById(rev.user_id);
+              const name = `${customer.firstName || customer.first_name || ''} ${customer.lastName || customer.last_name || ''}`.trim();
+              return { ...rev, displayName: name || `User ${(rev.user_id || '').substring(0, 6).toUpperCase()}` };
+            } catch {
+              return { ...rev, displayName: `User ${(rev.user_id || '').substring(0, 6).toUpperCase()}` };
+            }
+          })
+        );
 
         const rawSkills        = data.skills || [];
-       const normalizedSkills = rawSkills.map((skill) => {
-  if (typeof skill === 'object' && skill !== null) {
-    return {
-      name:  skill.name  || 'Unnamed Skill',
-      // prefer skill-level price → category price → base price
-      price: skill.price ?? skill.basePrice ?? taskPrices?.price ?? data.basePrice ?? '-',
-    };
-  }
-  return {
-    name:  String(skill),
-    price: taskPrices?.price ?? data.basePrice ?? '-',
-  };
-});
+        const normalizedSkills = rawSkills.map((skill) => {
+          if (typeof skill === 'object' && skill !== null) {
+            return {
+              name:  skill.name  || 'Unnamed Skill',
+              price: skill.price ?? skill.basePrice ?? taskPrices?.price ?? data.basePrice ?? '-',
+            };
+          }
+          return {
+            name:  String(skill),
+            price: taskPrices?.price ?? data.basePrice ?? '-',
+          };
+        });
 
         setWorker({
           name:          `${data.firstName || ''} ${data.lastName || ''}`.trim() || 'Unknown',
@@ -100,11 +110,11 @@ export default function WorkerDescription() {
           },
           responseTime:  data.responseTime  || '-',
           repeatClients: data.repeatClients || 0,
-          reviews:       sortedReviews,
+          reviews:       enrichedReviews,
           profileImage:  data.profileImage  || null,
           joinedOn:      data.joinedOn      || '-',
         });
-        setFilteredReviews(sortedReviews);
+        setFilteredReviews(enrichedReviews);
       } catch {
         setError('Failed to fetch worker data.');
       } finally {
@@ -114,7 +124,7 @@ export default function WorkerDescription() {
 
     if (workerId) fetchWorkerData();
   }, [workerId]);
-  
+
   /* ── Filter reviews ── */
   useEffect(() => {
     if (!worker?.reviews) return;
@@ -140,15 +150,7 @@ export default function WorkerDescription() {
   const selectedSkill    = worker?.skills?.[selectedSkillIndex] ?? null;
   const displayPrice     = selectedSkill?.price ?? worker?.basePrice ?? '-';
   const displaySkillName = selectedSkill?.name  ?? null;
-  
-  useEffect(() => {
-    if (worker) {
-      console.log('Raw skills:', worker.skills);
-      console.log('Base price:', worker.basePrice);
-      console.log('Selected skill:', selectedSkill);
-      console.log('Display price:', displayPrice);
-    }
-  }, [worker, selectedSkill, displayPrice]);
+
   /* ── Loading / Error ── */
   if (loading) return (
     <div className="worker-description-page">
@@ -320,8 +322,9 @@ export default function WorkerDescription() {
                             <div className="worker-review-body">
                               <div className="worker-review-header">
                                 <div className="worker-reviewer-info">
+                                  {/* ── Fixed: use enriched displayName ── */}
                                   <span className="worker-reviewer-name">
-                                    {review.yelp_user_id || 'Anonymous'}
+                                    {review.displayName || `User ${(review.user_id || '').substring(0, 6).toUpperCase()}` || 'Anonymous'}
                                   </span>
                                   <span className="worker-review-date">
                                     {review.createdAt

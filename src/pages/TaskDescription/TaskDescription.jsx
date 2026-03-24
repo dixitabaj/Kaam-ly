@@ -74,11 +74,12 @@ const TaskDescriptionPage = ({ worker }) => {
   const storedTaskRequest = localStorage.getItem('pendingTaskRequest');
   const taskDetails       = storedTaskRequest ? JSON.parse(storedTaskRequest) : {};
 
-  const storedWorker  = localStorage.getItem('selectedWorker');
+  const storedWorker   = localStorage.getItem('selectedWorker');
   const selectedTasker = worker || (storedWorker ? JSON.parse(storedWorker) : null);
 
-  // ── Read user from localStorage upfront so initial state is prefilled ──
-  const user         = JSON.parse(localStorage.getItem('user') || JSON.parse(sessionStorage.getItem('user')) || '{}');
+  // ── Fix 1: safe read from localStorage with sessionStorage fallback ──
+  const rawUser      = localStorage.getItem('user') || sessionStorage.getItem('user') || '{}';
+  const user         = JSON.parse(rawUser);
   const userId       = user.id || user._id;
   const userFullName = user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim();
   const userPhone    = user.phoneNo || '';
@@ -93,14 +94,14 @@ const TaskDescriptionPage = ({ worker }) => {
     email:        userEmail,
   });
 
-  // ── Prefill task fields from pendingTaskRequest or selectedTasker ──
+  // ── Fix 2: taskName no longer prefills from worker description ──
   const [editableTask, setEditableTask] = useState({
     taskType: taskDetails.taskType || selectedTasker?.taskType || '',
-    taskName: taskDetails.taskName || selectedTasker?.description || '',
+    taskName: taskDetails.taskName || '',
     address:  taskDetails.address  || '',
   });
 
-  const [acceptTerms,  setAcceptTerms]  = useState(false);
+  const [acceptTerms,   setAcceptTerms]   = useState(false);
   const [bookingStatus, setBookingStatus] = useState('form');
   const [photos,        setPhotos]        = useState([]);
   const [note,          setNote]          = useState('');
@@ -119,7 +120,12 @@ const TaskDescriptionPage = ({ worker }) => {
   maxDateObj.setMonth(maxDateObj.getMonth() + 3);
   const maxDate = maxDateObj.toISOString().split('T')[0];
 
-  // ── API call kept as a fallback — only overwrites if localStorage value is empty ──
+  // ── Clear stale pendingTaskRequest on unmount ──
+  useEffect(() => {
+    return () => localStorage.removeItem('pendingTaskRequest');
+  }, []);
+
+  // ── API call as fallback — only overwrites if localStorage value was empty ──
   useEffect(() => {
     if (!userId) return;
     const fetchCustomer = async () => {
@@ -127,7 +133,6 @@ const TaskDescriptionPage = ({ worker }) => {
         const c = await fetchCustomerById(userId);
         setBookingDetails(prev => ({
           ...prev,
-          // only overwrite if the localStorage value was empty
           customerName: prev.customerName || `${c.first_name || ''} ${c.last_name || ''}`.trim(),
           phone:        prev.phone        || c.phoneNo || '',
           email:        prev.email        || c.email   || '',

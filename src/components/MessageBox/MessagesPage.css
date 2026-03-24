@@ -19,7 +19,17 @@
   background: #f5f4f0;
   overflow: hidden;
 }
+/* Override HelpSection position only on messages page */
+.mp-chat-widget-wrapper .launcher-wrap {
+  right: unset !important;
+  left: 20px !important;
+}
 
+.mp-chat-widget-wrapper .chat-panel {
+  right: unset !important;
+  left: 20px !important;
+  transform-origin: bottom left !important;
+}
 .mp-center {
   flex: 1;
   display: flex;

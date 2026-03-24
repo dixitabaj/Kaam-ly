@@ -36,7 +36,7 @@
   animation: fadeUp 0.3s cubic-bezier(.34, 1.36, .64, 1) both;
   align-self: flex-start;
 
-  margin-left: -22px;
+  margin-left: 30px;
 }
 
 .need-help-close {

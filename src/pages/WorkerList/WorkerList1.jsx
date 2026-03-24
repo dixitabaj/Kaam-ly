@@ -1,9 +1,8 @@
-import { Underline } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-import { recommendWorker, getPriceByTask} from '../../api/api'
+import { recommendWorker, getPriceByTask } from '../../api/api';
 import BookingNavbar from "../../components/Navbar/Navbar";
 import ChatWidget from '../../components/HelpSection/HelpSection';
 
@@ -19,81 +18,78 @@ const BrowseTaskers = () => {
   const [minPrice, setMinPrice] = useState(10);
   const [maxPrice, setMaxPrice] = useState(950);
   const [hoveredButton, setHoveredButton] = useState(null);
-  
-
   const [taskers, setTaskers] = useState([]);
-
-  // ... existing imports
-  // ... existing filter states
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadWorkers = async () => {
       try {
         setLoading(true);
-  
+        const savedTask =  localStorage.getItem('pendingTaskRequest');
+
         const savedCategory = localStorage.getItem('predictedCategory');
-        const savedRequest = localStorage.getItem('pendingTaskRequest');
-  
-        let categoryObj = null;
-        let requestObj = null;
-  
-        try {
-          categoryObj = savedCategory ? JSON.parse(savedCategory) : null;
-          requestObj = savedRequest ? JSON.parse(savedRequest) : null;
-        } catch (e) {
-          console.error("Parsing error:", e);
+        if (!savedCategory) {
+          console.warn("No predicted category found");
+          return;
         }
-  
-        const lat = requestObj?.lat || requestObj?.latitude || requestObj?.coords?.lat || 0;
-        const lng = requestObj?.lng || requestObj?.longitude || requestObj?.coords?.lng || 0;
-  
-        // Extract values for the matching logic
-        const taskType = categoryObj?.broad?.[0]?.label || "General";
-        const subCategory = categoryObj?.sub?.[0]?.label || "";
-  
+
+        // ✅ Parse ONCE at the top
+        const parsedCategory = JSON.parse(savedCategory);
+        const parsedTask = JSON.parse(savedTask);
+        const firstPrediction = parsedCategory.all_predictions?.[0];
+
+        if (!firstPrediction) {
+          console.warn("No predictions available");
+          return;
+        }
+
+        const subCategory = firstPrediction.label;
+        const taskType = "carpentry";
+        const lat = parsedTask?.lat || parsedTask?.latitude || 0;
+        const lng = parsedTask?.lng || parsedTask?.longitude || 0;
+
+        console.log("subCategory", subCategory);
+
         const response = await recommendWorker({
           taskType,
-          lat: lat,
-          lng: lng,
-          subCategory: subCategory,
+          lat,
+          lng,
+          subCategory,
           top_k: 50
         });
-  
-        // ✅ The Fix: Map workers to extract the specific skill price
-       const processedWorkers = (response || []).map(worker => {
-  const matchingSkill = worker.skills?.find(
-    s => s.name?.toLowerCase().trim() === subCategory.toLowerCase().trim()
-  );
 
-  let displayPrice;
-  let priceRangeLabel = null;
+        console.log("response", response);
 
-  if (matchingSkill) {
-    // ✅ Exact match: show that skill’s price
-    displayPrice = matchingSkill.price;
-  } else if (worker.skills?.length) {
-    // ❌ No match: show min-max range of all skills
-    const skillPrices = worker.skills.map(s => s.price || 0);
-    const minPrice = Math.min(...skillPrices);
-    const maxPrice = Math.max(...skillPrices);
-    displayPrice = minPrice; // For sorting/filtering, pick min as representative
-    priceRangeLabel = `${minPrice} - ${maxPrice}`; // Display in UI
-  } else {
-    // No skills: fallback to basePrice
-    displayPrice = worker.basePrice || 0;
-  }
+        const processedWorkers = (response || []).map(worker => {
+          const matchingSkill = worker.skills?.find(
+            s => s.name?.toLowerCase().trim() === subCategory.toLowerCase().trim()
+          );
 
-  return {
-    ...worker,
-    displayPrice,
-    priceRangeLabel, // optional: if you want to show the range in UI
-    activeSkillName: matchingSkill?.name || worker.skills?.[0]?.name || taskType
-  };
-});
+          let displayPrice;
+          let priceRangeLabel = null;
 
-setTaskers(processedWorkers);
-  
+          if (matchingSkill) {
+            displayPrice = matchingSkill.price;
+          } else if (worker.skills?.length) {
+            const skillPrices = worker.skills.map(s => s.price || 0);
+            const minP = Math.min(...skillPrices);
+            const maxP = Math.max(...skillPrices);
+            displayPrice = minP;
+            priceRangeLabel = `${minP} - ${maxP}`;
+          } else {
+            displayPrice = worker.basePrice || 0;
+          }
+
+          return {
+            ...worker,
+            displayPrice,
+            priceRangeLabel,
+            activeSkillName: matchingSkill?.name || worker.skills?.[0]?.name || taskType
+          };
+        });
+
+        setTaskers(processedWorkers);
+
         if (processedWorkers.length > 0) {
           const prices = processedWorkers.map(w => w.displayPrice);
           const maxP = Math.max(...prices);
@@ -108,48 +104,43 @@ setTaskers(processedWorkers);
         setLoading(false);
       }
     };
-  
+
     loadWorkers();
   }, []);
 
   useEffect(() => {
-  const fetchPrices = async () => {
-    try {
-      const savedCategory = localStorage.getItem("predictedCategory");
-      if (!savedCategory) return;
+    const fetchPrices = async () => {
+      try {
+        const savedCategory = localStorage.getItem("predictedCategory");
+        if (!savedCategory) return;
 
-      const categoryObj = JSON.parse(savedCategory);
-      const taskName =
-        categoryObj?.sub?.[0]?.label ||
-        categoryObj?.broad?.[0]?.label ||
-        "General";
+        const categoryObj = JSON.parse(savedCategory);
+        const taskName =
+          categoryObj?.all_predictions?.[0]?.label ||
+          categoryObj?.predicted_label ||
+          "General";
 
-      const updatedWorkers = await Promise.all(
-        taskers.map(async (worker) => {
-          const priceData = await getPriceByTask(taskName, worker._id);
+        const updatedWorkers = await Promise.all(
+          taskers.map(async (worker) => {
+            const priceData = await getPriceByTask(taskName, worker._id);
+            return {
+              ...worker,
+              displayPrice: priceData?.price || worker.displayPrice || worker.basePrice
+            };
+          })
+        );
 
-          return {
-            ...worker,
-            displayPrice: priceData?.price || worker.displayPrice || worker.basePrice
-          };
-        })
-      );
+        setTaskers(updatedWorkers);
+      } catch (err) {
+        console.error("Error fetching worker task prices:", err);
+      }
+    };
 
-      setTaskers(updatedWorkers);
-
-    } catch (err) {
-      console.error("Error fetching worker task prices:", err);
+    if (taskers.length > 0) {
+      fetchPrices();
     }
-  };
+  }, []);
 
-  if (taskers.length > 0) {
-    fetchPrices();
-  }
-}, []);
-
-
-  // ... rest of your handle functions
-  
   const handleTimeToggle = (time) => {
     setSelectedTime(prev =>
       prev.includes(time) ? prev.filter(t => t !== time) : [...prev, time]
@@ -162,42 +153,32 @@ setTaskers(processedWorkers);
   };
 
   const handleTaskerSelect = (taskerId) => {
-  // Get the selected tasker data
-  const selectedTasker = filteredTaskers.find(t => t._id === taskerId);
-  
-  if (selectedTasker) {
-    // Store selected worker in localStorage
-    const workerData = {
-      id: selectedTasker._id,
-      firstName: selectedTasker.firstName,
-      lastName: selectedTasker.lastName,
-      name: `${selectedTasker.firstName} ${selectedTasker.lastName}`,
-      rating: selectedTasker.ratings,
-      reviews: selectedTasker.noOfCompletedTask,
-      hourlyRate: selectedTasker.basePrice,
-      minHours: selectedTasker.minHours || 1,
-      taskType: selectedTasker.taskType,
-      description: selectedTasker.description,
-      profilePhoto: selectedTasker.profilePhoto,
-      address: selectedTasker.address,
-      avatar: `${selectedTasker.firstName?.[0]}${selectedTasker.lastName?.[0]}`.toUpperCase()
-    };
-    
-    localStorage.setItem('selectedWorker', JSON.stringify(workerData));
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    const userId = user.id || user._id;
-    
-    // Navigate to task description page
-    navigate('/taskDescription');
-  }
-};
+    const selectedTasker = filteredTaskers.find(t => t._id === taskerId);
+
+    if (selectedTasker) {
+      const workerData = {
+        id: selectedTasker._id,
+        firstName: selectedTasker.firstName,
+        lastName: selectedTasker.lastName,
+        name: `${selectedTasker.firstName} ${selectedTasker.lastName}`,
+        rating: selectedTasker.ratings,
+        reviews: selectedTasker.noOfCompletedTask,
+        hourlyRate: selectedTasker.basePrice,
+        minHours: selectedTasker.minHours || 1,
+        taskType: selectedTasker.taskType,
+        description: selectedTasker.description,
+        profilePhoto: selectedTasker.profilePhoto,
+        address: selectedTasker.address,
+        avatar: `${selectedTasker.firstName?.[0]}${selectedTasker.lastName?.[0]}`.toUpperCase()
+      };
+
+      localStorage.setItem('selectedWorker', JSON.stringify(workerData));
+      navigate('/taskDescription');
+    }
+  };
 
   const handleViewProfile = (taskerId) => {
     navigate(`/workers/${encodeURIComponent(taskerId)}`);
-  };
-
-  const handleHelpClick = () => {
-    navigate('/helpSection');
   };
 
   const handleSpecificTimeChange = (e) => {
@@ -208,7 +189,9 @@ setTaskers(processedWorkers);
     setSortBy(e.target.value);
   };
 
-  const handleSendMessage = (taskerId, userId) => {
+  const handleSendMessage = (taskerId) => {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const userId = user.id || user._id;
     const encodedWorkerId = encodeURIComponent(taskerId);
     const encodedSenderId = encodeURIComponent(userId);
     navigate(`/chat/${encodedSenderId}/${encodedWorkerId}`);
@@ -224,53 +207,37 @@ setTaskers(processedWorkers);
     setShowDatePicker(false);
   };
 
-  // FILTER AND SORT LOGIC
   const getFilteredAndSortedTaskers = () => {
     let filtered = [...taskers];
 
-    // 1. PRICE FILTER
     filtered = filtered.filter(
-      tasker => (tasker.basePrice || 0) >= priceRange[0] && (tasker.basePrice || 0) <= priceRange[1]
+      tasker => (tasker.displayPrice || 0) >= priceRange[0] && (tasker.displayPrice || 0) <= priceRange[1]
     );
 
-    // 2. TIME OF DAY FILTER
     if (selectedTime.length > 0) {
       filtered = filtered.filter(tasker => {
-        const hours = tasker.hours;
-        if (!hours) return true;
-        
+        if (!tasker.hours) return true;
         return selectedTime.some(timeSlot => {
-          if (timeSlot === 'morning') {
-            return true;
-          }
-          if (timeSlot === 'afternoon') {
-            return true;
-          }
-          if (timeSlot === 'evening') {
-            return true;
-          }
+          if (timeSlot === 'morning') return true;
+          if (timeSlot === 'afternoon') return true;
+          if (timeSlot === 'evening') return true;
           return true;
         });
       });
     }
 
-    // 3. SPECIFIC TIME FILTER
-    if (specificTime !== 'flexible') {
-      console.log('Filtering by specific time:', specificTime);
-    }
-
-    // 4. SORT
     filtered.sort((a, b) => {
       switch (sortBy) {
         case 'price-low':
-          return (a.basePrice || 0) - (b.basePrice || 0);
+          return (a.displayPrice || 0) - (b.displayPrice || 0);
         case 'price-high':
-          return (b.basePrice || 0) - (a.basePrice || 0);
+          return (b.displayPrice || 0) - (a.displayPrice || 0);
         case 'rating':
           return (b.ratings || 0) - (a.ratings || 0);
         case 'reviews':
           return (b.noOfCompletedTask || 0) - (a.noOfCompletedTask || 0);
-        
+        default:
+          return 0;
       }
     });
 
@@ -280,7 +247,7 @@ setTaskers(processedWorkers);
   const filteredTaskers = getFilteredAndSortedTaskers();
 
   const averagePrice = filteredTaskers.length > 0
-    ? Math.round(filteredTaskers.reduce((sum, t) => sum + (t.basePrice || 0), 0) / filteredTaskers.length)
+    ? Math.round(filteredTaskers.reduce((sum, t) => sum + (t.displayPrice || 0), 0) / filteredTaskers.length)
     : 600;
 
   const styles = {
@@ -663,36 +630,6 @@ setTaskers(processedWorkers);
       alignItems: 'center',
       gap: '4px'
     },
-    helpButton: {
-      position: 'fixed',
-      bottom: '24px',
-      left: '24px',
-      padding: '12px 20px',
-      background: '#F6AD56',
-      color: 'white',
-      border: 'none',
-      borderRadius: '24px',
-      fontSize: '14px',
-      fontWeight: '600',
-      cursor: 'pointer',
-      boxShadow: '0 2px 8px rgba(66, 153, 225, 0.3)',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px',
-      zIndex: 100
-    },
-    helpIcon: {
-      width: '18px',
-      height: '18px',
-      borderRadius: '50%',
-      background: 'white',
-      color: '#F6AD56',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontSize: '12px',
-      fontWeight: '700'
-    },
     selectedDateDisplay: {
       marginTop: '12px',
       padding: '10px',
@@ -729,7 +666,7 @@ setTaskers(processedWorkers);
     const fullStars = Math.floor(rating);
     const halfStar = rating % 1 >= 0.5;
     const emptyStars = 5 - fullStars - (halfStar ? 1 : 0);
-    
+
     return (
       <span style={styles.stars}>
         {[...Array(fullStars)].map((_, i) => (
@@ -745,7 +682,7 @@ setTaskers(processedWorkers);
 
   return (
     <div style={styles.container}>
-      <BookingNavbar/>
+      <BookingNavbar />
 
       <div style={styles.content}>
         {/* Left Sidebar - Filters */}
@@ -755,65 +692,40 @@ setTaskers(processedWorkers);
             <h3 style={styles.filterTitle}>Date</h3>
             <div style={styles.dateButtonGroup}>
               <button
-                style={{
-                  ...styles.filterButton,
-                  ...(selectedDate === 'today' ? styles.filterButtonActive : {})
-                }}
-                onClick={() => {
-                  setSelectedDate('today');
-                  setShowDatePicker(false);
-                  setCustomDate(null);
-                }}
+                style={{ ...styles.filterButton, ...(selectedDate === 'today' ? styles.filterButtonActive : {}) }}
+                onClick={() => { setSelectedDate('today'); setShowDatePicker(false); setCustomDate(null); }}
               >
                 Today
               </button>
               <button
-                style={{
-                  ...styles.filterButton,
-                  ...(selectedDate === 'within3' ? styles.filterButtonActive : {})
-                }}
-                onClick={() => {
-                  setSelectedDate('within3');
-                  setShowDatePicker(false);
-                  setCustomDate(null);
-                }}
+                style={{ ...styles.filterButton, ...(selectedDate === 'within3' ? styles.filterButtonActive : {}) }}
+                onClick={() => { setSelectedDate('within3'); setShowDatePicker(false); setCustomDate(null); }}
               >
                 Within 3 Days
               </button>
             </div>
             <div style={styles.dateButtonGroup}>
               <button
-                style={{
-                  ...styles.filterButton,
-                  ...(selectedDate === 'week' ? styles.filterButtonActive : {})
-                }}
-                onClick={() => {
-                  setSelectedDate('week');
-                  setShowDatePicker(false);
-                  setCustomDate(null);
-                }}
+                style={{ ...styles.filterButton, ...(selectedDate === 'week' ? styles.filterButtonActive : {}) }}
+                onClick={() => { setSelectedDate('week'); setShowDatePicker(false); setCustomDate(null); }}
               >
                 Within A Week
               </button>
               <button
-                style={{
-                  ...styles.filterButton,
-                  ...(selectedDate === 'choose' ? styles.filterButtonActive : {})
-                }}
+                style={{ ...styles.filterButton, ...(selectedDate === 'choose' ? styles.filterButtonActive : {}) }}
                 onClick={handleChooseDates}
               >
                 Choose Dates
               </button>
             </div>
 
-            {/* Show selected custom date */}
             {selectedDate === 'choose' && customDate && (
               <div style={styles.selectedDateDisplay}>
-                Selected: {customDate.toLocaleDateString('en-US', { 
-                  weekday: 'short', 
-                  year: 'numeric', 
-                  month: 'short', 
-                  day: 'numeric' 
+                Selected: {customDate.toLocaleDateString('en-US', {
+                  weekday: 'short',
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric'
                 })}
               </div>
             )}
@@ -849,17 +761,13 @@ setTaskers(processedWorkers);
               />
               <span>Evening (5pm - 9:30pm)</span>
             </label>
-            
+
             <div style={styles.dividerText}>
               <div style={styles.dividerTextLine}></div>
               <div style={styles.dividerTextContent}>or choose a specific time</div>
             </div>
-            
-            <select 
-              style={styles.select}
-              value={specificTime}
-              onChange={handleSpecificTimeChange}
-            >
+
+            <select style={styles.select} value={specificTime} onChange={handleSpecificTimeChange}>
               <option value="flexible">I'm Flexible</option>
               <option value="9:00">9:00 AM</option>
               <option value="10:00">10:00 AM</option>
@@ -909,13 +817,9 @@ setTaskers(processedWorkers);
             <span style={styles.resultsCount}>
               {filteredTaskers.length} tasker{filteredTaskers.length !== 1 ? 's' : ''} available
             </span>
-            <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <span style={styles.sortLabel}>Sorted by:</span>
-              <select
-                value={sortBy}
-                onChange={handleSortChange}
-                style={styles.sortSelect}
-              >
+              <select value={sortBy} onChange={handleSortChange} style={styles.sortSelect}>
                 <option value="recommended">Recommended</option>
                 <option value="price-low">Price: Low to High</option>
                 <option value="price-high">Price: High to Low</option>
@@ -925,130 +829,137 @@ setTaskers(processedWorkers);
             </div>
           </div>
 
-          {/* Tasker Cards */}
-          <div style={styles.taskerList}>
-            {filteredTaskers.length > 0 ? (
-              filteredTaskers.map((tasker) => (
-                <div key={tasker._id} style={styles.taskerCard}>
-                  <div style={styles.cardHeader}>
-                    <div style={styles.taskerInfo}>
-                      <div style={styles.avatarContainer}>
-                        <div style={styles.avatar}>
-                          {tasker.firstName?.[0]}{tasker.lastName?.[0]}
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '48px' }}>
+              <span style={{ fontSize: '24px' }}>⏳</span>
+              <p style={{ color: '#718096', marginTop: '12px' }}>Loading taskers...</p>
+            </div>
+          ) : (
+            <div style={styles.taskerList}>
+              {filteredTaskers.length > 0 ? (
+                filteredTaskers.map((tasker) => (
+                  <div key={tasker._id} style={styles.taskerCard}>
+                    <div style={styles.cardHeader}>
+                      <div style={styles.taskerInfo}>
+                        <div style={styles.avatarContainer}>
+                          <div style={styles.avatar}>
+                            {tasker.firstName?.[0]}{tasker.lastName?.[0]}
+                          </div>
+                          <button
+                            style={styles.viewProfileUnderAvatar}
+                            onClick={() => handleViewProfile(tasker._id)}
+                            onMouseEnter={() => setHoveredButton(`view-${tasker._id}`)}
+                            onMouseLeave={() => setHoveredButton(null)}
+                          >
+                            View Profile
+                          </button>
                         </div>
+
+                        <div style={styles.taskerDetails}>
+                          <div style={styles.taskerNameRow}>
+                            <h3 style={styles.taskerName}>
+                              {tasker.firstName} {tasker.lastName}
+                            </h3>
+                            {tasker.ratings >= 4.5 && (
+                              <span style={styles.eliteBadge}>ELITE</span>
+                            )}
+                            <span style={styles.minHours}>{tasker.minHours || 1}hr min</span>
+                          </div>
+
+                          <div style={{ fontSize: '14px', color: '#475569', marginTop: '4px' }}>
+                            📍 {tasker.address || 'Location not specified'}
+                          </div>
+
+                          <div style={styles.ratingContainer}>
+                            {renderStars(tasker.ratings || 4.5)}
+                            <span style={styles.ratingValue}>
+                              {tasker.ratings?.toFixed(1) || '4.5'}
+                            </span>
+                            <span style={styles.ratingCount}>
+                              ({tasker.noOfCompletedTask || 0} reviews)
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={styles.priceRow}>
+                        <span style={styles.price}>
+                          Rs. {tasker.priceRangeLabel || tasker.displayPrice}
+                        </span>
+                        <span style={styles.priceLabel}>/hr</span>
+                      </div>
+                    </div>
+
+                    <div style={styles.reviewSection}>
+                      <div style={styles.reviewHeader}>
+                        <div style={styles.reviewIcon}>💬</div>
+                        <span style={{ fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>
+                          {tasker.activeSkillName || tasker.taskType || 'Service provider'}
+                        </span>
+                      </div>
+                      <p style={styles.reviewText}>
+                        "{tasker.description || 'Professional and reliable service.'}"
+                      </p>
+                      <div style={styles.reviewService}>
+                        <span>🔧 Service: {tasker.taskType || 'General'}</span>
+                      </div>
+                    </div>
+
+                    <div style={styles.actionButtons}>
+                      <div style={styles.mainButtons}>
                         <button
-                          style={styles.viewProfileUnderAvatar}
-                          onClick={() => handleViewProfile(tasker._id)}
-                          onMouseEnter={() => setHoveredButton(`view-${tasker._id}`)}
+                          style={{
+                            ...styles.sendRequestBtn,
+                            ...(hoveredButton === `send-${tasker._id}` ? { background: '#e09535' } : {})
+                          }}
+                          onClick={() => handleTaskerSelect(tasker._id)}
+                          onMouseEnter={() => setHoveredButton(`send-${tasker._id}`)}
                           onMouseLeave={() => setHoveredButton(null)}
                         >
-                          View Profile
+                          Send Request
+                        </button>
+                        <button
+                          style={{
+                            ...styles.chatNowBtn,
+                            ...(hoveredButton === `chat-${tasker._id}` ? { background: '#FFF1EB', borderColor: '#e09535', color: '#e09535' } : {})
+                          }}
+                          onClick={() => handleSendMessage(tasker._id)}
+                          onMouseEnter={() => setHoveredButton(`chat-${tasker._id}`)}
+                          onMouseLeave={() => setHoveredButton(null)}
+                        >
+                          Chat Now
                         </button>
                       </div>
-                     
-                      <div style={styles.taskerDetails}>
-                        <div style={styles.taskerNameRow}>
-                          <h3 style={styles.taskerName}>
-                            {tasker.firstName} {tasker.lastName}
-                          </h3>
-                          {tasker.ratings >= 4.5 && (
-                            <span style={styles.eliteBadge}>ELITE</span>
-                          )}
-                          <span style={styles.minHours}>{tasker.minHours || 1}hr min</span>
-                        </div>
-                        
-                        <div style={{ fontSize: '14px', color: '#475569', marginTop: '4px' }}>
-                          📍 {tasker.address || 'Location not specified'}
-                        </div>
-                        
-                        <div style={styles.ratingContainer}>
-                          {renderStars(tasker.ratings || 4.5)}
-                          <span style={styles.ratingValue}>
-                            {tasker.ratings?.toFixed(1) || '4.5'}
-                          </span>
-                          <span style={styles.ratingCount}>
-                            ({tasker.noOfCompletedTask || 0} reviews)
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div style={styles.priceRow}>
-                      <span style={styles.price}>Rs. Rs. {tasker.displayPrice}</span>
-                      <span style={styles.priceLabel}>/hr</span>
                     </div>
                   </div>
-
-                  <div style={styles.reviewSection}>
-                    <div style={styles.reviewHeader}>
-                      <div style={styles.reviewIcon}>💬</div>
-                      <span style={{fontSize: '14px', fontWeight: '600', color: '#0f172a'}}>
-                        {tasker.description || 'Service provider'}
-                      </span>
-                    </div>
-                    <p style={styles.reviewText}>
-                      "{tasker.description || 'Professional and reliable service.'}"
-                    </p>
-                    <div style={styles.reviewService}>
-                      <span>🔧 Service: {tasker.taskType || 'General'}</span>
-                    </div>
-                  </div>
-
-                  <div style={styles.actionButtons}>
-                    <div style={styles.mainButtons}>
-                      <button
-                        style={{
-                          ...styles.sendRequestBtn,
-                          ...(hoveredButton === `send-${tasker._id}` ? { background: '#e05a2b' } : {})
-                        }}
-                        onClick={() => handleTaskerSelect(tasker._id)}
-                        onMouseEnter={() => setHoveredButton(`send-${tasker._id}`)}
-                        onMouseLeave={() => setHoveredButton(null)}
-                      >
-                        Send Request
-                      </button>
-                      <button
-                        style={{
-                          ...styles.chatNowBtn,
-                          ...(hoveredButton === `chat-${tasker._id}` ? { background: '#FFF1EB', borderColor: '#e05a2b', color: '#e05a2b' } : {})
-                        }}
-                       onClick={() => 
-                       
-    handleSendMessage(tasker._id, userId)}
-                        onMouseEnter={() => setHoveredButton(`chat-${tasker._id}`)}
-                        onMouseLeave={() => setHoveredButton(null)}
-                      >
-                        Chat Now
-                      </button>
-                    </div>
-                  </div>
+                ))
+              ) : (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '48px',
+                  background: 'white',
+                  borderRadius: '12px',
+                  border: '1px solid #e8e8e8'
+                }}>
+                  <span style={{ fontSize: '48px', marginBottom: '16px', display: 'block' }}>🔍</span>
+                  <h3 style={{ color: '#2d3748', marginBottom: '8px' }}>No taskers found</h3>
+                  <p style={{ color: '#718096' }}>Try adjusting your filters</p>
                 </div>
-              ))
-            ) : (
-              <div style={{
-                textAlign: 'center',
-                padding: '48px',
-                background: 'white',
-                borderRadius: '12px',
-                border: '1px solid #e8e8e8'
-              }}>
-                <span style={{fontSize: '48px', marginBottom: '16px', display: 'block'}}>🔍</span>
-                <h3 style={{color: '#2d3748', marginBottom: '8px'}}>No taskers found</h3>
-                <p style={{color: '#718096'}}>Try adjusting your filters</p>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Date Picker Modal */}
       {showDatePicker && (
         <>
-          <div 
+          <div
             style={styles.datePickerOverlay}
             onClick={() => setShowDatePicker(false)}
           />
           <div style={styles.datePickerContainer}>
-            <h4 style={{margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600'}}>
+            <h4 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600' }}>
               Select a Date
             </h4>
             <DatePicker
@@ -1080,9 +991,8 @@ setTaskers(processedWorkers);
         </>
       )}
 
-     <ChatWidget/>
+      <ChatWidget />
 
-      {/* Custom CSS for date picker styling */}
       <style>{`
         .custom-calendar {
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;

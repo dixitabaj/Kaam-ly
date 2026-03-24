@@ -187,8 +187,7 @@ const MessagesPage = () => {
   const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
   const currentUser = storedUser ? JSON.parse(storedUser) : null;
   const actualUserId =
-    currentUser?.email || currentUser?.id || currentUser?._id ||
-    currentUser?.userId || null;
+  currentUser?.id || currentUser?._id || currentUser?.userId || null;
   const isWorker =
     currentUser?.role === 'worker' || currentUser?.type === 'worker';
   const otherId = recieverId;
@@ -662,7 +661,10 @@ if (!otherId) {
           </div>
         </div>
       </div>
-      <ChatWidget />
+      
+<div className="mp-chat-widget-wrapper">
+  <ChatWidget />
+</div>
     </>
   );
 }
@@ -678,7 +680,9 @@ if (loading) return (
         <p style={{ color: '#8a8179', margin: 0, fontSize: 14 }}>Loading…</p>
       </div>
     </div>
-    <ChatWidget />
+    <div className="mp-chat-widget-wrapper">
+  <ChatWidget />
+</div>
   </>
 );
 
@@ -698,7 +702,9 @@ if (error || !otherUser) return (
         </button>
       </div>
     </div>
-    <ChatWidget />
+   <div className="mp-chat-widget-wrapper">
+  <ChatWidget />
+</div>
   </>
 );
 
@@ -1047,7 +1053,9 @@ if (error || !otherUser) return (
           </div>
         )}
       </div>
-      <ChatWidget />
+      <div className="mp-chat-widget-wrapper">
+  <ChatWidget />
+</div>
     </>
   );
 };

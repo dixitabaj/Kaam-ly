@@ -1453,6 +1453,90 @@ async def search_workers_by_name(q: str, limit: int = 5):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+# main.py — add these imports at the top
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from .repository.fraud_engine import FraudScorer, RiskLevel
+from .router.fraud_router import router as fraud_router
+
+# ── After you create your `app = FastAPI(...)` ──────────────────────────
+
+# Attach your existing MongoDB db to app.state so fraud router can access it
+# (replace `your_db` with whatever your MongoDB db variable is called)
+@app.on_event("startup")
+async def startup():
+    from worker.config.database import collection_task  # already imported at top
+    from pymongo import MongoClient
+    app.state.db = mongo_client["user"]
+
+# ── Fraud middleware — add BEFORE your other middleware ─────────────────
+
+EXEMPT_PATHS = {"/api/auth/login", "/api/auth/register", "/docs", "/openapi.json", "/redoc"}
+
+SENSITIVE_PATHS = {
+    "/api/payments/withdraw",
+    "/api/tasks",            # adjust to your actual routes
+    "/api/reviews",
+}
+
+@app.middleware("http")
+async def fraud_middleware(request: Request, call_next):
+    EXEMPT_PATHS = {"/api/auth/login", "/api/auth/register", "/docs", "/openapi.json", "/redoc", "/chatbot"}
+
+    SENSITIVE_PATHS = {
+        "/customer/release",
+        "/task",
+        "/api/reviews",
+    }
+
+    if request.url.path in EXEMPT_PATHS:
+        return await call_next(request)
+
+    # ── Reuse your existing OAuth2 token extraction ──
+    token = request.headers.get("Authorization", "").strip()
+    if not token.startswith("Bearer "):
+        return await call_next(request)
+    token = token.removeprefix("Bearer ").strip()
+
+    try:
+        # ── Use the SAME secret/algorithm your OAuth2.py uses ──
+        from jose import jwt
+        from worker.services.OAuth2 import SECRET_KEY, ALGORITHM  # ← import your constants
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = str(payload.get("user_id") or payload.get("sub") or "")
+        if not user_id:
+            return await call_next(request)
+    except Exception:
+        return await call_next(request)   # invalid token — let the route handle it
+
+    db     = request.app.state.db
+    cached = db.fraud_reports.find_one({"user_id": user_id})
+
+    # Block suspended accounts on every request
+    if cached and cached.get("risk_level") == RiskLevel.SUSPEND.value:
+        return JSONResponse(
+            {"error": "Your account has been suspended. Contact support@kaamly.com"},
+            status_code=403,
+        )
+
+    # Re-score on sensitive actions only
+    is_sensitive = any(request.url.path.startswith(p) for p in SENSITIVE_PATHS)
+    if is_sensitive:
+        from .repository.fraud_engine import FraudScorer
+        scorer = FraudScorer(db)
+        report = scorer.score(user_id)
+        if report.risk_level == RiskLevel.SUSPEND:
+            return JSONResponse(
+                {"error": "Action blocked due to suspicious activity."},
+                status_code=403,
+            )
+
+    return await call_next(request)
+
+
+# ── Register the fraud admin router ────────────────────────────────────
+app.include_router(fraud_router)
 app.include_router(recommend_router.router)
 app.include_router(faceVerify.router, prefix="/api")
 #include routers
@@ -1474,6 +1558,9 @@ app.include_router(adminReviewAI.router, prefix='/api')
 app.include_router(pendingActivities.router, prefix='/api')
 app.include_router(esewaVerify.router, prefix='/api')
 app.include_router(updateProfile.router, prefix='/api')
-from worker.router.notifications import notifications_router, tasks_router
+
+from worker.router.notifications import notifications_router
+from worker.router.taskActions  import tasks_router
+
 app.include_router(notifications_router)
 app.include_router(tasks_router)

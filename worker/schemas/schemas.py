@@ -33,8 +33,12 @@ class SubSkill(BaseModel):
     name: str
     price: float = 0
 
+class StatusUpdate(BaseModel):
+    status: str 
+    
 class Skill(BaseModel):
     name: str
+    price: Optional[float] = 0
     subSkills: List[SubSkill] = []
 
 class WorkerCreateSchema(BaseModel):
