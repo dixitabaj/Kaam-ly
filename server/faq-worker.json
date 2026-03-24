@@ -1,0 +1,226 @@
+[
+  {
+    "question": "How do I register as a worker on Hamro Sewa?",
+    "answer": "Go to the registration page and complete the 5-step form: Account details → Skills & rates → Profile → Availability → Verification. The whole process takes about 5–10 minutes. Your account will be reviewed before you start receiving bookings."
+  },
+  {
+    "question": "What documents do I need to register?",
+    "answer": "You only need a valid email address and phone number to register. Optionally, you can upload skill evidence (photos, videos, certificates, or PDFs of your qualifications) and complete identity verification via a live selfie. These are not mandatory but significantly increase client trust and your chances of being booked."
+  },
+  {
+    "question": "How long does account approval take?",
+    "answer": "Most accounts are reviewed and approved within 24–48 hours. You'll receive an email notification once your account is active. During busy periods it may take up to 3 business days."
+  },
+  {
+    "question": "Can I register for more than one service category?",
+    "answer": "Currently each worker account is linked to one service category (e.g. Plumbing, Cleaning, Carpentry). If you offer services in multiple categories, please contact support — multi-category profiles are being rolled out and we can flag your account for early access."
+  },
+  {
+    "question": "I made a mistake during registration. How do I fix it?",
+    "answer": "Most details (name, phone, description, availability, rates, service areas) can be edited from your dashboard under Profile Settings. If you need to change your email address or service category, contact support as those require manual verification."
+  },
+  {
+    "question": "My registration got stuck on the verification step. What do I do?",
+    "answer": "The verification step (face liveness check) is optional — you can skip it and complete it later from your dashboard under Identity Verification. If the camera fails to load, make sure you've allowed browser camera permissions and that no other app is using your camera."
+  },
+  {
+    "question": "Do I need to verify my identity to start working?",
+    "answer": "No, identity verification is optional. However, verified workers appear with a 'Verified' badge on their profile, which increases trust with clients and typically leads to more bookings. We strongly recommend completing it."
+  },
+  {
+    "question": "What is skill evidence and does it help?",
+    "answer": "Skill evidence is anything that demonstrates your expertise — a photo of completed work, a short video, a certificate, or a professional licence. Uploading evidence can increase your booking rate significantly, as clients feel more confident booking someone with proof of their skills."
+  },
+  {
+    "question": "I uploaded the wrong profile photo. How do I change it?",
+    "answer": "Go to Dashboard → Profile Settings → Profile Photo. Upload a new photo and save. Note that if you have already completed identity verification, you will need to redo the face verification after changing your photo."
+  },
+  {
+    "question": "Why was my registration rejected?",
+    "answer": "Registrations may be rejected if the profile photo is unclear, the description is incomplete, the stated skills don't match the category selected, or if our moderation team flags a concern. You'll receive an email explaining the reason. You're welcome to resubmit after making corrections."
+  },
+  {
+    "question": "How do I receive job requests?",
+    "answer": "When a client books a service that matches your category and service area, you'll receive a push notification and an in-app alert. You have a limited window to accept or decline before the request is sent to the next available worker."
+  },
+  {
+    "question": "How long do I have to accept a booking request?",
+    "answer": "You have 15 minutes to accept a booking request. If you don't respond within that window, the request is automatically declined and passed to another worker. Make sure your notifications are enabled so you don't miss requests."
+  },
+  {
+    "question": "Can I decline a booking without it affecting my account?",
+    "answer": "You can decline bookings, but a high decline rate (above 30%) will negatively affect your ranking in search results. If you're unavailable for a period, it's better to pause your availability from your dashboard rather than repeatedly declining."
+  },
+  {
+    "question": "How do I mark a job as started?",
+    "answer": "When you arrive at the client's location, open the booking in your app and tap 'Mark as Started'. This timestamps the beginning of the job, which is used for records and dispute resolution."
+  },
+  {
+    "question": "How do I mark a job as completed?",
+    "answer": "Once you finish the work, tap 'Mark as Completed' in the booking details. The client will be notified and prompted to confirm completion and leave a review. Your earnings are released after the client confirms, or automatically after 24 hours if they don't respond."
+  },
+  {
+    "question": "The client isn't home when I arrive. What should I do?",
+    "answer": "First, try contacting the client via the in-app chat or phone. If there's no response after 15 minutes, mark the job as 'Client No-Show' in the app. Since the client already paid upfront, 50% of the booking amount will be released to you as compensation and the remaining 50% refunded to the client. Do not leave without marking the status — undocumented no-shows cannot be compensated."
+  },
+  {
+    "question": "What if the job takes longer than the estimated hours?",
+    "answer": "The price the client paid at booking is fixed — there are no additional charges after payment. If a job runs over the estimated time, you complete it at no extra cost to the client. This is why it is important to assess the scope carefully before accepting, and to set your hourly rate in a way that accounts for typical overruns in your trade."
+  },
+  {
+    "question": "What if the job is finished faster than expected?",
+    "answer": "If you finish earlier than estimated, the client still pays the original booked amount — there is no refund for unused time. The booking price is fixed at the point of payment. This balances out jobs that occasionally run over."
+  },
+  {
+    "question": "A client is asking me to do something outside my listed skills. Should I do it?",
+    "answer": "Only take on work that falls within your registered skills and what was agreed in the booking. Taking on tasks outside your expertise can create liability issues and affect your rating if the work is unsatisfactory. If a client needs additional services, they can place a new booking separately."
+  },
+  {
+    "question": "Can I cancel a booking after accepting it?",
+    "answer": "Yes, but cancellations after acceptance should be a last resort. If you cancel within 2 hours of the scheduled job, it counts as a late cancellation and will be noted on your account. Repeated late cancellations may result in account suspension. Always cancel as early as possible and provide a reason. The client will receive a full refund when you cancel."
+  },
+  {
+    "question": "A client cancelled on me last minute. Will I be compensated?",
+    "answer": "Yes. Since the client pays upfront, if they cancel less than 5 hours before the scheduled time, 50% of the booking amount is released to you as compensation and the remaining 50% is refunded to the client. This is processed automatically within 24–48 hours. If the payment doesn't appear, contact support with the booking ID."
+  },
+  {
+    "question": "Can I reschedule a booking?",
+    "answer": "Rescheduling must be agreed upon by both you and the client. You can propose a new time through the in-app chat and the client confirms the change. The original payment remains held and is released once the rescheduled job is completed. Rescheduling within 2 hours of the original time is treated similarly to a late cancellation."
+  },
+  {
+    "question": "What happens if I'm running late to a booking?",
+    "answer": "Notify the client immediately through the in-app chat or call. Being late without notice can result in a negative review. If you're going to be more than 30 minutes late, the client has the right to cancel and receive a full refund, and you won't receive payment."
+  },
+  {
+    "question": "A client is being rude or making me feel unsafe. What can I do?",
+    "answer": "Your safety is the priority. You can leave the situation if you feel unsafe and mark the job as 'Safety Concern' in the app. You will not be penalised. Submit a report through the app under Help → Report a Safety Issue, and our team will follow up within a few hours. In an emergency, always call local emergency services first."
+  },
+  {
+    "question": "How do I get paid?",
+    "answer": "Clients pay upfront when they book. That payment is held securely by Hamro Sewa and released to your registered bank account or e-wallet (eSewa / Khalti) once the job is marked complete. You can manage your payout method in Dashboard → Earnings → Payout Settings."
+  },
+  {
+    "question": "When will I receive my payment after completing a job?",
+    "answer": "Your earnings are released within 24–48 hours after the client confirms job completion. If the client doesn't confirm within 24 hours, the payment is automatically released to you. Bank transfers may take an additional 1–2 business days to appear in your account."
+  },
+  {
+    "question": "How does Hamro Sewa's commission work?",
+    "answer": "Hamro Sewa charges a service commission of 15% on each completed job. For example, if the client paid NPR 1,000, you receive NPR 850 and the platform retains NPR 150. Commission rates may be lower for top-rated workers — check Dashboard → Earnings for your current rate."
+  },
+  {
+    "question": "I completed a job but haven't received payment. What should I do?",
+    "answer": "First check your Earnings dashboard to see the payment status. If it shows 'Pending', wait the full 48-hour window. If it has been more than 48 hours and no payment has arrived, contact support with your booking ID and we'll investigate within 24 hours."
+  },
+  {
+    "question": "Can I change my hourly rate?",
+    "answer": "Yes. Go to Dashboard → Profile Settings → Skills & Rates and update your rates. Rate changes apply to new bookings only — existing confirmed bookings keep the rate that was locked in when the client paid."
+  },
+  {
+    "question": "What is the minimum rate I can set?",
+    "answer": "The minimum hourly rate is NPR 200. Rates below this are not allowed to ensure fair wages for all workers on the platform."
+  },
+  {
+    "question": "A client is trying to pay me cash directly. What should I do?",
+    "answer": "Politely decline. Clients always pay through the platform before the job begins — a cash payment on the side means you won't be covered by our payment protection, dispute resolution, or insurance for that job. It also violates our terms of service and can result in account suspension."
+  },
+  {
+    "question": "My earnings seem wrong for a completed job. How do I dispute it?",
+    "answer": "Go to Dashboard → Earnings, find the job, and tap 'Report an Earnings Issue'. Describe the discrepancy and our payments team will review it within 2 business days. Have your booking confirmation and any relevant screenshots ready."
+  },
+  {
+    "question": "Is there a bonus for top-rated workers?",
+    "answer": "Yes. Workers who maintain a rating of 4.8 or above over at least 20 completed jobs qualify for our Top Worker programme. Benefits include a reduced commission rate (10% instead of 15%), a priority badge in search results, and access to higher-value bookings."
+  },
+  {
+    "question": "Are my earnings taxable?",
+    "answer": "Income earned through Hamro Sewa is subject to applicable Nepalese income tax laws. Hamro Sewa does not withhold tax on your behalf. We recommend consulting a tax professional. You can download your full earnings history from Dashboard → Earnings → Export."
+  },
+  {
+    "question": "How do I update my availability?",
+    "answer": "Go to Dashboard → Availability. Toggle days on or off and adjust your working hours. Changes take effect immediately and will be visible to clients when they browse for workers."
+  },
+  {
+    "question": "How do I temporarily pause my account without deleting it?",
+    "answer": "Go to Dashboard → Availability and turn off all days, or use the 'Pause Account' toggle under Profile Settings. While paused, you won't appear in search results and won't receive booking requests. You can reactivate at any time."
+  },
+  {
+    "question": "How do I add or remove a service area?",
+    "answer": "Go to Dashboard → Profile Settings → Service Areas and update your locations. You can select multiple areas across Nepal. Removing an area means you won't be shown to clients booking from that location."
+  },
+  {
+    "question": "How do I change my phone number or email?",
+    "answer": "Email and phone number changes require identity verification for security. Go to Profile Settings → Contact Details and request a change. You'll need to verify via OTP on your old number or email before the new one is saved."
+  },
+  {
+    "question": "How do I change my password?",
+    "answer": "Go to Dashboard → Profile Settings → Security → Change Password. You'll need to enter your current password before setting a new one. If you've forgotten your password, use the 'Forgot Password' link on the login page."
+  },
+  {
+    "question": "How do I update my bio or description?",
+    "answer": "Go to Dashboard → Profile Settings → About You. Keep your description under 500 characters. A good bio clearly states your experience, specialisations, and what clients can expect. Keep it professional — descriptions are reviewed if flagged."
+  },
+  {
+    "question": "Can I see my ratings and reviews?",
+    "answer": "Yes. Go to Dashboard → Reviews to see all client reviews, your average rating, and rating breakdown by category. You cannot delete reviews, but you can respond to them publicly."
+  },
+  {
+    "question": "Can I respond to a negative review?",
+    "answer": "Yes. Tap 'Reply' on any review in Dashboard → Reviews. Keep responses professional and constructive — your reply is visible to all future clients. Replies that violate our community guidelines will be removed."
+  },
+  {
+    "question": "A review I received is fake or unfair. What can I do?",
+    "answer": "Report the review by tapping the flag icon next to it. Our moderation team reviews flagged content within 3 business days. Reviews are only removed if they contain false information, violate our policies, or are unrelated to a verified booking."
+  },
+  {
+    "question": "How do I delete my account?",
+    "answer": "Go to Dashboard → Profile Settings → Account → Delete Account. Deleting your account is permanent and removes all your data, earnings history, and reviews. Any pending earnings will still be processed before deletion is finalised. If you're just taking a break, consider pausing your account instead."
+  },
+  {
+    "question": "I forgot my password and can't log in. What do I do?",
+    "answer": "On the login page, tap 'Forgot Password'. Enter the email address associated with your account and we'll send a reset link. Check your spam folder if you don't see it within a few minutes. The reset link expires after 30 minutes."
+  },
+  {
+    "question": "My account has been suspended. What do I do?",
+    "answer": "You'll receive an email explaining the reason for suspension. Common reasons include a high cancellation rate, a safety complaint, or a policy violation. Reply to the email or contact support to appeal. Most suspensions are reviewed within 3–5 business days."
+  },
+  {
+    "question": "What if a client damages my tools or equipment during a job?",
+    "answer": "Document the damage with photos immediately. Report it through the app under Help → Report an Incident within 24 hours of the job ending. Hamro Sewa will facilitate a resolution between you and the client. We recommend keeping your own equipment insurance for high-value tools."
+  },
+  {
+    "question": "A client is claiming I damaged their property but I didn't. What do I do?",
+    "answer": "Submit your side of the dispute through Dashboard → Bookings → [Job] → Raise Dispute. Include any photos, messages, or evidence you have. Our dispute team reviews both sides within 48 hours. The 'Mark as Started' and 'Mark as Completed' timestamps are also used as part of the evidence."
+  },
+  {
+    "question": "Can I work with a helper or assistant on a job?",
+    "answer": "Only the registered worker who accepted the booking should perform the work. Bringing an unregistered assistant creates liability issues and violates our terms. If a job genuinely requires multiple people, the client should book accordingly or contact support to discuss options."
+  },
+  {
+    "question": "What happens if the actual scope of work is completely different from the booking?",
+    "answer": "If the work required is significantly different from what the client described, you are not obligated to complete it. Discuss the situation with the client — if no agreement can be reached, contact support before leaving. Our team can help mediate and, where appropriate, process a fair cancellation without penalising you."
+  },
+  {
+    "question": "I accidentally marked a job as completed before it was done. What do I do?",
+    "answer": "Contact support immediately with the booking ID. Do not ask the client to re-book. Our team can revert the status within the same business day in most cases. This is time-sensitive, so reach out as soon as possible."
+  },
+  {
+    "question": "Can a client book me directly without going through the platform?",
+    "answer": "Repeat or direct bookings must still go through Hamro Sewa. Working off-platform means you lose access to payment protection, dispute resolution, and your rating history. It also violates our terms of service. If a client suggests a direct deal, politely direct them to book through the app."
+  },
+  {
+    "question": "What if I find a safety hazard at the client's property?",
+    "answer": "Do not proceed with work if you believe there is a genuine safety risk (e.g. exposed wiring, structural instability, gas leaks). Inform the client of the hazard, mark the booking as 'Unable to Complete — Safety Hazard' in the app, and contact support. You will not be penalised and a fair resolution will be arranged regarding the upfront payment."
+  },
+  {
+    "question": "A client is harassing me over chat. What can I do?",
+    "answer": "Block the client using the three-dot menu in the chat thread and report the conversation through Help → Report Harassment. Our team reviews harassment reports within 24 hours. Repeated offenders are removed from the platform. Your personal contact information is never shared with clients."
+  },
+  {
+    "question": "Can I request that a specific client not be matched with me again?",
+    "answer": "Yes. After a completed or cancelled booking, you can flag the client as 'Do Not Match' from the booking details page. This is private — the client is not notified. Future requests from that client will not be sent to you."
+  },
+  {
+    "question": "What happens to my account if I don't receive any bookings for a long time?",
+    "answer": "Inactive accounts (no completed bookings in 90 days) may be moved to 'Inactive' status and shown lower in search results. Your account and data are not deleted. To reactivate, simply log in, refresh your availability, and update your profile — active profiles are re-ranked within 24–48 hours."
+  }
+]

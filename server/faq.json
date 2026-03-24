@@ -1,0 +1,14 @@
+[
+    {
+      "question": "What are your working hours?",
+      "answer": "Kaam-ly workers are available from 9 AM to 6 PM, Monday to Saturday."
+    },
+    {
+      "question": "How can I book a worker?",
+      "answer": "You can book a worker by sending a message to Kaam-ly AI with your required service and date."
+    },
+    {
+      "question": "Do workers bring their own tools?",
+      "answer": "Yes, most workers bring the necessary tools for the service."
+    }
+  ]

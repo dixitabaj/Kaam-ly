@@ -1,0 +1,65 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+*.safetensors
+worker/model/
+__pycache__/
+*.pyc
+
+worker/model/
+*.safetensors
+__pycache__/
+*.pyc
+node_modules/
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# =====================
+# Python
+# =====================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+env/
+fastapi-env/
+.venv/
+*.env
+
+# =====================
+# Node / frontend
+# =====================
+node_modules/
+dist/
+vite-env.d.ts
+package-lock.json
+uv.lock
+
+# =====================
+# macOS
+# =====================
+.DS_Store
+
+# =====================
+# Project-specific
+# =====================
+uploads/worker/router/kaam-ly-firebase.json

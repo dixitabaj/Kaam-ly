@@ -1,0 +1,160 @@
+/* Step1BasicInfo.css - Compact Version */
+
+/* Step content styles specific to Step1 */
+.step-content {
+  margin-bottom: 30px; /* Reduced from 40px */
+}
+
+.step-title {
+  font-size: 22px; /* Reduced from 25px */
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 10px; /* Reduced from 12px */
+}
+
+.step-description {
+  font-size: 14px; /* Reduced from 17px */
+  color: #64748b;
+  margin-bottom: 30px; /* Reduced from 42px */
+  line-height: 1.4; /* Adjusted from 1.2 */
+}
+
+.form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px; /* Reduced from 5px */
+}
+
+.form-row {
+  display: flex;
+  gap: 16px; /* Reduced from 20px */
+}
+
+.form-group {
+  flex: 1;
+}
+
+.form-label {
+  display: block;
+  font-size: 13px; /* Reduced from 15px */
+  font-weight: 500;
+  color: #475569;
+  margin-bottom: 6px; /* Reduced from 8px */
+  margin-left: 4px; /* Reduced from 5px */
+}
+
+.form-input {
+  width: 100%; /* Changed from fixed 300px to responsive */
+  max-width: 260px; /* Set a max-width instead of fixed width */
+  padding: 12px 14px; /* Reduced from 14px 16px */
+  border: 2px solid #e2e8f0;
+  border-radius: 10px; /* Reduced from 12px */
+  font-size: 13px; /* Increased from 12px for better readability */
+  color: #1e293b;
+  background: white;
+  transition: all 0.3s;
+  height: 44px; /* Added fixed height for consistency */
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #070707;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1); /* Reduced from 3px */
+}
+
+.form-input::placeholder {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.phone-input-wrapper {
+  display: flex;
+  align-items: center;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px; /* Reduced from 12px */
+  overflow: hidden;
+  transition: all 0.3s;
+  width: 100%; /* Changed from fixed 305px to responsive */
+  max-width: 265px; /* Slightly wider than form-input for phone */
+  height: 44px; /* Match form-input height */
+}
+
+.phone-input-wrapper:focus-within {
+  border-color: #070707;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1); /* Reduced from 3px */
+}
+
+.country-code {
+  padding: 12px 14px; /* Reduced from 14px 16px */
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 500;
+  border-right: 2px solid #e2e8f0;
+  font-size: 13px; /* Increased from 12px */
+  height: 100%; /* Full height */
+  display: flex;
+  align-items: center;
+}
+
+.phone-input {
+  flex: 1;
+  border: none;
+  padding: 12px 14px; /* Reduced from 14px 16px */
+  font-size: 13px; /* Increased from 12px */
+  color: #1e293b;
+  background: white;
+  height: 100%;
+}
+
+.phone-input:focus {
+  outline: none;
+}
+
+.phone-input::placeholder {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+/* Error message styling */
+.error-message {
+  display: block;
+  font-size: 12px; /* Smaller error text */
+  color: #ef4444;
+  margin-top: 4px; /* Reduced spacing */
+  margin-left: 4px; /* Reduced from 5px */
+  min-height: 16px; /* Prevent layout shift */
+}
+
+.error-input {
+  border-color: #ef4444 !important;
+  background-color: #fef2f2 !important;
+}
+
+.error-input:focus {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1) !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .form-row {
+    flex-direction: column;
+    gap: 12px; /* Smaller gap for mobile */
+  }
+  
+  .form-input {
+    max-width: 100%;
+  }
+  
+  .phone-input-wrapper {
+    max-width: 100%;
+  }
+  
+  .step-title {
+    font-size: 20px;
+  }
+  
+  .step-description {
+    font-size: 13px;
+  }
+}

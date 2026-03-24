@@ -1,0 +1,423 @@
+/* WorkerProfileAdmin.css — Kaam-ly brand theme */
+/*
+  Brand reference (no CSS variables — all values hardcoded):
+  brand:        #E8843A    brand-light: #E8843A18   brand-hover: #D4712A
+  bg:           #F7F5EF    surface:     #FFFFFF      border:      #EDE8DF
+  divider:      #FAF7F2    text-primary:#1C1410      text-second: #7A6E65
+  text-muted:   #B0A89E    green:       #3D9E6E      green-light: #3D9E6E18
+  red:          #D94F3D    red-light:   #D94F3D15    blue:        #3D7EC9
+*/
+
+/* ── Container ── */
+.worker-profile-container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 24px;
+  min-height: 100vh;
+  background-color: #F7F5EF;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ── Header Card ── */
+.header-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #FFFFFF;
+  padding: 18px 20px;
+  border-radius: 12px;
+  border: 1px solid #EDE8DF;
+  box-shadow: 0 2px 8px rgba(100, 60, 20, 0.07);
+  margin-bottom: 24px;
+}
+
+.header-card h1 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #1C1410;
+  margin: 0 0 4px;
+}
+
+.header-card p {
+  font-size: 0.8rem;
+  color: #B0A89E;
+  font-family: monospace;
+  margin: 0;
+}
+
+.header-card button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #D94F3D15;
+  color: #D94F3D;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid #D94F3D25;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.header-card button:hover {
+  background-color: #F5C5C0;
+}
+
+/* ── Layout Grid ── */
+.grid-3 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+@media (min-width: 768px) {
+  .grid-3 {
+    grid-template-columns: 1fr 2fr;
+  }
+}
+
+/* ── Profile Card ── */
+.profile-card {
+  background-color: #FFFFFF;
+  padding: 24px;
+  border-radius: 12px;
+  border: 1px solid #EDE8DF;
+  box-shadow: 0 2px 8px rgba(100, 60, 20, 0.07);
+  text-align: center;
+}
+
+.profile-photo {
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  margin: 0 auto 16px;
+  background-color: #F7F5EF;
+  border: 3px solid #EDE8DF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* ── Status Badges ── */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.status-available {
+  background-color: #3D9E6E18;
+  color: #3D9E6E;
+  border: 1px solid #3D9E6E25;
+}
+
+.status-suspended {
+  background-color: #E8843A18;
+  color: #E8843A;
+  border: 1px solid #E8843A30;
+}
+
+.status-banned {
+  background-color: #D94F3D15;
+  color: #D94F3D;
+  border: 1px solid #D94F3D25;
+}
+
+.status-offline {
+  background-color: #F0ECE7;
+  color: #B0A89E;
+  border: 1px solid #EDE8DF;
+}
+
+/* ── Star Rating ── */
+.star-rating {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: #E8843A;
+  margin-bottom: 8px;
+}
+
+/* ── Verification Card ── */
+.verification-card {
+  background-color: #FFFFFF;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid #EDE8DF;
+  box-shadow: 0 2px 8px rgba(100, 60, 20, 0.07);
+}
+
+.verification-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #FAF7F2;
+}
+
+.verification-row:last-child {
+  border-bottom: none;
+}
+
+.verification-badge-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background-color: #3D9E6E18;
+  color: #3D9E6E;
+  border: 1px solid #3D9E6E25;
+  border-radius: 9999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.verification-badge-fail {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background-color: #D94F3D15;
+  color: #D94F3D;
+  border: 1px solid #D94F3D25;
+  border-radius: 9999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ── Details Card ── */
+.details-card {
+  background-color: #FFFFFF;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid #EDE8DF;
+  box-shadow: 0 2px 8px rgba(100, 60, 20, 0.07);
+  margin-bottom: 20px;
+}
+
+.contact-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #FAF7F2;
+}
+
+.contact-row:last-child {
+  border-bottom: none;
+}
+
+.contact-row .label {
+  font-size: 10px;
+  color: #B0A89E;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-weight: 500;
+}
+
+.contact-row .value {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1C1410;
+}
+
+/* ── Metrics ── */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.metric-card {
+  background-color: #FFFFFF;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid #EDE8DF;
+  box-shadow: 0 2px 8px rgba(100, 60, 20, 0.07);
+  text-align: center;
+}
+
+.metric-card .label {
+  font-size: 10px;
+  color: #B0A89E;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-weight: 500;
+}
+
+.metric-card .value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #1C1410;
+}
+
+/* ── Skills ── */
+.skills-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.skill-badge {
+  background-color: #E8843A18;
+  color: #D4712A;
+  border: 1px solid #E8843A30;
+  padding: 3px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* ── Service Area ── */
+.service-area {
+  background-color: #F7F5EF;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: monospace;
+  color: #7A6E65;
+  border: 1px solid #EDE8DF;
+}
+
+/* ── Schedule ── */
+.schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.schedule-card {
+  text-align: center;
+  padding: 10px 8px;
+  border-radius: 8px;
+  background-color: #F7F5EF;
+  border: 1px solid #EDE8DF;
+  font-size: 11px;
+  color: #7A6E65;
+  font-weight: 500;
+}
+
+.schedule-card.active {
+  background-color: #E8843A18;
+  border-color: #E8843A;
+  color: #D4712A;
+  font-weight: 600;
+}
+
+/* ── Section titles ── */
+.section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #B0A89E;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 14px;
+}
+
+/* ── Action buttons ── */
+.action-btn-danger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #D94F3D15;
+  color: #D94F3D;
+  padding: 9px 16px;
+  border-radius: 9px;
+  border: 1px solid #D94F3D25;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.15s;
+  width: 100%;
+  justify-content: center;
+}
+
+.action-btn-danger:hover {
+  background-color: #F5C5C0;
+}
+
+.action-btn-primary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #E8843A;
+  color: #FFFFFF;
+  padding: 9px 16px;
+  border-radius: 9px;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  width: 100%;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.action-btn-primary:hover {
+  background-color: #D4712A;
+}
+
+.action-btn-warn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #E8843A18;
+  color: #E8843A;
+  padding: 9px 16px;
+  border-radius: 9px;
+  border: 1px solid #E8843A30;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  width: 100%;
+  justify-content: center;
+}
+
+.action-btn-warn:hover {
+  background-color: #E8843A30;
+}
+
+.action-btn-success {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #3D9E6E18;
+  color: #3D9E6E;
+  padding: 9px 16px;
+  border-radius: 9px;
+  border: 1px solid #3D9E6E25;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  width: 100%;
+  justify-content: center;
+}
+
+.action-btn-success:hover {
+  background-color: #3D9E6E30;
+}
+
+/* ── Loading/Empty states ── */
+.empty-state {
+  padding: 60px 24px;
+  text-align: center;
+  color: #B0A89E;
+  font-size: 14px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .metrics-grid             { grid-template-columns: repeat(2, 1fr); }
+  .schedule-grid            { grid-template-columns: repeat(3, 1fr); }
+  .worker-profile-container { padding: 14px; }
+}

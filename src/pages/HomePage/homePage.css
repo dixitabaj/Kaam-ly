@@ -1,0 +1,595 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+  background-color: #F8FAFC;
+  color: #0f172a;
+}
+
+.app-container {
+  min-height: 100vh;
+  background: #F8FAFC;
+}
+
+/* =====================================
+   HERO SECTION - KEEP YOUR EXISTING
+   ===================================== */
+.hero-section {
+  background: white;
+  padding: 4rem 2rem 3rem;
+}
+
+.hero-content {
+  max-width: 56rem;
+  margin: 0 auto;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.hero-title {
+  margin-top: 50px;
+  font-size: 3rem;
+  font-weight: bold;
+  color: #000000;
+  margin-bottom: 1.5rem;
+  line-height: 1.2;
+}
+
+.hero-subtitle {
+  font-size: 1.25rem;
+  color: #242424;
+  margin-bottom: 2rem;
+  line-height: 1.75;
+}
+
+/* =====================================
+   CATEGORIES SECTION - FIXED TO ORANGE
+   ===================================== */
+.categories-icons-section {
+  background: white;
+  padding: 2rem 2rem 3rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.categories-icons-content {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.category-icon-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 5px;
+  width: 120px;
+  margin-bottom: 20px;
+}
+
+.category-icon-item:hover {
+  box-shadow: 0 8px 30px -15px #f6ad56;
+
+  width: 120px;
+  border-radius: 20px;
+}
+
+
+
+/* Bottom border for active label */
+.icon-label.active {
+  position: relative;
+  color: #f6ad56;
+}
+
+.icon-label.active::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 25%;
+  width: 50%;
+  height: 3px;
+  background: #f6ad56;
+  border-radius: 2px;
+}
+
+
+.icon-label {
+  font-size: 0.875rem;
+  color: #475569;
+  font-weight: 600;
+  text-align: center;
+  margin-top: -15px;
+  margin-bottom: 20px;
+}
+
+
+/* =====================================
+   WORKERS SECTION
+   ===================================== */
+   
+.workers-section {
+  padding: 3rem 2rem;
+  background: #FFFDF2;
+}
+
+.workers-content {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.section-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 1.5rem;
+}
+
+.workers-horizontal-scroll-container {
+  overflow-x: auto;
+  padding-bottom: 1rem;
+  margin-bottom: 2rem;
+  
+}
+
+.workers-horizontal-scroll {
+  display: flex;
+  gap: 24px;
+  width: 1350px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  scrollbar-width: thin;
+  margin-bottom: 50px;
+}
+/* Subcategories Section */
+.subcategories-section {
+  border-top:1px solid #a9abab;
+  padding: 20px 0 10px 0;
+}
+.category-img {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+}
+
+.icon-circle {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+
+.subcategories-content {
+  width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: center;
+}
+
+.subcategory-item {
+  padding: 10px 30px;
+  background-color: white;
+  border: 1px solid #e1ab71;;
+  border-radius: 20px;
+  font-size: 18px;
+  font-weight: 550;
+  color: #444444;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.subcategory-item:hover {
+  background-color: #fdebd9;
+  border-color: #e1ab71;
+}
+
+.subcategory-item.active {
+  background-color: rgb(255, 253, 242);
+  border-color: #e1ab71;
+  color: rgb(54, 54, 54);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .subcategories-content {
+    padding: 0 15px;
+    gap: 8px;
+  }
+  
+  .subcategory-item {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+}
+.priceHome {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+  width: 120px;
+}
+.worker-details{
+  margin-left: 110px;
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
+.priceLabel {
+  font-size:'14px';
+  font-weight: '400';
+  color: '#64748b';
+}
+/* =====================================
+   WORKER CARD - EXACT MATCH TO SCREENSHOT
+   ===================================== */
+.worker-card-horizontal-scroll {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 580px;
+  min-width: 580px;
+  border: 1px solid #edf2f7;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Header - Name and ELITE */
+.worker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.worker-name {
+  width: 290px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #000000;
+  line-height: 1.2;
+}
+
+.elite-badge {
+  background: #FF6B35;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* Rating Row */
+.rating-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.star-icon {
+  color: #FFB800;
+  font-size: 18px;
+}
+
+.rating-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #000000;
+  
+  margin-left: 5px;
+}
+
+.reviews-count {
+  font-size: 15px;
+  color: #5e5e5e;
+  font-weight: 400;
+  margin-left: 5px;
+}
+
+/* Tasks List */
+.tasks-list {
+  margin-top: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 30px;
+}
+
+.task-item {
+  display: grid;
+  font-size: 15px;
+  color: #4a4a4a;
+  grid-template-columns: 0.4fr 1fr;
+}
+
+.task-number {
+  color: #000000;
+}
+
+.task-label{
+  font-weight: 600;
+}
+
+/* Work Photos */
+.work-photos {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+/* Profile Photo */
+.worker-header {
+  margin-bottom: 12px;
+}
+
+.worker-header-left {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  margin-bottom: -30px;
+}
+
+.profile-photo-home {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgb(246, 173, 86);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.profile-photo-home img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-initials {
+  color: white;
+  font-size: 20px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.worker-name-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.worker-name {
+  font-size: 24px;
+  font-weight: 700;
+  color: #000000;
+  margin: 0;
+  line-height: 1.2;
+}
+.worker-description{
+  height: 190px;
+}
+
+.elite-badge {
+  background: rgb(246, 173, 86);;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.work-photos-icon {
+  font-size: 18px;
+}
+.worker-description{
+  height: 350px;
+}
+.work-photos-text {
+  font-size: 15px;
+  font-weight: 600;
+  color: #000000;
+  text-decoration: underline;
+  text-decoration-color: #cbd5e0;
+  text-underline-offset: 2px;
+}
+/* Review Section */
+.review-section {
+  background: #F8FAFD;
+  padding: 16px;
+  border-radius: 12px;
+  margin-top: 28px;
+  margin-bottom: 10px;
+  margin-right: 40px;
+  margin-left: 40px;
+}
+
+.review-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.review-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #ebeef2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #475569;
+  flex-shrink: 0;
+}
+
+.review-text {
+  font-size: 14px;
+  color: #475569;
+  line-height: 1.5;
+  margin-top: px;
+  font-style: italic;
+}
+
+.review-service {
+  font-size: 13px;
+  color: #94a3b8;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Optional: Add hover effect if needed */
+.review-icon:hover {
+  background: rgb(246, 173, 86);;
+  color: white;
+  transition: all 0.2s ease;
+}
+
+/* Responsive adjustment for mobile */
+@media (max-width: 768px) {
+  .review-section {
+    margin-left: 0;
+    padding: 14px;
+  }
+}
+/* Divider */
+.divider {
+  height: 1px;
+  background: #e2e8f0;
+  margin: 8px 0;
+}
+
+/* Action Buttons */
+.view-profile-btn {
+  background: none;
+  border: none;
+      color: black;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      white-space: nowrap;
+      margin-left: -2px;
+}
+
+.select-btn {
+  width: 100%;
+  padding: 14px 20px;
+  background: rgb(246, 173, 86);;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+
+.booking-note {
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* How I Can Help */
+.help-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #000000;
+  margin: 0 0 8px 0;
+}
+
+.help-description {
+  font-size: 15px;
+  color: #4a4a4a;
+  line-height: 1.5;
+  margin: 0 0 8px 0;
+}
+
+.read-more {
+  color: #FF6B35;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+/* Review Section */
+.review-card {
+  background: #f8fafc;
+  padding: 16px;
+  border-radius: 12px;
+  margin-top: 4px;
+}
+
+.review-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.reviewer-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #000000;
+}
+
+.review-date {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.review-text {
+  font-size: 14px;
+  color: #4a4a4a;
+  line-height: 1.6;
+  margin: 0;
+  font-style: normal;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .worker-card-horizontal-scroll {
+    min-width: 320px;
+    padding: 20px;
+  }
+  
+  .worker-name {
+    font-size: 22px;
+  }
+}

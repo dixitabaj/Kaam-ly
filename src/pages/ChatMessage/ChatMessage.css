@@ -1,0 +1,144 @@
+.chat-popup {
+  position: fixed;
+  bottom: 0;
+  left: 20px;
+  width: 360px;
+  height: 550px;
+  background: #242526;
+  border-radius: 12px 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: #e4e6eb;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  box-shadow: 0 12px 28px 0 rgba(0,0,0,0.4);
+  z-index: 9999;
+}
+
+.chat-popup.minimized {
+  height: auto;
+  width: 360px;
+}
+
+.chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #3e4042;
+}
+
+.contact-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.contact-info .avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: 600;
+  color: white;
+  position: relative;
+}
+
+
+.contact-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.contact-status {
+  font-size: 11px;
+  color: #b0b3b8;
+}
+
+.messages-container {
+  flex: 1;
+  padding: 12px;
+  overflow-y: auto;
+  background: #18191a;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.message-wrapper {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 75%;
+}
+
+.message-wrapper.sent {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.message-wrapper.received {
+  align-self: flex-start;
+}
+
+.avatar-small {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: white;
+}
+
+.message-bubble {
+  padding: 8px 12px;
+  border-radius: 18px;
+  word-wrap: break-word;
+  background: #3a3b3c;
+  color: #e4e6eb;
+  max-width: 100%;
+}
+
+
+.message-wrapper.received .message-bubble {
+  border-bottom-right-radius: 18px;
+  border-bottom-left-radius: 4px;
+}
+
+.chat-input {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  gap: 6px;
+  border-top: 1px solid #3e4042;
+  background: #242526;
+}
+
+.textarea-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  background: #3a3b3c;
+  border-radius: 20px;
+  padding: 0 10px;
+}
+
+.textarea-wrapper textarea {
+  flex: 1;
+  padding: 8px 32px 8px 8px;
+  background: transparent;
+  border: none;
+  color: #e4e6eb;
+  font-size: 14px;
+  outline: none;
+  resize: none;
+  max-height: 100px;
+  line-height: 1.3;
+}

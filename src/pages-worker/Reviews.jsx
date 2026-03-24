@@ -1,0 +1,569 @@
+import React, { useState, useEffect } from "react";
+import Sidebar from "./sidebar";
+import BookingNavbar from "../components/Navbar/Navbar";
+import { getReviewsById, getTaskById } from "../api/api";
+
+const FontLink = () => (
+  <style>{`
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    * { box-sizing: border-box; }
+    body { background: #faf9f7; }
+    .review-row:hover { background: #fdf8f4 !important; cursor: pointer; }
+    .filter-tab:hover { background: #f5f0eb !important; }
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to   { transform: translateX(0);    opacity: 1; }
+    }
+    .drawer { animation: slideIn 0.25s cubic-bezier(0.22,1,0.36,1); }
+    textarea:focus { outline: none; border-color: #f97316 !important; }
+    input:focus { outline: none; border-color: #f97316 !important; }
+  `}</style>
+);
+
+/* ─── Helpers ─────────────────────────────────────────────────── */
+const parseDate = (str) => {
+  if (!str) return null;
+  const ddmmyyyy = /^(\d{2})-(\d{2})-(\d{4})$/;
+  const match = str.match(ddmmyyyy);
+  if (match) return new Date(`${match[3]}-${match[2]}-${match[1]}`);
+  const d = new Date(str);
+  return isNaN(d) ? null : d;
+};
+
+const formatDateShort = (str) => {
+  const d = parseDate(str);
+  if (!d) return str || "—";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+};
+
+const formatDateLong = (str) => {
+  const d = parseDate(str);
+  if (!d) return str || "—";
+  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
+};
+
+/* ─── Stat Card ───────────────────────────────────────────────── */
+const StatCard = ({ iconPath, label, value, sub }) => (
+  <div style={{
+    flex: 1, minWidth: 160,
+    background: "#fff",
+    border: "1px solid #ede9e4",
+    borderRadius: 14,
+    padding: "1.1rem 1.25rem",
+    display: "flex", alignItems: "center", gap: 14,
+  }}>
+    <div style={{
+      width: 44, height: 44, borderRadius: 10,
+      background: "#fff4ed",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      flexShrink: 0,
+    }}>
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+        {iconPath}
+      </svg>
+    </div>
+    <div>
+      <div style={{ fontSize: "0.7rem", color: "#a89f97", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#1a1310", lineHeight: 1 }}>{value}</div>
+      {sub && <div style={{ fontSize: "0.72rem", color: "#a89f97", marginTop: 3 }}>{sub}</div>}
+    </div>
+  </div>
+);
+
+/* ─── Stars ───────────────────────────────────────────────────── */
+const Stars = ({ count, max = 5, size = "0.82rem" }) => (
+  <span style={{ fontSize: size, letterSpacing: 1 }}>
+    {Array.from({ length: max }, (_, i) => (
+      <span key={i} style={{ color: i < Math.round(count) ? "#f97316" : "#e5ddd6" }}>&#9733;</span>
+    ))}
+  </span>
+);
+
+/* ─── Badge ───────────────────────────────────────────────────── */
+const Badge = ({ rating }) => {
+  const map = {
+    5: { bg: "#f0fdf4", color: "#16a34a", label: "Excellent" },
+    4: { bg: "#eff6ff", color: "#2563eb", label: "Good"      },
+    3: { bg: "#fffbeb", color: "#d97706", label: "Average"   },
+    2: { bg: "#fff7ed", color: "#ea580c", label: "Poor"      },
+    1: { bg: "#fef2f2", color: "#dc2626", label: "Bad"       },
+  };
+  const s = map[Math.round(rating)] || map[3];
+  return (
+    <span style={{
+      background: s.bg, color: s.color,
+      borderRadius: 99, padding: "2px 9px",
+      fontSize: "0.68rem", fontWeight: 600,
+      display: "inline-flex", alignItems: "center", gap: 4,
+    }}>
+      <span style={{ width: 5, height: 5, borderRadius: "50%", background: s.color, display: "inline-block" }} />
+      {s.label}
+    </span>
+  );
+};
+
+/* ─── Info Row ────────────────────────────────────────────────── */
+const InfoRow = ({ label, value }) => (
+  <div style={{
+    display: "flex", justifyContent: "space-between", alignItems: "flex-start",
+    padding: "0.55rem 0", borderBottom: "1px solid #f5f0eb",
+  }}>
+    <span style={{ fontSize: "0.75rem", color: "#b0a89f", flexShrink: 0, width: 120 }}>{label}</span>
+    <span style={{ fontSize: "0.82rem", color: "#2d2420", fontWeight: 500, textAlign: "right" }}>{value || "—"}</span>
+  </div>
+);
+
+/* ─── Drawer ──────────────────────────────────────────────────── */
+function ReviewDrawer({ review, task, onClose, onReplySubmit }) {
+  const [replyText, setReplyText] = useState(review.workerReply || "");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted]   = useState(!!review.workerReply);
+
+  const userId = review.customerId || "Unknown";
+  const rating = review.rating || 0;
+
+  const avatarColors = ["#f97316","#3b82f6","#22c55e","#a855f7","#ef4444","#0ea5e9","#eab308"];
+  const avatarBg = avatarColors[userId.charCodeAt(0) % avatarColors.length];
+  const initials = userId.slice(0, 2).toUpperCase();
+
+  const handleSubmit = async () => {
+    if (!replyText.trim()) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`http://localhost:8000/api/reviews/${review._id}/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reply: replyText }),
+      });
+      if (res.ok) {
+        setSubmitted(true);
+        onReplySubmit(review._id, replyText);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.18)", zIndex: 900 }} />
+      <div className="drawer" style={{
+        position: "fixed", top: 0, right: 0, bottom: 0,
+        width: 440, background: "#fff",
+        boxShadow: "-6px 0 32px rgba(0,0,0,0.08)",
+        zIndex: 1000, overflowY: "auto",
+        display: "flex", flexDirection: "column",
+        fontFamily: "'Inter', sans-serif",
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: "1.1rem 1.5rem",
+          borderBottom: "1px solid #ede9e4",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+        }}>
+          <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "#1a1310" }}>Review Detail</div>
+          <button onClick={onClose} style={{
+            background: "#f5f0eb", border: "none", borderRadius: 8,
+            width: 30, height: 30, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "#6b6460", fontSize: "0.85rem", fontFamily: "'Inter', sans-serif",
+          }}>&#10005;</button>
+        </div>
+
+        <div style={{ flex: 1, padding: "1.5rem" }}>
+
+          {/* Reviewer */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: "1.5rem" }}>
+            <div style={{
+              width: 46, height: 46, borderRadius: "50%",
+              background: avatarBg, color: "#fff",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontWeight: 700, fontSize: "0.95rem", flexShrink: 0,
+            }}>{initials}</div>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: "0.9rem", color: "#1a1310" }}>{userId}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                <Stars count={rating} size="1rem" />
+                <Badge rating={rating} />
+              </div>
+            </div>
+            <div style={{ marginLeft: "auto", fontSize: "0.72rem", color: "#b0a89f" }}>
+              {formatDateShort(review.createdAt)}
+            </div>
+          </div>
+
+          {/* Comment */}
+          <div style={{
+            background: "#fdf8f4", borderRadius: 10,
+            padding: "1rem", marginBottom: "1.5rem",
+            border: "1px solid #ede9e4",
+          }}>
+            <div style={{ fontSize: "0.68rem", color: "#b0a89f", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Comment</div>
+            <p style={{ margin: 0, fontSize: "0.88rem", color: "#3d3530", lineHeight: 1.65 }}>
+              {review.comment || "No comment left."}
+            </p>
+          </div>
+
+          {/* Task Details */}
+          <div style={{ marginBottom: "1.5rem" }}>
+            <div style={{ fontSize: "0.68rem", color: "#b0a89f", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: "0.75rem" }}>Task Details</div>
+            <div style={{ background: "#fdf8f4", borderRadius: 10, padding: "0.2rem 1rem", border: "1px solid #ede9e4" }}>
+              <InfoRow label="Task Name"    value={task?.taskName || task?.title} />
+              <InfoRow label="Task Type"    value={task?.taskType} />
+              <InfoRow label="Address"      value={task?.address} />
+              <InfoRow label="Service Date" value={task?.serviceDate ? formatDateLong(task.serviceDate) : null} />
+              <InfoRow label="Completed At" value={task?.completedAt ? formatDateLong(task.completedAt) : task?.completionTime ? `${task.completionTime} hrs` : null} />
+              <InfoRow label="Total Cost"   value={task?.totalCost ? `Rs. ${task.totalCost.toLocaleString()}` : null} />
+              <InfoRow label="Status"       value={task?.status} />
+            </div>
+          </div>
+
+          {/* Reply */}
+          <div>
+            <div style={{ fontSize: "0.68rem", color: "#b0a89f", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: "0.75rem" }}>
+              {submitted ? "Your Reply" : "Respond to Review"}
+            </div>
+
+            {submitted ? (
+              <div style={{ background: "#f0fdf4", borderRadius: 10, padding: "1rem", border: "1px solid #bbf7d0" }}>
+                <div style={{ fontSize: "0.72rem", color: "#16a34a", fontWeight: 600, marginBottom: 6 }}>Reply submitted</div>
+                <p style={{ margin: 0, fontSize: "0.86rem", color: "#3d3530", lineHeight: 1.6 }}>{replyText}</p>
+                <button onClick={() => setSubmitted(false)} style={{
+                  marginTop: 10, background: "none", border: "none",
+                  color: "#16a34a", fontSize: "0.72rem", cursor: "pointer",
+                  padding: 0, textDecoration: "underline",
+                }}>Edit reply</button>
+              </div>
+            ) : (
+              <>
+                <textarea
+                  value={replyText}
+                  onChange={e => setReplyText(e.target.value)}
+                  placeholder="Write a professional response to this review..."
+                  rows={4}
+                  style={{
+                    width: "100%", padding: "0.85rem",
+                    border: "1.5px solid #ede9e4", borderRadius: 10,
+                    fontSize: "0.85rem", fontFamily: "'Inter', sans-serif",
+                    resize: "vertical", color: "#2d2420",
+                    background: "#fdf8f4", lineHeight: 1.55,
+                    transition: "border-color 0.15s",
+                  }}
+                />
+                <button
+                  onClick={handleSubmit}
+                  disabled={submitting || !replyText.trim()}
+                  style={{
+                    marginTop: "0.65rem",
+                    width: "100%", padding: "0.75rem",
+                    background: replyText.trim() ? "#f97316" : "#ede9e4",
+                    color: replyText.trim() ? "#fff" : "#b0a89f",
+                    border: "none", borderRadius: 10,
+                    fontWeight: 600, fontSize: "0.88rem",
+                    cursor: replyText.trim() ? "pointer" : "not-allowed",
+                    transition: "all 0.15s",
+                    fontFamily: "'Inter', sans-serif",
+                  }}
+                >
+                  {submitting ? "Submitting..." : "Submit Reply"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ─── MAIN ────────────────────────────────────────────────────── */
+export default function Reviews() {
+  const [reviews, setReviews]         = useState([]);
+  const [taskDetails, setTaskDetails] = useState({});
+  const [loading, setLoading]         = useState(true);
+  const [filter, setFilter]           = useState(0);
+  const [search, setSearch]           = useState("");
+  const [selected, setSelected]       = useState(null);
+
+  const userString = localStorage.getItem("user") || sessionStorage.getItem("user");
+  const workerId   = userString
+    ? JSON.parse(userString)?.id || JSON.parse(userString)?.email
+    : null;
+
+  useEffect(() => {
+    if (!workerId) { setLoading(false); return; }
+
+    const fetchData = async () => {
+      try {
+        const data = await getReviewsById(workerId);
+        setReviews([...data].reverse());
+
+        const details = {};
+        for (const r of data) {
+          if (r.taskId && !details[r.taskId]) {
+            try {
+              const task = await getTaskById(r.taskId);
+              details[r.taskId] = task;
+            } catch (err) {
+              console.error(`Failed to fetch task ${r.taskId}:`, err);
+              details[r.taskId] = null;
+            }
+          }
+        }
+        setTaskDetails(details);
+      } catch (err) {
+        console.error("Error fetching reviews:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [workerId]);
+
+  const handleReplySubmit = (reviewId, reply) => {
+    setReviews(prev => prev.map(r => r._id === reviewId ? { ...r, workerReply: reply } : r));
+  };
+
+  if (loading) return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#b0a89f", fontSize: "0.9rem", background: "#faf9f7" }}>
+      Loading reviews...
+    </div>
+  );
+
+  const total     = reviews.length;
+  const avg       = total > 0 ? reviews.reduce((s, r) => s + (r.rating || 0), 0) / total : 0;
+  const fiveStars = reviews.filter(r => Math.round(r.rating) === 5).length;
+  const oneStars  = reviews.filter(r => Math.round(r.rating) === 1).length;
+  const replied   = reviews.filter(r => !!r.workerReply).length;
+
+  const displayed = reviews
+    .filter(r => filter === 0 || Math.round(r.rating) === filter)
+    .filter(r => !search ||
+      (r.customerId || "").toLowerCase().includes(search.toLowerCase()) ||
+      (r.comment    || "").toLowerCase().includes(search.toLowerCase())
+    );
+
+  const avatarColors = ["#f97316","#3b82f6","#22c55e","#a855f7","#ef4444","#0ea5e9","#eab308"];
+  const getAvatarColor = (str = "") => avatarColors[str.charCodeAt(0) % avatarColors.length];
+  const getInitials    = (id = "") => id.slice(0, 2).toUpperCase();
+
+  return (
+    <>
+      <FontLink />
+      <BookingNavbar />
+      <div style={{ display: "flex", minHeight: "100vh", background: "#faf9f7", fontFamily: "'Inter', sans-serif" }}>
+        <Sidebar workerId={workerId} />
+
+        <main style={{ flex: 1, padding: "2rem 2.5rem", maxWidth: 1200, margin: "0 auto", width: "100%" }}>
+
+          {/* Page Title */}
+          <div style={{ marginBottom: "1.75rem" }}>
+            <h1 style={{ fontSize: "1.4rem", fontWeight: 700, color: "#1a1310", margin: 0 }}>Reviews</h1>
+            <p style={{ fontSize: "0.82rem", color: "#a89f97", margin: "4px 0 0" }}>Monitor and respond to customer feedback</p>
+          </div>
+
+          {/* Stat Cards */}
+          <div style={{ display: "flex", gap: "1rem", marginBottom: "1.75rem", flexWrap: "wrap" }}>
+            <StatCard
+              iconPath={<path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01L12 2z" stroke="#f97316" strokeWidth="1.5" strokeLinejoin="round"/>}
+              label="Average Rating" value={avg.toFixed(1)} sub="out of 5.0"
+            />
+            <StatCard
+              iconPath={<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="#f97316" strokeWidth="1.5" strokeLinejoin="round"/>}
+              label="Total Reviews" value={total} sub={`${fiveStars} five-star`}
+            />
+            <StatCard
+              iconPath={<><circle cx="12" cy="12" r="10" stroke="#f97316" strokeWidth="1.5"/><path d="M9 12l2 2 4-4" stroke="#f97316" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></>}
+              label="Replied" value={replied} sub={total > 0 ? `${Math.round(replied / total * 100)}% response rate` : "—"}
+            />
+            <StatCard
+              iconPath={<><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="#ef4444" strokeWidth="1.5" strokeLinejoin="round"/><line x1="12" y1="9" x2="12" y2="13" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round"/><line x1="12" y1="17" x2="12.01" y2="17" stroke="#ef4444" strokeWidth="2" strokeLinecap="round"/></>}
+              label="1-Star Reviews" value={oneStars} sub={oneStars > 0 ? "Needs attention" : "None"}
+            />
+          </div>
+
+          {/* Table Card */}
+          <div style={{ background: "#fff", border: "1px solid #ede9e4", borderRadius: 16, overflow: "hidden" }}>
+
+            {/* Toolbar */}
+            <div style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "1rem 1.5rem", borderBottom: "1px solid #ede9e4",
+              flexWrap: "wrap", gap: 10,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontWeight: 600, fontSize: "0.92rem", color: "#1a1310" }}>All Reviews</span>
+                <span style={{
+                  background: "#fff4ed", color: "#f97316",
+                  borderRadius: 99, padding: "1px 9px",
+                  fontSize: "0.7rem", fontWeight: 600,
+                }}>{displayed.length}</span>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                {/* Search */}
+                <div style={{ position: "relative" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)" }}>
+                    <circle cx="11" cy="11" r="8" stroke="#b0a89f" strokeWidth="2"/>
+                    <path d="m21 21-4.35-4.35" stroke="#b0a89f" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                  <input
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Search reviews..."
+                    style={{
+                      paddingLeft: 30, paddingRight: 12, height: 34,
+                      border: "1px solid #ede9e4", borderRadius: 8,
+                      fontSize: "0.8rem", background: "#fdf8f4",
+                      color: "#2d2420", width: 200,
+                      fontFamily: "'Inter', sans-serif",
+                      transition: "border-color 0.15s",
+                    }}
+                  />
+                </div>
+
+                {/* Filter tabs */}
+                {[0,5,4,3,2,1].map(f => (
+                  <button
+                    key={f}
+                    className="filter-tab"
+                    onClick={() => setFilter(f)}
+                    style={{
+                      padding: "5px 12px", borderRadius: 8,
+                      fontSize: "0.76rem", cursor: "pointer",
+                      fontWeight: filter === f ? 600 : 400,
+                      background: filter === f ? "#f97316" : "#fdf8f4",
+                      color: filter === f ? "#fff" : "#7a6f68",
+                      border: `1px solid ${filter === f ? "#f97316" : "#ede9e4"}`,
+                      transition: "all 0.15s",
+                      fontFamily: "'Inter', sans-serif",
+                    }}
+                  >
+                    {f === 0 ? "All" : `${f} Stars`}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Column Headers */}
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "2fr 1.6fr 1fr 100px 90px 110px",
+              padding: "0.55rem 1.5rem",
+              borderBottom: "1px solid #ede9e4",
+              fontSize: "0.68rem", color: "#b0a89f",
+              fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em",
+            }}>
+              <div>Reviewer</div>
+              <div>Task</div>
+              <div>Completed</div>
+              <div>Rating</div>
+              <div>Status</div>
+              <div>Date</div>
+            </div>
+
+            {/* Rows */}
+            {displayed.length === 0 ? (
+              <div style={{ textAlign: "center", color: "#c5bdb6", padding: "4rem 0", fontSize: "0.88rem" }}>
+                {reviews.length === 0 ? "No reviews yet." : "No reviews match this filter."}
+              </div>
+            ) : displayed.map((review, i) => {
+              const userId   = review.customerId || "Unknown";
+              const rating   = review.rating     || 0;
+              const task     = taskDetails[review.taskId];
+              const hasReply = !!review.workerReply;
+
+              return (
+                <div
+                  key={review._id || i}
+                  className="review-row"
+                  onClick={() => setSelected({ review, task: task || null })}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "2fr 1.6fr 1fr 100px 90px 110px",
+                    padding: "0.85rem 1.5rem",
+                    borderBottom: i < displayed.length - 1 ? "1px solid #f5f0eb" : "none",
+                    alignItems: "center",
+                    transition: "background 0.1s",
+                  }}
+                >
+                  {/* Reviewer */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: "50%",
+                      background: getAvatarColor(userId), color: "#fff",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: "0.68rem", fontWeight: 700, flexShrink: 0,
+                    }}>
+                      {getInitials(userId)}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "0.83rem", color: "#2d2420", fontWeight: 500, marginBottom: 3 }}>{userId}</div>
+                      <Badge rating={rating} />
+                    </div>
+                  </div>
+
+                  {/* Task */}
+                  <div style={{
+                    fontSize: "0.82rem", color: "#4a403a", fontWeight: 500,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    textTransform: "capitalize",
+                  }}>
+                    {task?.taskName || task?.title || "—"}
+                  </div>
+
+                  {/* Completed */}
+                  <div style={{ fontSize: "0.8rem", color: "#a89f97" }}>
+                    {task?.completedAt
+                      ? formatDateShort(task.completedAt)
+                      : task?.completionTime
+                      ? `${task.completionTime} hrs`
+                      : "—"}
+                  </div>
+
+                  {/* Stars */}
+                  <div><Stars count={rating} /></div>
+
+                  {/* Reply status */}
+                  <div>
+                    {hasReply ? (
+                      <span style={{
+                        background: "#f0fdf4", color: "#16a34a",
+                        borderRadius: 99, padding: "2px 9px",
+                        fontSize: "0.68rem", fontWeight: 600,
+                      }}>Replied</span>
+                    ) : (
+                      <span style={{
+                        background: "#fff4ed", color: "#f97316",
+                        borderRadius: 99, padding: "2px 9px",
+                        fontSize: "0.68rem", fontWeight: 600,
+                      }}>Pending</span>
+                    )}
+                  </div>
+
+                  {/* Date */}
+                  <div style={{ fontSize: "0.8rem", color: "#a89f97" }}>
+                    {formatDateShort(review.createdAt)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </main>
+      </div>
+
+      {selected && (
+        <ReviewDrawer
+          review={selected.review}
+          task={selected.task}
+          onClose={() => setSelected(null)}
+          onReplySubmit={handleReplySubmit}
+        />
+      )}
+    </>
+  );
+}
