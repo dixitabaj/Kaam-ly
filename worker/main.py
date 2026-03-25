@@ -3,7 +3,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Query, WebSocket, WebSock
 
 
 
-from .router import registerCustomer, updateProfile, skillVerification, faceVerify, adminPayout, registerWorker, login, otp, createTask, chat, duplicateCheck, faceVerify, recommend_router, esewaVerify, predictTask, review_route, search_router, image_classify_router, report, adminReviewAI, pendingActivities, notifications
+from .router import registerCustomer, refund, updateProfile, skillVerification, faceVerify, adminPayout, registerWorker, login, otp, createTask, chat, duplicateCheck, faceVerify, recommend_router, esewaVerify, predictTask, review_route, search_router, image_classify_router, report, adminReviewAI, pendingActivities, notifications
 from .schemas.schemas import WorkerCreateSchema, WorkerResponseSchema, WorkerStatsResponse
 from worker.config.database import collection, collection_worker, chat_collection, collection_reviews, collection_task, collection_reports
 from .services.hashing import Hash
@@ -15,6 +15,7 @@ import json
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from typing import Optional, List
+from .config import database
 # Create FastAPI app instance
 app = FastAPI()
 
@@ -1229,30 +1230,61 @@ def get_escorw_status(taskId:str):
     status=task.get("escrow_status")
     return status
 
+from bson import ObjectId
+from datetime import datetime
+
+# ── REPLACE THIS (was broken — used raw string as _id) ───────────────────────
 @app.get("/worker/isavailable/status/{workerId}", tags=["worker"])
 def is_available(workerId: str):
-    worker = collection_worker.find_one({"_id": workerId})
-    
+    worker = None
+    try:
+        worker = collection_worker.find_one({"_id": ObjectId(workerId)})
+    except Exception:
+        pass
+    if not worker:
+        worker = collection_worker.find_one({"email": workerId})
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
-    
-    # Return the availability in a JSON-friendly format
     return {"workerId": workerId, "isAvailable": worker.get("isAvailable", False)}
 
+
+# ── REPLACE THIS (was broken — used raw string as _id) ───────────────────────
 @app.patch("/worker/isavailable/update/status/{workerId}", tags=["worker"])
-def update_availability(workerId: str, status:bool):
-    worker = collection_worker.update_one(
-        {"_id": workerId},
+def update_availability(workerId: str, status: bool):
+    worker_filter = {"email": workerId}
+    try:
+        worker_filter = {"_id": ObjectId(workerId)}
+    except Exception:
+        pass
+    result = collection_worker.update_one(
+        worker_filter,
         {"$set": {"isAvailable": status}}
     )
-    
-    if not worker:
+    if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Worker not found")
-   
-    # Return the availability in a JSON-friendly format
     return {"workerId": workerId, "isAvailable": status}
 
 
+@app.get("/worker/availability/{workerId}", tags=["worker"])
+def get_worker_availability(workerId: str):
+    worker = None
+    try:
+        worker = collection_worker.find_one({"_id": ObjectId(workerId)})
+    except Exception:
+        pass
+    if not worker:
+        worker = collection_worker.find_one({"email": workerId})
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    # ✅ FIX: schema stores hours at worker.hours (top-level), NOT worker.availability.hours
+    hours = worker.get("hours") or worker.get("availability", {}).get("hours", {})
+
+    return {
+        "isAvailable": worker.get("isAvailable", True),
+        "hours":       hours,
+        "workerId":    str(worker["_id"]),
+    }
 # server.py — Kaam-ly Full Backend
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -1468,6 +1500,7 @@ from .router.fraud_router import router as fraud_router
 async def startup():
     from worker.config.database import collection_task  # already imported at top
     from pymongo import MongoClient
+    mongo_client = MongoClient("mongodb+srv://dixita1:Shuvechhya@cluster0.ue3kxzv.mongodb.net/?appName=Cluster0")
     app.state.db = mongo_client["user"]
 
 # ── Fraud middleware — add BEFORE your other middleware ─────────────────
@@ -1558,6 +1591,9 @@ app.include_router(adminReviewAI.router, prefix='/api')
 app.include_router(pendingActivities.router, prefix='/api')
 app.include_router(esewaVerify.router, prefix='/api')
 app.include_router(updateProfile.router, prefix='/api')
+app.include_router(refund.router, prefix="/api")
+from .router import slots
+app.include_router(slots.router)
 
 from worker.router.notifications import notifications_router
 from worker.router.taskActions  import tasks_router

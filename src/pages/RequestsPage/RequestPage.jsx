@@ -655,20 +655,32 @@ const TaskModal = ({ task, worker, setShowDetailsModal }) => {
 // ── Cancel Task Modal ─────────────────────────────────────────────────────────
 const CancelTaskModal = ({ task, onClose, onSubmit }) => {
   const [reason, setReason]         = useState("");
+  const [photo, setPhoto]           = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError]           = useState(null);
 
-  const taskIsPaid   = task.paymentStatus === "paid";
-  const taskDatetime = task.serviceDate ? new Date(`${task.serviceDate.split("T")[0]}T${task.serviceTime || "00:00"}`) : null;
-  const hoursLeft    = taskDatetime ? (taskDatetime - Date.now()) / 3600000 : null;
-  const penaltyWillApply = taskIsPaid && hoursLeft !== null && hoursLeft <= 3;
+  const taskIsPaid       = task.paymentStatus === "paid";
+  const taskDatetime     = task.serviceDate
+    ? new Date(`${task.serviceDate.split("T")[0]}T${task.serviceTime || "00:00"}`)
+    : null;
+  const hoursLeft        = taskDatetime ? (taskDatetime - Date.now()) / 3600000 : null;
+  const penaltyWillApply = taskIsPaid && hoursLeft !== null && hoursLeft < 4;
   const totalCost        = task.totalCost || 0;
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { setError("Photo must be under 5 MB."); return; }
+    setPhoto(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  };
 
   const handleSubmit = async () => {
     if (!reason.trim()) { setError("Please provide a reason."); return; }
     setSubmitting(true); setError(null);
     try {
-      await onSubmit(reason);
+      await onSubmit(reason, photo);
       onClose();
     } catch (err) {
       setError(err.message || "Failed to cancel task");
@@ -678,48 +690,72 @@ const CancelTaskModal = ({ task, onClose, onSubmit }) => {
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, backdropFilter: "blur(4px)" }} onClick={onClose}>
-      <div style={{ background: "white", borderRadius: "20px", padding: "1.8rem", maxWidth: "420px", width: "90%", boxShadow: "0 24px 60px rgba(0,0,0,0.15)" }} onClick={e => e.stopPropagation()}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-          <h2 style={{ fontSize: "18px", fontWeight: "800", margin: 0, color: "#1c1008" }}>Cancel Task</h2>
-          <button onClick={onClose} style={{ background: "#f5efe6", border: "none", width: "30px", height: "30px", borderRadius: "50%", cursor: "pointer", color: "#78716c", fontSize: "16px", fontWeight: "700", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+    <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:2000, backdropFilter:"blur(4px)" }} onClick={onClose}>
+      <div style={{ background:"white", borderRadius:"20px", padding:"1.8rem", maxWidth:"420px", width:"90%", boxShadow:"0 24px 60px rgba(0,0,0,0.15)", maxHeight:"90vh", overflowY:"auto" }} onClick={e => e.stopPropagation()}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"1rem" }}>
+          <h2 style={{ fontSize:"18px", fontWeight:"800", margin:0, color:"#1c1008" }}>Cancel Task</h2>
+          <button onClick={onClose} style={{ background:"#f5efe6", border:"none", width:"30px", height:"30px", borderRadius:"50%", cursor:"pointer", color:"#78716c", fontSize:"16px", fontWeight:"700", display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
         </div>
 
         {penaltyWillApply && (
-          <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "12px", padding: "12px 14px", marginBottom: "14px" }}>
-            <p style={{ margin: 0, fontSize: "13px", fontWeight: "700", color: "#991b1b" }}>⚠️ Cancellation Fee Applies</p>
-            <p style={{ margin: "6px 0 0", fontSize: "13px", color: "#7f1d1d", lineHeight: "1.55" }}>
-              You're cancelling within 3 hours of the scheduled time. A <strong>25% penalty (NPR {(totalCost * 0.25).toFixed(2)})</strong> will be paid to the worker.
+          <div style={{ background:"#fef2f2", border:"1px solid #fecaca", borderRadius:"12px", padding:"12px 14px", marginBottom:"14px" }}>
+            <p style={{ margin:0, fontSize:"13px", fontWeight:"700", color:"#991b1b" }}>⚠️ Cancellation Fee Applies</p>
+            <p style={{ margin:"6px 0 0", fontSize:"13px", color:"#7f1d1d", lineHeight:"1.55" }}>
+              Cancelling within 4 hours of the scheduled time. A <strong>25% penalty (NPR {(totalCost * 0.25).toFixed(2)})</strong> will be paid to the worker.
               You'll receive a <strong>75% refund (NPR {(totalCost * 0.75).toFixed(2)})</strong>.
             </p>
           </div>
         )}
 
         {taskIsPaid && !penaltyWillApply && (
-          <div style={{ background: "#f0fdf4", border: "1px solid #a7f3d0", borderRadius: "12px", padding: "12px 14px", marginBottom: "14px" }}>
-            <p style={{ margin: 0, fontSize: "13px", fontWeight: "700", color: "#065f46" }}>✅ Full Refund</p>
-            <p style={{ margin: "6px 0 0", fontSize: "13px", color: "#064e3b", lineHeight: "1.55" }}>
-              Since you're cancelling more than 3 hours before the scheduled time, a <strong>full refund of NPR {totalCost.toFixed(2)}</strong> will be processed.
+          <div style={{ background:"#f0fdf4", border:"1px solid #a7f3d0", borderRadius:"12px", padding:"12px 14px", marginBottom:"14px" }}>
+            <p style={{ margin:0, fontSize:"13px", fontWeight:"700", color:"#065f46" }}>✅ Full Refund</p>
+            <p style={{ margin:"6px 0 0", fontSize:"13px", color:"#064e3b", lineHeight:"1.55" }}>
+              Cancelling more than 4 hours before the scheduled time — a <strong>full refund of NPR {totalCost.toFixed(2)}</strong> will be processed.
             </p>
           </div>
         )}
 
-        <p style={{ fontSize: "13px", color: "#78716c", marginBottom: "8px" }}>Please tell us why you're cancelling:</p>
+        <p style={{ fontSize:"12px", fontWeight:"700", color:"#a8a29e", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:"6px" }}>Reason for cancellation</p>
         <textarea
-          value={reason} onChange={e => setReason(e.target.value)} rows={3} placeholder="Enter reason..."
-          style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1.5px solid #e8dfd0", fontSize: "14px", outline: "none", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", transition: "border-color 0.2s" }}
+          value={reason} onChange={e => setReason(e.target.value)} rows={3}
+          placeholder="Describe why you're cancelling…"
+          style={{ width:"100%", padding:"10px", borderRadius:"10px", border:"1.5px solid #e8dfd0", fontSize:"14px", outline:"none", resize:"vertical", fontFamily:"inherit", boxSizing:"border-box", marginBottom:"14px", transition:"border-color 0.2s" }}
           onFocus={e => e.target.style.borderColor = "#f6a623"}
           onBlur={e  => e.target.style.borderColor = "#e8dfd0"}
         />
-        {error && <p style={{ color: "#dc2626", fontSize: "12px", marginTop: "6px" }}>{error}</p>}
 
-        <div style={{ display: "flex", gap: "8px", marginTop: "14px" }}>
-          <button onClick={onClose} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1.5px solid #e8dfd0", background: "white", cursor: "pointer", fontSize: "14px", fontWeight: "600", color: "#78716c" }}>
+        <p style={{ fontSize:"12px", fontWeight:"700", color:"#a8a29e", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:"6px" }}>Photo evidence <span style={{ fontWeight:"400", textTransform:"none" }}>(optional)</span></p>
+
+        {photoPreview ? (
+          <div style={{ position:"relative", marginBottom:"12px" }}>
+            <img src={photoPreview} alt="evidence" style={{ width:"100%", maxHeight:"140px", objectFit:"cover", borderRadius:"10px", border:"1px solid #e8dfd0" }} />
+            <button
+              onClick={() => { setPhoto(null); setPhotoPreview(null); }}
+              style={{ position:"absolute", top:"6px", right:"6px", background:"rgba(0,0,0,0.55)", border:"none", borderRadius:"50%", width:"24px", height:"24px", cursor:"pointer", color:"white", fontSize:"14px", display:"flex", alignItems:"center", justifyContent:"center" }}
+            >×</button>
+          </div>
+        ) : (
+          <label style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"6px", padding:"18px 12px", borderRadius:"10px", border:"1.5px dashed #e8dfd0", cursor:"pointer", marginBottom:"12px", fontSize:"13px", color:"#a8a29e", textAlign:"center", transition:"border-color 0.2s", boxSizing:"border-box", width:"100%" }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = "#f6a623"}
+            onMouseLeave={e => e.currentTarget.style.borderColor = "#e8dfd0"}
+          >
+            <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M3 16v3a2 2 0 002 2h14a2 2 0 002-2v-3M12 3v13M8 7l4-4 4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Tap to upload a photo
+            <span style={{ fontSize:"11px", opacity:0.6 }}>JPG, PNG — max 5 MB</span>
+            <input type="file" accept="image/*" style={{ display:"none" }} onChange={handlePhotoChange} />
+          </label>
+        )}
+
+        {error && <p style={{ color:"#dc2626", fontSize:"12px", marginBottom:"10px" }}>{error}</p>}
+
+        <div style={{ display:"flex", gap:"8px", marginTop:"4px" }}>
+          <button onClick={onClose} style={{ flex:1, padding:"10px", borderRadius:"10px", border:"1.5px solid #e8dfd0", background:"white", cursor:"pointer", fontSize:"14px", fontWeight:"600", color:"#78716c" }}>
             Keep Task
           </button>
           <button
             onClick={handleSubmit} disabled={submitting}
-            style={{ flex: 2, padding: "10px", borderRadius: "10px", border: "none", background: penaltyWillApply ? "linear-gradient(135deg,#dc2626,#b91c1c)" : "#dc2626", color: "white", fontWeight: "700", cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.7 : 1, fontSize: "14px" }}
+            style={{ flex:2, padding:"10px", borderRadius:"10px", border:"none", background: penaltyWillApply ? "linear-gradient(135deg,#dc2626,#b91c1c)" : "#dc2626", color:"white", fontWeight:"700", cursor:submitting?"default":"pointer", opacity:submitting?0.7:1, fontSize:"14px" }}
           >
             {submitting ? "Cancelling…" : penaltyWillApply ? `Cancel (NPR ${(totalCost * 0.25).toFixed(2)} fee)` : "Confirm Cancel"}
           </button>
@@ -728,6 +764,8 @@ const CancelTaskModal = ({ task, onClose, onSubmit }) => {
     </div>
   );
 };
+
+
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 const CustomerTaskPage = () => {
@@ -794,7 +832,7 @@ const CustomerTaskPage = () => {
       if (opts.initial) setLoading(false);
     }
   }, [customerId]);
-
+  
   useEffect(() => { fetchTasks({ initial: true }); }, [fetchTasks]);
 
   useEffect(() => {
@@ -864,19 +902,40 @@ const CustomerTaskPage = () => {
     }
   };
 
-  const cancelTask = async (taskId, reason) => {
-    const res  = await fetch(`${API_BASE}/task/${taskId}/cancel?reason=${encodeURIComponent(reason)}`, { method: "PATCH" });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Failed to cancel task");
-    await fetchTasks({ syncSelected: true });
-    if (data.penaltyApplied) {
-      addToast({ color: "#991b1b", message: `Task cancelled. You'll be refunded NPR ${data.refundAmount?.toFixed(2)} (25% penalty: NPR ${data.penaltyAmount?.toFixed(2)}).` });
-    } else if (data.refundAmount > 0) {
-      addToast({ color: "#065f46", message: `Task cancelled. Full refund of NPR ${data.refundAmount?.toFixed(2)} will be processed.` });
-    } else {
-      addToast({ color: "#991b1b", message: "Task cancelled successfully." });
-    }
-  };
+  const cancelTask = async (taskId, reason, photo) => {
+  let evidenceUrl = null;
+
+  // Upload photo first if provided
+  if (photo) {
+    const form = new FormData();
+    form.append("file", photo);
+    try {
+      const uploadRes = await fetch(`${API_BASE}/upload`, { method: "POST", body: form });
+      if (uploadRes.ok) {
+        const uploadData = await uploadRes.json();
+        evidenceUrl = uploadData.url || uploadData.file_url || null;
+      }
+    } catch { /* proceed without photo */ }
+  }
+
+  const res = await fetch(`${API_BASE}/task/${taskId}/cancel`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      cancelled_by: "customer",
+      reason: reason,
+      ...(evidenceUrl ? { evidenceUrl } : {}),
+    }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "Failed to cancel task");
+  await fetchTasks({ syncSelected: true });
+
+  if (data.penaltyAmount > 0) addToast({ color: "#991b1b", message: `Task cancelled. Refund: NPR ${data.refundAmount?.toFixed(2)} (penalty: NPR ${data.penaltyAmount?.toFixed(2)}).` });
+  else if (data.refundAmount > 0) addToast({ color: "#065f46", message: `Task cancelled. Full refund of NPR ${data.refundAmount?.toFixed(2)} will be processed.` });
+  else addToast({ color: "#991b1b", message: "Task cancelled successfully." });
+};
 
   const handleViewDetails = task => { setSelectedTask(task); setShowDetailsModal(true); };
 
@@ -1061,10 +1120,10 @@ const CustomerTaskPage = () => {
       )}
       {cancelTaskData && (
         <CancelTaskModal
-          task={cancelTaskData}
-          onClose={() => setCancelTaskData(null)}
-          onSubmit={(reason) => cancelTask(cancelTaskData._id, reason)}
-        />
+  task={cancelTaskData}
+  onClose={() => setCancelTaskData(null)}
+  onSubmit={(reason, photo) => cancelTask(cancelTaskData._id, reason, photo)}
+/>
       )}
       {releaseTaskData && (
         <ReleasePaymentModal

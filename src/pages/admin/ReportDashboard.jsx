@@ -6,9 +6,12 @@ import {
   TrendingUp, ChevronRight, Shield, UserCheck, UserX,
   AlertCircle, FileText, Calendar, MoreVertical, Info,
   Ban, Check, AlertOctagon, HelpCircle, Brain,
-  ThumbsUp, ThumbsDown, Scale, Gavel, Zap, PenTool,
+  ThumbsUp, ThumbsDown, Scale, Gavel, Zap, PenTool, RotateCcw,
   Star, MessageCircle, Layers
 } from "lucide-react";
+import BookingNavbar from "../../components/Navbar/Navbar";
+
+import { CreateRefundModal } from "./RefundManagement";
 
 const BASE = "http://localhost:8000/api";
 
@@ -742,7 +745,7 @@ const ReportDetailModal = ({ report, onClose, onResolve, onDecline, onDelete }) 
   const [confirm,   setConfirm]   = useState(null);
   const [activeTab, setActiveTab] = useState("details");
   const backdropRef = useRef(null);
-
+  const [showRefundModal, setShowRefundModal] = useState(false);
   const DetailRow = ({ icon: Icon, label, value }) => (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "8px 0", borderBottom: `1px solid ${C.divider}` }}>
       <div style={{ width: 32, height: 32, borderRadius: 10, background: C.bg, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -795,21 +798,28 @@ const ReportDetailModal = ({ report, onClose, onResolve, onDecline, onDelete }) 
 
           {/* Action strip */}
           {report.status === "pending" && activeTab === "details" && (
-            <div style={{ padding: "16px 24px", borderBottom: `1px solid ${C.border}`, background: C.bg, display: "flex", gap: 10, flexShrink: 0 }}>
-              <button onClick={() => setConfirm({ type: "resolve", message: "Resolve this report? This will mark it as resolved." })}
-                style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: C.green, color: "white", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "inherit" }}>
-                <CheckCircle size={16} /> Resolve
-              </button>
-              <button onClick={() => setConfirm({ type: "decline", message: "Decline this report?", danger: true })}
-                style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: C.red, color: "white", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "inherit" }}>
-                <XCircle size={16} /> Decline
-              </button>
-              <button onClick={() => setConfirm({ type: "delete", message: "Permanently delete this report? This cannot be undone.", danger: true })}
-                style={{ padding: "10px 14px", borderRadius: 10, background: C.redLight, color: C.red, border: `1px solid ${C.red}30`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Trash2 size={16} />
-              </button>
-            </div>
-          )}
+  <div style={{ padding: "16px 24px", borderBottom: `1px solid ${C.border}`, background: C.bg, display: "flex", gap: 10, flexShrink: 0 }}>
+    <button onClick={() => setConfirm({ type: "resolve", message: "Resolve this report? This will mark it as resolved." })}
+      style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: C.green, color: "white", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "inherit" }}>
+      <CheckCircle size={16} /> Resolve
+    </button>
+    <button onClick={() => setConfirm({ type: "decline", message: "Decline this report?", danger: true })}
+      style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: C.red, color: "white", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "inherit" }}>
+      <XCircle size={16} /> Decline
+    </button>
+ 
+    {/* ── NEW: Request Refund button ── */}
+    <button onClick={() => setShowRefundModal(true)}
+      style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: "#2E9E8E", color: "white", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "inherit" }}>
+      <RotateCcw size={16} /> Request Refund
+    </button>
+ 
+    <button onClick={() => setConfirm({ type: "delete", message: "Permanently delete this report? This cannot be undone.", danger: true })}
+      style={{ padding: "10px 14px", borderRadius: 10, background: C.redLight, color: C.red, border: `1px solid ${C.red}30`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <Trash2 size={16} />
+    </button>
+  </div>
+)}
 
           {/* Body — scrollable */}
           <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px 32px", background: C.bg }}>
@@ -876,7 +886,16 @@ const ReportDetailModal = ({ report, onClose, onResolve, onDecline, onDelete }) 
           </div>
         </div>
       </div>
-
+        {showRefundModal && (
+  <CreateRefundModal
+    report={report}
+    onClose={() => setShowRefundModal(false)}
+    onCreated={(newRefund) => {
+      // Optional: show a success toast or navigate to refunds page
+      console.log("Refund created:", newRefund);
+    }}
+  />
+)}
       {confirm && (
         <ConfirmDialog
           message={confirm.message}

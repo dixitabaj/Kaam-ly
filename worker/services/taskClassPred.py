@@ -22,7 +22,7 @@ CLASS_LABELS = [
     "Outdoor Assembly", "Oven Repair", "Pipe Repair", "Plant Care", "Refinishing",
     "Refrigerator Repair", "Socket Repair", "Specialty Moving", "Stove Repair",
     "Switch Repair", "Toilet Repair", "Tree Trimming", "Trim Work",
-    "Washer Repair", "Water Heater Repair", "Weed Control"
+    "Washer Repair", "Water Heater Repair", "Weed Control", "Plumbing"
 ]
 
 def run_prediction(text: str) -> dict:

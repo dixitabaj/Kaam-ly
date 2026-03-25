@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { fetchCustomerById, createTask } from '../../api/api';
 import { Camera, Upload } from "lucide-react";
 import BookingNavbar from '../../components/Navbar/Navbar';
@@ -70,14 +70,20 @@ const inputStyle = (field, errors, touched, submitted, base = 'input') => {
 // ─────────────────────────────────────────────────────────────────────────────
 const TaskDescriptionPage = ({ worker }) => {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const storedTaskRequest = localStorage.getItem('pendingTaskRequest');
   const taskDetails       = storedTaskRequest ? JSON.parse(storedTaskRequest) : {};
 
-  const storedWorker   = localStorage.getItem('selectedWorker');
-  const selectedTasker = worker || (storedWorker ? JSON.parse(storedWorker) : null);
+  const storedWorker = localStorage.getItem('selectedWorker');
 
-  // ── Fix 1: safe read from localStorage with sessionStorage fallback ──
+  // ✅ Priority: prop → route state → localStorage
+  const selectedTasker =
+    worker ||
+    location.state ||
+    (storedWorker ? JSON.parse(storedWorker) : null);
+  console.log(selectedTasker)
+  // ── Safe read from localStorage with sessionStorage fallback ──
   const rawUser      = localStorage.getItem('user') || sessionStorage.getItem('user') || '{}';
   const user         = JSON.parse(rawUser);
   const userId       = user.id || user._id;
@@ -94,7 +100,6 @@ const TaskDescriptionPage = ({ worker }) => {
     email:        userEmail,
   });
 
-  // ── Fix 2: taskName no longer prefills from worker description ──
   const [editableTask, setEditableTask] = useState({
     taskType: taskDetails.taskType || selectedTasker?.taskType || '',
     taskName: taskDetails.taskName || '',
@@ -178,8 +183,11 @@ const TaskDescriptionPage = ({ worker }) => {
     setPhotos(prev => [...prev, ...validFiles.slice(0, remaining)]);
   };
 
+  // ✅ Guard against NaN when hourlyRate is undefined or '-'
   const calculateTotal = () => {
-    const subtotal    = selectedTasker?.hourlyRate * (selectedTasker?.minHours || 1);
+    const rate        = Number(selectedTasker?.hourlyRate) || 0;
+    const hours       = Number(selectedTasker?.minHours)   || 1;
+    const subtotal    = rate * hours;
     const platformFee = subtotal * 0.05;
     return { subtotal, platformFee, total: subtotal + platformFee };
   };
@@ -225,7 +233,8 @@ const TaskDescriptionPage = ({ worker }) => {
       formData.append('lat',             taskDetails.lat?.toString() || '');
       formData.append('lng',             taskDetails.lng?.toString() || '');
       formData.append('userId',          userId?.toString() || '');
-      formData.append('assignedWorker',  selectedTasker.email || selectedTasker.id || '');
+      // ✅ Prefer id over email — backend expects worker ID
+      formData.append('assignedWorker',  selectedTasker.id || selectedTasker._id || selectedTasker.email || '');
       formData.append('serviceDate',     bookingDetails.date || '');
       formData.append('serviceTime',     bookingDetails.time || '');
       formData.append('note',            note || '');
@@ -276,16 +285,20 @@ const TaskDescriptionPage = ({ worker }) => {
 
       {/* Tasker Summary */}
       <div style={styles.taskerSummary}>
-        <div style={styles.taskerAvatar}>{selectedTasker.avatar}</div>
+        <div style={styles.taskerAvatar}>
+          {selectedTasker.avatar || selectedTasker.name?.charAt(0) || 'W'}
+        </div>
         <div style={styles.taskerInfo}>
           <h3 style={styles.taskerName}>{selectedTasker.name}</h3>
           <div style={styles.taskerMeta}>
-            <span style={styles.rating}>★ {selectedTasker.rating}</span>
-            <span style={styles.reviews}>({selectedTasker.reviews} reviews)</span>
+            <span style={styles.rating}>★ {selectedTasker.rating ?? selectedTasker.ratings ?? 0}</span>
+            <span style={styles.reviews}>
+              ({selectedTasker.reviews ?? selectedTasker.noOfCompletedTask ?? 0} reviews)
+            </span>
             {selectedTasker.isElite && <span style={styles.eliteBadge}>ELITE</span>}
           </div>
           <div style={styles.taskerRate}>
-            NPR {selectedTasker.hourlyRate}/hour • {selectedTasker.minHours} hour minimum
+            NPR {selectedTasker.hourlyRate || '—'}/hour • {selectedTasker.minHours || 1} hour minimum
           </div>
           <p style={styles.taskerDescription}>{selectedTasker.description}</p>
         </div>
@@ -623,7 +636,7 @@ const TaskDescriptionPage = ({ worker }) => {
                 <div style={styles.priceRow}>
                   <span style={styles.priceRowLabel}>Hourly fee</span>
                   <span style={styles.priceRowValue}>
-                    NPR {selectedTasker.hourlyRate}<span style={styles.perHr}>/hr</span>
+                    NPR {selectedTasker.hourlyRate || '—'}<span style={styles.perHr}>/hr</span>
                   </span>
                 </div>
 

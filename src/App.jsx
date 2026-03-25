@@ -30,7 +30,7 @@ import WorkerVerification from './pages/admin/workerVerification';
 import CustomerProfile    from './pages/customerProfile';
 import Notification from './components/Notification';
 import CompleteProfile from './components/CompleteProfile/CompleteProfile';
-
+import RefundManagement from './pages/admin/RefundManagement';
 function App() {
   return (
     <div>
@@ -49,6 +49,8 @@ function App() {
           <Route path="/landing" element={<LandingPage />} />
           <Route path="/complete-profile" element={<CompleteProfile/>} />
 <Route path="/chat/:senderId/:recieverId" element={<MessagePage />} />
+
+          <Route path="/refund" element={<RefundManagement/>}/>
 <Route path="/chat/:senderId" element={<MessagePage />} />
          <Route path="/tasks/user/:id" element={<TaskListPage/>} />
          <Route path="/task-request" element={<TaskBookingPage />} />

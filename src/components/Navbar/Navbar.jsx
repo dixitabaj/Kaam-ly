@@ -160,6 +160,8 @@ const BookingNavbar = () => {
               <div className="booking-nav-link" onClick={() => navigate('/admin/dashboard')}>Dashboard</div>
               <div className="booking-nav-link" onClick={() => navigate('/admin/payouts')}>Payouts</div>
               <div className="booking-nav-link" onClick={() => navigate('/workerVerification')}>Worker Verification</div>
+
+              <div className="booking-nav-link" onClick={() => navigate('/refund')}>Refunds</div>
             </>
           )}
 

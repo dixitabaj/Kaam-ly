@@ -501,7 +501,56 @@ def recommend_workers(
     shortfall        = n_quality - len(recommendations)
     if shortfall > 0:
         recommendations += quality_pool[n_quality: n_quality + shortfall]
+    recommendations  = quality_pool[:n_quality]
+    shortfall        = n_quality - len(recommendations)
+
+    if shortfall > 0:
+        recommendations += quality_pool[n_quality: n_quality + shortfall]
+
     recommendations += cold_pool[:n_cold]
+
+    # ════════════════════════════════════════════════
+    # 🔥 FALLBACK LOGIC (CORRECTLY INDENTED)
+    # ════════════════════════════════════════════════
+    if len(recommendations) < top_k:
+        print("⚠️ Expanding to full category fallback")
+
+        # fetch ALL workers (ignore subcategory)
+        fallback_workers = get_workers_by_task(task_type, target_subcat=None)
+
+        extra = []
+
+        for worker in fallback_workers:
+            try:
+                score, dist_km = score_worker(
+                    worker,
+                    task_type,
+                    user_lat,
+                    user_lon,
+                    target_subcat=None  # 🔥 remove subcat restriction
+                )
+
+                if score < 0:
+                    continue
+
+                extra.append({
+                    **{k: str(v) if k == "_id" else v for k, v in worker.items()},
+                    "_id": str(worker["_id"]),
+                    "_score": round(score, 4),
+                    "_distance_km": round(dist_km, 2) if dist_km else None,
+                    "_is_new": False,
+                    "_subcat_match": "fallback"
+                })
+
+            except Exception:
+                continue
+
+        # sort fallback workers
+        extra.sort(key=lambda x: x["_score"], reverse=True)
+
+        # fill remaining slots
+        needed = top_k - len(recommendations)
+        recommendations += extra[:needed]
 
     return recommendations[:top_k]
 

@@ -35,7 +35,7 @@ class SubSkill(BaseModel):
 
 class StatusUpdate(BaseModel):
     status: str 
-    
+
 class Skill(BaseModel):
     name: str
     price: Optional[float] = 0
@@ -220,8 +220,37 @@ class TaskOfferUpdate(BaseModel):
     additionalCost: float
     offerStatus: str
 
-class StatusUpdate(BaseModel):
+class RefundCreate(BaseModel):
+    task_id: str
+    requester_id: str
+    reported_id: Optional[str]
+    requester_type: Literal["customer","worker"]
+    reported_type: Literal["customer","worker"]
+    amount_customer: float = Field(..., ge=0)
+    amount_worker: float = Field(..., ge=0)
+    reason: str
+    requested_by: Literal["customer","worker","admin"]
+    esewa_ref_id: Optional[str]  # for eSewa sandbox
+
+class RefundOut(BaseModel):
+    id: str
+    task_id: str
+    requester_id: str
+    reported_id: Optional[str]
+    requester_type: str
+    reported_type: str
+    amount_customer: float
+    amount_worker: float
+    reason: str
+    requested_by: str
     status: str
+    admin_note: Optional[str]
+    created_at: datetime
+    resolved_at: Optional[datetime]
+
+class RefundUpdateStatus(BaseModel):
+    status: Literal["approved","rejected"]
+    admin_note: Optional[str]
 
 from datetime import datetime
 from typing import Optional

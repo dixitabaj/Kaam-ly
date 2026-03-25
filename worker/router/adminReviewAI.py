@@ -8,7 +8,7 @@ from bson import ObjectId
 
 from ..config.database import (
     collection_reports,
-    collection,   # adjust to your actual collection names
+    collection,
     collection_worker,
     collection_reviews,
     collection_task,
@@ -17,9 +17,7 @@ from ..config.database import (
 
 router = APIRouter(tags=["ai-review"])
 
-# Groq config
-# Free at: https://console.groq.com → API Keys → Create API Key
-# No credit card needed. Add to your .env:  GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxx
+# Groq API config
 
 # Schemas
 class DraftRequest(BaseModel):
@@ -35,51 +33,52 @@ def _sid(doc: dict) -> dict:
     return doc
 
 def _safe_oid(val: str):
-    try: return ObjectId(val)
-    except: return None
+    try:
+        return ObjectId(val)
+    except:
+        return None
 
 def _get_user(user_id: str) -> dict:
-    """Try customers first, then workers. Returns {} if user_id is None or not found."""
     if not user_id:
         return {}
-
-    oid_query = {"_id": _safe_oid(user_id)} if len(user_id) == 24 else {"_id": None}
-
-    doc = collection.find_one({"$or": [oid_query, {"email": user_id}]})
-    if doc: return {"collection": "customer", **_sid(doc)}
-
-    doc = collection_worker.find_one({"$or": [oid_query, {"email": user_id}]})
-    if doc: return {"collection": "worker", **_sid(doc)}
+    oid = _safe_oid(user_id)
+    for col, name in [(collection, "customer"), (collection_worker, "worker")]:
+        doc = col.find_one({"$or": [{"_id": oid}, {"email": user_id}]})
+        if doc:
+            return {"collection": name, **_sid(doc)}
     return {}
 
 async def _call_llm(prompt: str) -> str:
-    """Call Groq API and return raw text response."""
+    """Call Groq API safely and return text."""
     if not GROQ_API_KEY:
-        raise HTTPException(status_code=500, detail="GROQ_API_KEY not set in environment")
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY not set")
 
     async with httpx.AsyncClient(timeout=30) as client:
-        res = await client.post(
-            GROQ_URL,
-            headers={
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-                "Content-Type":  "application/json",
-            },
-            json={
-                "model":       GROQ_MODEL,
-                "messages":    [{"role": "user", "content": prompt}],
-                "temperature": 0.3,
-                "max_tokens":  1600,
-            },
-        )
-
-    if res.status_code != 200:
-        raise HTTPException(status_code=502, detail=f"Groq error: {res.text}")
+        try:
+            res = await client.post(
+                GROQ_URL,
+                headers={
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type":  "application/json",
+                },
+                json={
+                    "model":       GROQ_MODEL,
+                    "messages":    [{"role": "user", "content": prompt}],
+                    "temperature": 0.3,
+                    "max_tokens":  1600,
+                },
+            )
+            res.raise_for_status()
+        except httpx.RequestError as e:
+            raise HTTPException(status_code=502, detail=f"Groq request failed: {str(e)}")
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(status_code=502, detail=f"Groq error: {res.text}")
 
     data = res.json()
     return data["choices"][0]["message"]["content"]
 
+# Gather full context
 def _gather_context(report_id: str) -> dict:
-    """Fetch all data needed for AI review — shared by both endpoints."""
     report = collection_reports.find_one({"_id": _safe_oid(report_id)})
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
@@ -88,8 +87,9 @@ def _gather_context(report_id: str) -> dict:
     reporter_id = report.get("reporterId") or ""
     reported_id = report.get("reportedId") or ""
 
-    # Reporter profile
     rr = _get_user(reporter_id)
+    rd = _get_user(reported_id)
+
     reporter_profile = {
         "id":             reporter_id,
         "name":           f"{rr.get('first_name') or rr.get('firstName','')} {rr.get('last_name') or rr.get('lastName','')}".strip(),
@@ -100,8 +100,6 @@ def _gather_context(report_id: str) -> dict:
         "completedTasks": rr.get("noOfCompletedTask"),
     }
 
-    # Reported user profile
-    rd = _get_user(reported_id)
     reported_profile = {
         "id":             reported_id,
         "name":           f"{rd.get('first_name') or rd.get('firstName','')} {rd.get('last_name') or rd.get('lastName','')}".strip(),
@@ -117,7 +115,7 @@ def _gather_context(report_id: str) -> dict:
         "taskType":       rd.get("taskType"),
     }
 
-    # Prior reports against reported user
+    # Prior reports
     prior_raw = list(collection_reports.find(
         {"reportedId": reported_id, "_id": {"$ne": _safe_oid(report_id)}}
     ).sort("createdAt", -1).limit(10))
@@ -130,13 +128,13 @@ def _gather_context(report_id: str) -> dict:
         "reports":  prior_reports,
     }
 
-    # Reviews (workers only)
+    # Reviews
     reviews = []
     if rd.get("collection") == "worker" or rd.get("role") == "worker":
         for rv in collection_reviews.find({"workerId": reported_id}).sort("createdAt", -1).limit(10):
             reviews.append({
                 "stars":     rv.get("stars"),
-                "text":      (rv.get("text", ""))[:200],
+                "text":      (rv.get("text", "") or "")[:200],
                 "createdAt": str(rv.get("createdAt")),
             })
 
@@ -160,10 +158,10 @@ def _gather_context(report_id: str) -> dict:
             {"sender_id": reporter_id, "receiver_id": reported_id},
             {"sender_id": reported_id, "receiver_id": reporter_id},
         ]
-    }).sort("timestamp", 1).limit(50):
+    }).sort("timestamp", 1).limit(20):
         messages.append({
             "sender":    "reporter" if msg.get("sender_id") == reporter_id else "reported",
-            "message":   msg.get("message", ""),
+            "message":   (msg.get("message") or "")[:200],
             "timestamp": str(msg.get("timestamp", "")),
         })
 
@@ -177,6 +175,7 @@ def _gather_context(report_id: str) -> dict:
         "chat":            {"total": len(messages), "messages": messages},
     }
 
+# Build LLM prompt
 def _build_review_prompt(ctx: dict) -> str:
     r   = ctx["report"]
     rpr = ctx["reporterProfile"]
@@ -191,30 +190,38 @@ def _build_review_prompt(ctx: dict) -> str:
     review_lines = "\n".join(f"  - {rv['stars']} stars: \"{rv['text']}\"" for rv in rvs) or "  No reviews."
     job_lines    = "\n".join(f"  - {j['taskType']} | {j['status']} | payment:{j['paymentStatus']} | escrow:{j['escrowStatus']}" for j in jbs) or "  No job history."
 
-    return f"""You are a senior trust & safety analyst for a TaskRabbit-style gig platform. Analyze this report using ALL provided context. Return ONLY valid JSON with no markdown fences, no extra text, just the raw JSON object.
+    # Optional internal scoring hint
+    risk_score = 0
+    if rpd.get("ratings") and rpd["ratings"] < 3:
+        risk_score += 0.2
+    risk_score += min(pri["pending"], 3) * 0.1
+    risk_score += min(cht["total"], 20) * 0.01
+    severity_hint = "High" if risk_score >= 0.6 else "Medium" if risk_score >= 0.3 else "Low"
+
+    return f"""You are a senior trust & safety analyst for a TaskRabbit-style gig platform. Analyze this report using all provided context. Be fair and realistic; avoid exaggeration. Return ONLY valid JSON with no markdown or extra text.
 
 REPORT
 Reason: {r.get("reason")}
-Description: "{r.get("description") or "None provided"}"
+Description: "{r.get('description') or 'None provided'}"
 
 REPORTER
-Name: {rpr["name"] or "Unknown"}
-Role: {rpr["role"]}
-Status: {rpr["status"]}
-Rating: {rpr["ratings"] or "N/A"}
-Jobs completed: {rpr["completedTasks"] or "N/A"}
+Name: {rpr['name'] or 'Unknown'}
+Role: {rpr['role']}
+Status: {rpr['status']}
+Rating: {rpr['ratings'] or 'N/A'}
+Jobs completed: {rpr['completedTasks'] or 'N/A'}
 
 REPORTED USER
-Name: {rpd["name"] or "Unknown"}
-Role: {rpd["role"]}
-Status: {rpd["status"]}
-Rating: {rpd["ratings"] or "N/A"} ({rpd["reviewCount"] or 0} reviews)
-Jobs done: {rpd["completedTasks"] or "N/A"}
-Verified: face={rpd["faceVerified"]}, skill={rpd["skillVerified"]}
-Description: "{rpd["description"] or "None"}"
+Name: {rpd['name'] or 'Unknown'}
+Role: {rpd['role']}
+Status: {rpd['status']}
+Rating: {rpd['ratings'] or 'N/A'} ({rpd.get('reviewCount',0)} reviews)
+Jobs done: {rpd.get('completedTasks','N/A')}
+Verified: face={rpd.get('faceVerified',False)}, skill={rpd.get('skillVerified',False)}
+Description: "{rpd.get('description','None')}"
 
 PRIOR REPORTS AGAINST REPORTED USER
-Total: {pri["total"]} ({pri["resolved"]} resolved, {pri["declined"]} declined, {pri["pending"]} pending)
+Total: {pri['total']} ({pri['resolved']} resolved, {pri['declined']} declined, {pri['pending']} pending)
 {prior_lines}
 
 REVIEWS
@@ -223,98 +230,67 @@ REVIEWS
 JOB HISTORY
 {job_lines}
 
-CHAT ({cht["total"]} messages)
+CHAT ({cht['total']} messages)
 {chat_lines}
 
 INSTRUCTIONS
-Cross-reference ALL sections. Look for: repeat offender patterns, contradictions between reviews and complaints, off-platform payment requests or threats in chat, escrow/payment anomalies, unverified profile with complaints, whether the description matches the actual chat.
+- Consider frequency and recency of disputes/reports.
+- Check chat for threats, off-platform requests, or inconsistencies.
+- Weigh prior reports, ratings, verification, and reviews to assess risk.
+- Use severity hint: {severity_hint}.
+- Return balanced JSON reflecting realistic risk.
+- Consider severity based on confirmed incidents, verified fraud reports, or clear evidence from chat.
+- Treat minor disputes, repeated greetings, or slight pricing inconsistencies as Medium risk, not High.
+- Only recommend permanent ban for repeated, confirmed fraud or scam.
 
-Return exactly this JSON object and nothing else:
+Return exactly this JSON object:
 {{
-  "summary": "3-4 sentences cross-referencing chat, prior history, and reviews",
-  "severity": "Critical|High|Medium|Low",
-  "severityReason": "One sentence with specific evidence from any data source",
-  "suggestedAction": "Warn user|Suspend account|Permanent ban|Dismiss report",
-  "actionReason": "One sentence referencing prior reports, chat, or reviews",
-  "reporterCredibility": "High|Medium|Low",
-  "credibilityNote": "Does the chat and job history support or contradict the reporter?",
-  "keyEvidence": "The single most important piece of evidence across all sources",
-  "redFlags": ["max 4 specific red flags found"],
-  "chatInsight": "What the conversation reveals beyond the description, or N/A",
-  "profileInsight": "Anything suspicious in profile, reviews, or job history, or N/A"
+  "summary": "",
+  "severity": "",
+  "severityReason": "",
+  "suggestedAction": "",
+  "actionReason": "",
+  "reporterCredibility": "",
+  "credibilityNote": "",
+  "keyEvidence": "",
+  "redFlags": [],
+  "chatInsight": "",
+  "profileInsight": ""
 }}"""
 
 # Endpoints
 
-# GET /reports/{id}/ai-context
-# Returns raw context only — used by frontend Context + Chat tabs
 @router.get("/reports/{report_id}/ai-context")
 def get_ai_context(report_id: str):
     return _gather_context(report_id)
 
-
-# GET /reports/{id}/debug-prior  <-- TEMPORARY, remove after fixing
-@router.get("/reports/{report_id}/debug-prior")
-def debug_prior_reports(report_id: str):
-    report = collection_reports.find_one({"_id": _safe_oid(report_id)})
-    if not report:
-        return {"error": "report not found"}
-    reported_id = report.get("reportedId") or ""
-    all_against = list(collection_reports.find({"reportedId": reported_id}))
-    sample_fields = []
-    for r in collection_reports.find().limit(5):
-        sample_fields.append({
-            "id":         str(r.get("_id")),
-            "reportedId": r.get("reportedId"),
-            "reporterId": r.get("reporterId"),
-            "reason":     r.get("reason"),
-            "status":     r.get("status"),
-        })
-    return {
-        "current_report_id":  report_id,
-        "reported_id_value":  reported_id,
-        "reported_id_type":   type(reported_id).__name__,
-        "total_found":        len(all_against),
-        "matches": [{"id": str(r.get("_id")), "reportedId": r.get("reportedId"), "reason": r.get("reason"), "status": r.get("status")} for r in all_against],
-        "sample_5_reports": sample_fields,
-    }
-
-
-# POST /reports/{id}/ai-review
-# Gathers context + calls Groq server-side — returns AI analysis result
-# API key stays on the server, never sent to browser
 @router.post("/reports/{report_id}/ai-review")
 async def run_ai_review(report_id: str):
     ctx    = _gather_context(report_id)
     prompt = _build_review_prompt(ctx)
     text   = await _call_llm(prompt)
 
-    clean = text.replace("```json", "").replace("```", "").strip()
-
+    clean = text.replace("```json","").replace("```","").strip()
     try:
         result = json.loads(clean)
     except json.JSONDecodeError:
-        raise HTTPException(status_code=502, detail=f"LLM returned invalid JSON: {clean[:200]}")
+        try:
+            result = json.loads(clean.replace("'", '"'))
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=502, detail=f"LLM returned invalid JSON: {clean[:300]}")
 
-    return {
-        "aiResult": result,
-        "context":  ctx,
-    }
+    return {"aiResult": result, "context": ctx}
 
-
-# POST /reports/{id}/ai-draft
-# Generates a message draft for reporter or reported user
 @router.post("/reports/{report_id}/ai-draft")
 async def generate_draft(report_id: str, body: DraftRequest):
     ctx = _gather_context(report_id)
-
     is_reported   = body.target == "reported"
     reported_name = ctx["reportedProfile"]["name"] or "User"
     reporter_name = ctx["reporterProfile"]["name"] or "User"
     report_reason = ctx["report"].get("reason", "")
 
     target_desc = f"the reported user ({reported_name})" if is_reported else f"the reporter ({reporter_name})"
-    instruction = "Do NOT reveal the reporter's identity. Reference only the report category." if is_reported else "Thank them for reporting. Share the outcome without confidential details about the other party."
+    instruction = "Do NOT reveal the reporter's identity." if is_reported else "Thank them for reporting. Share outcome without confidential details."
 
     prompt = f"""You are a trust & safety admin on a gig-work platform.
 Write a message to {target_desc}.
@@ -322,11 +298,8 @@ Report reason: {report_reason}
 Action taken: {body.suggestedAction}
 Summary: {body.summary}
 Write 3-5 sentences. Professional and empathetic. {instruction}
-No subject line. No sign-off. Return only the message text."""
+No subject line. No sign-off. Return only the message text.
+"""
 
     text = await _call_llm(prompt)
-    return {
-        "draft":  text.strip(),
-        "target": body.target,
-        "name":   reported_name if is_reported else reporter_name,
-    }
+    return {"draft": text.strip(), "target": body.target, "name": reported_name if is_reported else reporter_name}

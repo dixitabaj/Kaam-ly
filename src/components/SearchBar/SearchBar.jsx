@@ -75,13 +75,41 @@ export default function SearchBar({ onItemSelect, onImageClassified }) {
   };
 
   // Select search suggestion
-  const handleItemClick = (item) => {
-    setQuery(item.label || item.name || query);
-    setIsDropdownOpen(false);
-    setSelectedIndex(-1);
-    setClassifiedLabel(null); // ← clear nudge on selection
-    if (onItemSelect) onItemSelect(item);
-  };
+  const handleItemClick = async (item) => {
+  const displayValue = item.label || item.name || query;
+
+  setQuery(displayValue);
+  setIsDropdownOpen(false);
+  setSelectedIndex(-1);
+  setClassifiedLabel(null);
+
+  try {
+    // ← run prediction on the selected label to get the real category
+    const prediction = await predictTask(displayValue);
+
+    localStorage.setItem(
+      "predictedCategory",
+      JSON.stringify({
+        predicted_label: prediction?.predicted_label || displayValue,
+        text: displayValue,
+        all_predictions: prediction?.all_predictions || [{ label: displayValue, confidence: "manual" }]
+      })
+    );
+  } catch (err) {
+    console.error("predictTask failed on item click:", err);
+    // fallback if prediction fails
+    localStorage.setItem(
+      "predictedCategory",
+      JSON.stringify({
+        predicted_label: displayValue,
+        text: displayValue,
+        all_predictions: [{ label: displayValue, confidence: "manual" }]
+      })
+    );
+  }
+
+  if (onItemSelect) onItemSelect(item);
+};
 
   // Keyboard navigation
   const handleKeyDown = async (e) => {
