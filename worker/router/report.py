@@ -3,23 +3,28 @@ import shutil
 from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Query, File, UploadFile, Form
 from typing import Optional
-from ..repository.reportRepo import ReportRepo
-from ..config.database import collection_reports
+from bson import ObjectId
+from bson.errors import InvalidId
+from datetime import datetime
+from ..repository.reportRepo import ReportRepo, _serialize
+from ..config.database import collection_reports, collection_task, refund_collection
 
 router = APIRouter(tags=["reports"])
 reportRepo = ReportRepo(collection_reports)
 
-# Define where to save images
+# ─────────────────────────────────────────────────────────────
+# Upload config
+# ─────────────────────────────────────────────────────────────
 UPLOAD_DIR = "uploads/reports"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# ⚠️  ORDER MATTERS in FastAPI — fixed routes must come BEFORE dynamic /{id}
-#     /reports/stats, /reports/user/{userId}, /reports/reported/{userId},
-#     and /reports/count/{userId} are all declared first on purpose.
-# ─────────────────────────────────────────────────────────────────────────────
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
-# ── YOUR EXISTING ENDPOINTS (unchanged) ──────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# CREATE REPORT
+# ─────────────────────────────────
+from bson import ObjectId, errors as bson_errors
 
 @router.post("/reports")
 async def create_report(
@@ -29,47 +34,100 @@ async def create_report(
     reportedType: str = Form(...),
     reason:       str = Form(...),
     description:  Optional[str] = Form(None),
-    evidence:     Optional[UploadFile] = File(None)
+    evidence:     Optional[UploadFile] = File(None),
+    taskId:       Optional[str] = Form(None),
+    requestForRefund: bool = Form(False),
+    esewaId:      Optional[str] = Form(None)  # Only required if refund requested
 ):
     evidence_url = None
 
+    # ─── Handle evidence upload ───
     if evidence:
-        if not evidence.content_type.startswith("image/"):
-            raise HTTPException(status_code=400, detail="Only image files are allowed.")
-        
+        if evidence.content_type not in ALLOWED_TYPES:
+            raise HTTPException(status_code=400, detail="Invalid image type.")
+        contents = await evidence.read()
+        if len(contents) > MAX_FILE_SIZE:
+            raise HTTPException(status_code=400, detail="File too large (max 5MB).")
         file_extension = evidence.filename.split(".")[-1]
         unique_filename = f"{uuid4()}.{file_extension}"
         file_path = os.path.join(UPLOAD_DIR, unique_filename)
-        
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(evidence.file, buffer)
-        
+            buffer.write(contents)
         evidence_url = f"/static/reports/{unique_filename}"
 
+    # ─── Prepare report data ───
     data = {
-        "reporterId":   reporterId,
+        "reporterId": reporterId,
         "reporterType": reporterType,
-        "reportedId":   reportedId,
+        "reportedId": reportedId,
         "reportedType": reportedType,
-        "reason":       reason,
-        "description":  description
+        "reason": reason,
+        "description": description
     }
-    
+    if taskId:
+        data["taskId"] = taskId
+
+    # ─── Check task for refund eligibility ───
+    create_refund_doc = False
+    task = None
+    if taskId:
+        try:
+            obj_id = ObjectId(taskId)
+            task = collection_task.find_one({"_id": obj_id})
+            if not task:
+                raise HTTPException(status_code=404, detail="Task not found")
+            if task.get("escrow_status") in ("held", "released") and requestForRefund:
+                create_refund_doc = True
+                # Set task status to dispute
+                collection_task.update_one(
+                    {"_id": obj_id},
+                    {"$set": {"taskStatus": "dispute", "disputedAt": datetime.utcnow()}}
+                )
+        except bson_errors.InvalidId:
+            raise HTTPException(status_code=400, detail="Invalid taskId")
+
+    # ─── Create report ───
     report = reportRepo.createReport(data, evidence_url)
+
+    # ─── Create refund document if eligible ───
+    if create_refund_doc:
+        if not esewaId:
+            raise HTTPException(status_code=400, detail="eSewa ID required for refund requests")
+        refund_doc = {
+            "task_id": taskId,
+            "requester_id": str(task.get("userId")),
+            "reported_id": str(task.get("assignedWorkerId")) if task.get("assignedWorkerId") else None,
+            "requester_type": "customer",
+            "reported_type": "worker",
+            "amount_customer": None,  # Admin decides
+            "amount_worker": None,    # Admin decides
+            "reason": reason,
+            "total_amount": task.get("totalCost"),
+            "status": "pending",
+            "created_at": datetime.utcnow(),
+            "evidence_files": [evidence_url] if evidence_url else [],
+            "esewa_id": esewaId,      # Store eSewa ID for payout
+        }
+        refund_collection.insert_one(refund_doc)
+        report["refund_requested"] = True
+        report["refund_doc_id"] = str(refund_doc["_id"])
+
     return report
-
-
+# ─────────────────────────────────────────────────────────────
+# GET REPORTS (with filters)
+# ─────────────────────────────────────────────────────────────
 @router.get("/reports")
 def get_reports(
-    skip:         int = Query(0),
-    limit:        int = Query(50),
+    skip:         int = Query(0, ge=0),
+    limit:        int = Query(50, le=100),
     status:       str = Query("all"),
     reporterType: str = Query("all"),
     reportedType: str = Query("all"),
     search:       str = Query(""),
 ):
     return reportRepo.getReports(
-        skip=skip, limit=limit,
+        skip=skip,
+        limit=limit,
         status=status,
         reporterType=reporterType,
         reportedType=reportedType,
@@ -77,30 +135,50 @@ def get_reports(
     )
 
 
+# ─────────────────────────────────────────────────────────────
+# STATS
+# ─────────────────────────────────────────────────────────────
 @router.get("/reports/stats")
 def get_report_stats():
     return reportRepo.getStats()
 
 
+# ─────────────────────────────────────────────────────────────
+# UPDATE STATUS
+# ─────────────────────────────────────────────────────────────
 @router.patch("/reports/{id}/status")
-def update_status(id: str, status: str = Form(...), adminNote: str = Form("")):
-    if status not in ("resolved", "declined"):
+def update_status(
+    id: str,
+    status: str = Form(...),
+    adminNote: str = Form("")
+):
+    VALID_STATUS = {"resolved", "declined"}
+
+    if status not in VALID_STATUS:
         raise HTTPException(status_code=400, detail="Invalid status")
+
     ok = reportRepo.updateReportStatus(id, status, adminNote)
     if not ok:
         raise HTTPException(status_code=404, detail="Report not found")
+
     return {"success": True}
 
 
+# ─────────────────────────────────────────────────────────────
+# REPORTS BY REPORTER
+# ─────────────────────────────────────────────────────────────
 @router.get("/reports/user/{userId}")
 def get_reports_by_user(userId: str):
     reports = reportRepo.getReportsByUserId(userId)
     return {
         "reports": reports,
-        "total":   len(reports),
+        "total": len(reports),
     }
 
 
+# ─────────────────────────────────────────────────────────────
+# GET SINGLE REPORT
+# ─────────────────────────────────────────────────────────────
 @router.get("/reports/{id}")
 def get_report_by_id(id: str):
     report = reportRepo.getReportById(id)
@@ -109,37 +187,40 @@ def get_report_by_id(id: str):
     return report
 
 
+# ─────────────────────────────────────────────────────────────
+# DELETE REPORT
+# ─────────────────────────────────────────────────────────────
 @router.delete("/reports/{id}")
 def delete_report(id: str):
-    report = reportRepo.getReportById(id)
+    try:
+        obj_id = ObjectId(id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid ID")
+
+    report = reportRepo.col.find_one({"_id": obj_id})
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
-    from bson import ObjectId
-    reportRepo.col.delete_one({"_id": ObjectId(id)})
+
+    reportRepo.col.delete_one({"_id": obj_id})
     return {"success": True}
 
 
-# ── NEW ENDPOINTS ─────────────────────────────────────────────────────────────
-
-# GET /reports/reported/{userId}
-# Returns all reports filed AGAINST a user (reportedId = userId).
-# Different from /user/{userId} which returns reports filed BY a user.
-# Used in the admin modal to show prior history on the reported person.
+# ─────────────────────────────────────────────────────────────
+# REPORTS AGAINST A USER
+# ─────────────────────────────────────────────────────────────
 @router.get("/reports/reported/{userId}")
 def get_reports_against_user(userId: str):
-    reports = list(reportRepo.col.find({"reportedId": userId}).sort("createdAt", -1))
-    serialized = []
-    for r in reports:
-        r["id"] = str(r["_id"])
-        del r["_id"]
-        serialized.append(r)
+    reports = reportRepo.col.find({"reportedId": userId}).sort("createdAt", -1)
+    serialized = [_serialize(r) for r in reports]
+
     return {
-        "reports":  serialized,
-        "total":    len(serialized),
-        "pending":  sum(1 for r in serialized if r.get("status") == "pending"),
+        "reports": serialized,
+        "total": len(serialized),
+        "pending": sum(1 for r in serialized if r.get("status") == "pending"),
         "resolved": sum(1 for r in serialized if r.get("status") == "resolved"),
         "declined": sum(1 for r in serialized if r.get("status") == "declined"),
     }
+
 
 
 # GET /reports/count/{userId}

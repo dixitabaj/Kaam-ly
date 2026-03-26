@@ -3,7 +3,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Query, WebSocket, WebSock
 
 
 
-from .router import registerCustomer, refund, updateProfile, skillVerification, faceVerify, adminPayout, registerWorker, login, otp, createTask, chat, duplicateCheck, faceVerify, recommend_router, esewaVerify, predictTask, review_route, search_router, image_classify_router, report, adminReviewAI, pendingActivities, notifications
+from .router import registerCustomer, refundCustomer,refund, updateProfile, skillVerification, faceVerify, adminPayout, registerWorker, login, otp, createTask, chat, duplicateCheck, faceVerify, recommend_router, esewaVerify, predictTask, review_route, search_router, image_classify_router, report, adminReviewAI, pendingActivities, notifications
 from .schemas.schemas import WorkerCreateSchema, WorkerResponseSchema, WorkerStatsResponse
 from worker.config.database import collection, collection_worker, chat_collection, collection_reviews, collection_task, collection_reports
 from .services.hashing import Hash
@@ -1573,6 +1573,7 @@ app.include_router(fraud_router)
 app.include_router(recommend_router.router)
 app.include_router(faceVerify.router, prefix="/api")
 #include routers
+app.include_router(refundCustomer.router, prefix="/api")
 app.include_router(registerCustomer.router, prefix="/api")
 app.include_router(skillVerification.router, prefix="/api")
 app.include_router(adminPayout.router)

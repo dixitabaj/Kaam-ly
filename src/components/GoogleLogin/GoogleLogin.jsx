@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { loginUsingGoogle } from "../api/api"
 
 // ── Phone Modal ───────────────────────────────────────────────────────────────
-const PhoneModal = ({ email, token, onDone }) => {
+const PhoneModal = ({ id, token, onDone }) => {
   const [phone,   setPhone]   = useState('')
   const [error,   setError]   = useState('')
   const [loading, setLoading] = useState(false)
@@ -22,7 +22,7 @@ const PhoneModal = ({ email, token, onDone }) => {
 
     setLoading(true)
     try {
-      const res = await fetch('http://localhost:8000/api/customer/update-phone', {
+      const res = await fetch(`http://localhost:8000/api/customer/${id}/phone`, {
         method:  'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -183,7 +183,7 @@ export function Landing() {
       {/* Phone modal — only shown for new users */}
       {pendingUser && (
         <PhoneModal
-          email={pendingUser.email}
+          id={pendingUser.id}
           token={pendingUser.token}
           onDone={handlePhoneDone}
         />

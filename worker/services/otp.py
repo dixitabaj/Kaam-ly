@@ -10,6 +10,7 @@ import time
 app = FastAPI()
 
 # ===== Gmail SMTP config =====
+                     # TLS port
 
 # ===== In-memory OTP storage =====
 otp_store = {}

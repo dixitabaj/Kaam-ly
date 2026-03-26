@@ -10,9 +10,9 @@ import base64
 import httpx
 import json
 from datetime import datetime
-from fastapi import APIRouter, HTTPException
-from bson import ObjectId
-from worker.config.database import collection_task, collection_worker
+from fastapi import APIRouter, HTTPException, Form
+from bson import ObjectId, errors as bson_errors
+from worker.config.database import collection_task, collection_worker, refund_collection
 from worker.router import notifications
 from worker.manager import websocket_manager
 
@@ -213,23 +213,8 @@ Add these routes to your existing payout.py (admin_payout.py).
 They handle the customer refund queue — fetching pending refunds
 and marking them as processed with customer + worker notifications.
 """
-
-# ── Add these imports at the top of your payout.py (if not already present) ──
-# from fastapi import APIRouter, HTTPException
-# from bson import ObjectId
-# from datetime import datetime
-# from worker.config.database import collection_task, collection_worker
-# from ..router import notifications          ← your existing notifications module
-# from ..manager import websocket_manager    ← your existing WS manager
-# import json
-
-# ─────────────────────────────────────────────────────────────────────────────
-# GET /api/refunds/pending
-# Returns all cancelled tasks that had a payment and need a refund processed
-# ─────────────────────────────────────────────────────────────────────────────
-@router.get("/refunds/pending")
-def get_pending_refunds():
-    # Single clean query using $or instead of nested $in with $exists
+@router.post("/refunds/bulk")
+async def bulk_refund():
     tasks = list(collection_task.find({
         "status":        "cancelled",
         "paymentStatus": "paid",
@@ -240,193 +225,598 @@ def get_pending_refunds():
         ]
     }))
 
-    result = []
+    if not tasks:
+        return {"message": "No pending refunds found", "processed": 0}
+
+    results   = []
+    succeeded = 0
+    failed    = 0
+
     for task in tasks:
         task_id     = str(task["_id"])
-        customer_id = task.get("userId")
-        worker_id   = task.get("assignedWorkerId")
+        customer_id = str(task.get("userId", ""))
+        worker_id   = str(task.get("assignedWorkerId", ""))
+        refund_amount = task.get("refundAmount", 0)
+        penalty       = task.get("penaltyAmount", 0)
+        task_name     = task.get("taskName", "your task")
+        now           = datetime.utcnow()
 
-        customer = None
-        if customer_id:
+        if refund_amount <= 0:
+            results.append({"task_id": task_id, "status": "skipped", "reason": "Refund amount <= 0"})
+            failed += 1
+            continue
+
+        try:
+            # Update task as refunded
+            collection_task.update_one(
+                {"_id": ObjectId(task_id)},
+                {"$set": {
+                    "refund_status": "refunded",
+                    "refunded_at":   now,
+                    "refunded_by":   "admin",
+                }}
+            )
+
+            # Notify customer
+            customer = None
             try:
                 from ..config import database as db
                 customer = db.collection_user.find_one({"_id": ObjectId(customer_id)})
             except Exception:
                 pass
 
-        worker = None
-        if worker_id:
+            if customer:
+                if penalty > 0:
+                    customer_body = f"Your refund of NPR {refund_amount:.2f} for '{task_name}' has been processed. NPR {penalty:.2f} retained as penalty."
+                else:
+                    customer_body = f"Your full refund of NPR {refund_amount:.2f} for '{task_name}' has been processed."
+
+                try:
+                    await notifications.notify_with_fallback(
+                        userId=customer_id,
+                        title="Refund Processed ✅",
+                        body=customer_body,
+                        token=customer.get("fcmToken"),
+                        email=customer.get("email"),
+                        is_worker=False,
+                        data={"event_type": "refund_processed", "task_id": task_id, "refund_amount": str(refund_amount)},
+                    )
+                except Exception as e:
+                    print(f"[BULK REFUND] Customer notification failed: {e}")
+
+                try:
+                    await websocket_manager.manager.send_to_user(customer_id, json.dumps({
+                        "type": "refund_processed",
+                        "taskId": task_id,
+                        "taskName": task_name,
+                        "refundAmount": refund_amount,
+                    }))
+                except Exception as e:
+                    print(f"[BULK REFUND] Customer WS failed: {e}")
+
+            # Notify worker
+            worker = None
             try:
                 worker = collection_worker.find_one({"_id": ObjectId(worker_id)})
             except Exception:
                 pass
 
-        result.append({
-            "task_id":        task_id,
-            "task_name":      task.get("taskName") or task.get("taskDescrip", "Unnamed Task"),
-            "customer_id":    customer_id,
-            "customer_name":  f"{customer.get('firstName','')} {customer.get('lastName','')}".strip() if customer else "Unknown",
-            "customer_email": customer.get("email", "") if customer else "",
-            "total_cost":     task.get("totalCost", 0),
-            "refund_amount":  task.get("refundAmount", 0),
-            "penalty_amount": task.get("penaltyAmount", 0),
-            "cancel_reason":  task.get("cancelReason", ""),
-            "cancelled_at":   str(task.get("cancelledAt", "")),
-            "refund_status":  task.get("refund_status", "pending_refund"),
-            "refunded_at":    str(task.get("refunded_at", "")) if task.get("refunded_at") else None,
-            "worker_name":    f"{worker.get('firstName','')} {worker.get('lastName','')}".strip() if worker else "Unknown",
-        })
+            if worker:
+                if penalty > 0:
+                    worker_body = f"Customer refund for '{task_name}' processed. Penalty of NPR {penalty:.2f} credited to your earnings."
+                else:
+                    worker_body = f"Customer refund for '{task_name}' processed. No penalty applied."
 
-    total_owed = sum(r["refund_amount"] for r in result if r["refund_status"] != "refunded")
-    return {"count": len(result), "total_owed": total_owed, "refunds": result}
+                try:
+                    await notifications.notify_with_fallback(
+                        userId=worker_id,
+                        title="Refund Issued to Customer 🔔",
+                        body=worker_body,
+                        token=worker.get("fcmToken"),
+                        email=worker.get("email"),
+                        is_worker=True,
+                    )
+                except Exception as e:
+                    print(f"[BULK REFUND] Worker notification failed: {e}")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# POST /api/refunds/{task_id}/mark-refunded
-# Admin calls this after manually processing the refund in eSewa.
-# Notifies the customer (FCM + email) and worker via WebSocket + FCM.
-# ─────────────────────────────────────────────────────────────────────────────
-@router.post("/refunds/{task_id}/mark-refunded")
-async def mark_refund_processed(task_id: str):
-    """
-    Mark a cancelled task's refund as processed.
-    - Updates refund_status → "refunded"
-    - Notifies the customer via FCM push + email
-    - Notifies the worker via FCM push + WebSocket
-    """
-    try:
-        obj_id = ObjectId(task_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid task ID")
+                try:
+                    await websocket_manager.manager.send_to_user(worker_id, json.dumps({
+                        "type": "refund_processed",
+                        "taskId": task_id,
+                        "taskName": task_name,
+                        "penaltyAmount": penalty,
+                    }))
+                except Exception as e:
+                    print(f"[BULK REFUND] Worker WS failed: {e}")
 
-    task = collection_task.find_one({"_id": obj_id})
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+            results.append({"task_id": task_id, "status": "success", "refund_amount": refund_amount, "penalty_amount": penalty})
+            succeeded += 1
 
-    if task.get("refund_status") == "refunded":
-        raise HTTPException(status_code=400, detail="Refund already processed")
-
-    if task.get("status") != "cancelled":
-        raise HTTPException(status_code=400, detail="Task is not cancelled")
-
-    if not task.get("refundAmount") or task.get("refundAmount", 0) <= 0:
-        raise HTTPException(status_code=400, detail="No refund amount recorded for this task")
-
-    now           = datetime.utcnow()
-    refund_amount = task.get("refundAmount", 0)
-    penalty       = task.get("penaltyAmount", 0)
-    total_cost    = task.get("totalCost", 0)
-    task_name     = task.get("taskName", "your task")
-    customer_id   = str(task.get("userId", ""))
-    worker_id     = str(task.get("assignedWorkerId", ""))
-
-    # ── Update task in DB ──
-    collection_task.update_one(
-        {"_id": obj_id},
-        {"$set": {
-            "refund_status": "refunded",
-            "refunded_at":   now,
-            "refunded_by":   "admin",
-        }}
-    )
-
-    # ── Fetch customer document ──
-    customer = None
-    try:
-        customer = collection_task.database["users"].find_one({"_id": ObjectId(customer_id)})
-    except Exception:
-        pass
-
-    # ── Fetch worker document ──
-    worker = None
-    try:
-        worker = collection_worker.find_one({"_id": ObjectId(worker_id)})
-    except Exception:
-        pass
-
-    # ── Notify customer ──
-    if customer:
-        if penalty > 0:
-            # Partial refund (late cancellation penalty applied)
-            customer_body = (
-                f"Your refund of NPR {refund_amount:.2f} for '{task_name}' has been processed. "
-                f"(NPR {penalty:.2f} was retained as a late cancellation fee for the worker.)"
-            )
-        else:
-            # Full refund
-            customer_body = (
-                f"Your full refund of NPR {refund_amount:.2f} for '{task_name}' has been processed. "
-                f"The amount will reflect in your eSewa account shortly."
-            )
-
-        try:
-            await notifications.notify_with_fallback(
-                userId=customer_id,
-                title="Refund Processed ✅",
-                body=customer_body,
-                token=customer.get("fcmToken"),
-                email=customer.get("email"),
-                is_worker=False,
-                data={
-                    "event_type":    "refund_processed",
-                    "task_id":       task_id,
-                    "refund_amount": str(refund_amount),
-                },
-            )
         except Exception as e:
-            print(f"[REFUND] Customer notification failed: {e}")
-
-        # WebSocket to customer
-        try:
-            await websocket_manager.manager.send_to_user(customer_id, json.dumps({
-                "type":          "refund_processed",
-                "taskId":        task_id,
-                "taskName":      task_name,
-                "refundAmount":  refund_amount,
-            }))
-        except Exception as e:
-            print(f"[REFUND] Customer WebSocket failed: {e}")
-
-    # ── Notify worker ──
-    if worker:
-        if penalty > 0:
-            worker_body = (
-                f"Admin has processed the customer refund for '{task_name}'. "
-                f"Your cancellation penalty of NPR {penalty:.2f} has been credited to your earnings."
-            )
-        else:
-            worker_body = (
-                f"The customer refund for cancelled task '{task_name}' has been fully processed. "
-                f"No penalty was applied."
-            )
-
-        try:
-            await notifications.notify_with_fallback(
-                userId=worker_id,
-                title="Refund Issued to Customer 🔔",
-                body=worker_body,
-                token=worker.get("fcmToken"),
-                email=worker.get("email"),
-                is_worker=True,
-            )
-        except Exception as e:
-            print(f"[REFUND] Worker notification failed: {e}")
-
-        # WebSocket to worker
-        try:
-            await websocket_manager.manager.send_to_user(worker_id, json.dumps({
-                "type":          "refund_processed",
-                "taskId":        task_id,
-                "taskName":      task_name,
-                "penaltyAmount": penalty,
-            }))
-        except Exception as e:
-            print(f"[REFUND] Worker WebSocket failed: {e}")
+            results.append({"task_id": task_id, "status": "failed", "reason": str(e)})
+            failed += 1
 
     return {
-        "success":       True,
-        "message":       "Refund marked as processed. Customer and worker notified.",
-        "task_id":       task_id,
-        "refund_amount": refund_amount,
-        "penalty_amount": penalty,
-        "refunded_at":   now.isoformat(),
+        "message": f"Bulk refund complete: {succeeded} succeeded, {failed} failed",
+        "succeeded": succeeded,
+        "failed": failed,
+        "results": results,
+    }
+
+## ─────────────── PENDING REFUNDS ───────────────
+@router.get("/refunds/pending")
+def get_pending_refunds():
+    refunds = list(refund_collection.find({"status": "pending"}))
+    print("refunds", refunds)
+
+    result = []
+    total_pending = 0
+
+    for refund in refunds:
+        task_id = refund.get("task_id")
+        task = collection_task.find_one({"_id": ObjectId(task_id)}) if task_id else None
+
+        # assignedWorkerId stores an email string, not an ObjectId
+        worker_email = task.get("assignedWorkerId") if task else None
+        worker = collection_worker.find_one({"email": worker_email}) if worker_email else None
+
+        refund_amount = refund.get("amount_customer") or 0
+
+        result.append({
+            "refund_id":     str(refund["_id"]),
+            "task_id":       task_id,
+            "task_name":     task.get("taskName", "Unnamed Task") if task else "Unknown",
+            "customer_id":   refund.get("requester_id", ""),
+            "refund_amount": refund_amount,
+            "penalty_amount": refund.get("amount_worker") or 0,
+            "refund_status": refund.get("status", "pending"),
+            "reason":        refund.get("reason", ""),
+            "created_at":    str(refund.get("created_at", "")),
+            "worker_email":  worker_email,
+            "worker_name":   (
+                f"{worker.get('firstName', '')} {worker.get('lastName', '')}".strip()
+                if worker else None
+            ),
+        })
+        total_pending += refund_amount
+
+    return {
+        "count":                len(result),
+        "total_pending_amount": total_pending,
+        "refunds":              result,
+    }
+
+
+# ─────────────── REFUND HISTORY ───────────────
+ 
+# ── Refunds ───────────────────────────────────────────────────────────────────
+ 
+@router.post("/refunds/bulk")
+async def bulk_refund():
+    tasks = list(collection_task.find({
+        "status":        "cancelled",
+        "paymentStatus": "paid",
+        "refundAmount":  {"$gt": 0},
+        "$or": [
+            {"refund_status": "pending_refund"},
+            {"refund_status": {"$exists": False}},
+        ]
+    }))
+ 
+    if not tasks:
+        return {"message": "No pending refunds found", "processed": 0}
+ 
+    results   = []
+    succeeded = 0
+    failed    = 0
+ 
+    for task in tasks:
+        task_id       = str(task["_id"])
+        customer_id   = str(task.get("userId", ""))
+        worker_id     = str(task.get("assignedWorkerId", ""))
+        refund_amount = task.get("refundAmount", 0)
+        penalty       = task.get("penaltyAmount", 0)
+        task_name     = task.get("taskName", "your task")
+        now           = datetime.utcnow()
+ 
+        if refund_amount <= 0:
+            results.append({"task_id": task_id, "status": "skipped", "reason": "Refund amount <= 0"})
+            failed += 1
+            continue
+ 
+        try:
+            collection_task.update_one(
+                {"_id": ObjectId(task_id)},
+                {"$set": {
+                    "refund_status": "refunded",
+                    "refunded_at":   now,
+                    "refunded_by":   "admin",
+                }}
+            )
+ 
+            # Notify customer
+            customer = None
+            try:
+                from ..config import database as db
+                customer = db.collection_user.find_one({"_id": ObjectId(customer_id)})
+            except Exception:
+                pass
+ 
+            if customer:
+                if penalty > 0:
+                    customer_body = f"Your refund of NPR {refund_amount:.2f} for '{task_name}' has been processed. NPR {penalty:.2f} retained as penalty."
+                else:
+                    customer_body = f"Your full refund of NPR {refund_amount:.2f} for '{task_name}' has been processed."
+ 
+                try:
+                    await notifications.notify_with_fallback(
+                        userId=customer_id,
+                        title="Refund Processed ✅",
+                        body=customer_body,
+                        token=customer.get("fcmToken"),
+                        email=customer.get("email"),
+                        is_worker=False,
+                        data={"event_type": "refund_processed", "task_id": task_id, "refund_amount": str(refund_amount)},
+                    )
+                except Exception as e:
+                    print(f"[BULK REFUND] Customer notification failed: {e}")
+ 
+                try:
+                    await websocket_manager.manager.send_to_user(customer_id, json.dumps({
+                        "type": "refund_processed",
+                        "taskId": task_id,
+                        "taskName": task_name,
+                        "refundAmount": refund_amount,
+                    }))
+                except Exception as e:
+                    print(f"[BULK REFUND] Customer WS failed: {e}")
+ 
+            # Notify worker
+            worker = None
+            try:
+                worker = collection_worker.find_one({"_id": ObjectId(worker_id)})
+            except Exception:
+                pass
+ 
+            if worker:
+                if penalty > 0:
+                    worker_body = f"Customer refund for '{task_name}' processed. Penalty of NPR {penalty:.2f} credited to your earnings."
+                else:
+                    worker_body = f"Customer refund for '{task_name}' processed. No penalty applied."
+ 
+                try:
+                    await notifications.notify_with_fallback(
+                        userId=worker_id,
+                        title="Refund Issued to Customer 🔔",
+                        body=worker_body,
+                        token=worker.get("fcmToken"),
+                        email=worker.get("email"),
+                        is_worker=True,
+                    )
+                except Exception as e:
+                    print(f"[BULK REFUND] Worker notification failed: {e}")
+ 
+                try:
+                    await websocket_manager.manager.send_to_user(worker_id, json.dumps({
+                        "type": "refund_processed",
+                        "taskId": task_id,
+                        "taskName": task_name,
+                        "penaltyAmount": penalty,
+                    }))
+                except Exception as e:
+                    print(f"[BULK REFUND] Worker WS failed: {e}")
+ 
+            results.append({"task_id": task_id, "status": "success", "refund_amount": refund_amount, "penalty_amount": penalty})
+            succeeded += 1
+ 
+        except Exception as e:
+            results.append({"task_id": task_id, "status": "failed", "reason": str(e)})
+            failed += 1
+ 
+    return {
+        "message":   f"Bulk refund complete: {succeeded} succeeded, {failed} failed",
+        "succeeded": succeeded,
+        "failed":    failed,
+        "results":   results,
+    }
+ 
+ 
+@router.get("/refunds/pending")
+def get_pending_refunds():
+    refunds = list(refund_collection.find({"status": "pending"}))
+    result        = []
+    total_pending = 0
+ 
+    for refund in refunds:
+        task_id      = refund.get("task_id")
+        task         = collection_task.find_one({"_id": ObjectId(task_id)}) if task_id else None
+        worker_email = task.get("assignedWorkerId") if task else None
+        worker       = collection_worker.find_one({"email": worker_email}) if worker_email else None
+        refund_amount = refund.get("amount_customer") or 0
+ 
+        result.append({
+            "refund_id":      str(refund["_id"]),
+            "task_id":        task_id,
+            "task_name":      task.get("taskName", "Unnamed Task") if task else "Unknown",
+            "customer_id":    refund.get("requester_id", ""),
+            "refund_amount":  refund_amount,
+            "penalty_amount": refund.get("amount_worker") or 0,
+            "refund_status":  refund.get("status", "pending"),
+            "reason":         refund.get("reason", ""),
+            "created_at":     str(refund.get("created_at", "")),
+            "worker_email":   worker_email,
+            "worker_name":    (
+                f"{worker.get('firstName', '')} {worker.get('lastName', '')}".strip()
+                if worker else None
+            ),
+        })
+        total_pending += refund_amount
+ 
+    return {
+        "count":                len(result),
+        "total_pending_amount": total_pending,
+        "refunds":              result,
+    }
+@router.get("/refunds/approved")
+def get_approved_refunds():
+    refunds = list(refund_collection.find({"status": "approved"}))
+    result        = []
+    total_approved = 0
+ 
+    for refund in refunds:
+        task_id      = refund.get("task_id")
+        task         = collection_task.find_one({"_id": ObjectId(task_id)}) if task_id else None
+        worker_email = task.get("assignedWorkerId") if task else None
+        worker       = collection_worker.find_one({"email": worker_email}) if worker_email else None
+        refund_amount = refund.get("amount_customer") or 0
+ 
+        result.append({
+            "refund_id":      str(refund["_id"]),
+            "task_id":        task_id,
+            "task_name":      task.get("taskName", "Unnamed Task") if task else "Unknown",
+            "customer_id":    refund.get("requester_id", ""),
+            "refund_amount":  refund_amount,
+            "penalty_amount": refund.get("amount_worker") or 0,
+            "refund_status":  refund.get("status", "approved"),
+            "reason":         refund.get("reason", ""),
+            "created_at":     str(refund.get("created_at", "")),
+            "worker_email":   worker_email,
+            "worker_name":    (
+                f"{worker.get('firstName', '')} {worker.get('lastName', '')}".strip()
+                if worker else None
+            ),
+        })
+        total_approved += refund_amount
+ 
+    return {
+        "count":                len(result),
+        "total_approved_amount": total_approved,
+        "refunds":              result,
+    } 
+@router.get("/refunds/rejected")
+def get_rejected_refunds():
+    refunds = list(refund_collection.find({"status": "rejected"}))
+    result        = []
+    total_rejected = 0
+ 
+    for refund in refunds:
+        task_id      = refund.get("task_id")
+        task         = collection_task.find_one({"_id": ObjectId(task_id)}) if task_id else None
+        worker_email = task.get("assignedWorkerId") if task else None
+        worker       = collection_worker.find_one({"email": worker_email}) if worker_email else None
+        refund_amount = refund.get("amount_customer") or 0
+ 
+        result.append({
+            "refund_id":      str(refund["_id"]),
+            "task_id":        task_id,
+            "task_name":      task.get("taskName", "Unnamed Task") if task else "Unknown",
+            "customer_id":    refund.get("requester_id", ""),
+            "refund_amount":  refund_amount,
+            "penalty_amount": refund.get("amount_worker") or 0,
+            "refund_status":  refund.get("status", "rejected"),
+            "reason":         refund.get("reason", ""),
+            "created_at":     str(refund.get("created_at", "")),
+            "worker_email":   worker_email,
+            "worker_name":    (
+                f"{worker.get('firstName', '')} {worker.get('lastName', '')}".strip()
+                if worker else None
+            ),
+        })
+        total_rejected += refund_amount
+ 
+    return {
+        "count":                len(result),
+        "total_rejected_amount": total_rejected,
+        "refunds":              result,
+    }  
+@router.get("/refunds/history")
+def get_refund_history():
+    refunds = list(refund_collection.find({"status": "refunded"}))
+    result         = []
+    total_refunded = 0
+    total_penalty  = 0
+ 
+    for refund in refunds:
+        task_id      = refund.get("task_id")
+        task         = collection_task.find_one({"_id": ObjectId(task_id)}) if task_id else None
+        worker_email = task.get("assignedWorkerId") if task else None
+        worker       = collection_worker.find_one({"email": worker_email}) if worker_email else None
+        refund_amount  = refund.get("amount_customer") or 0
+        penalty_amount = refund.get("amount_worker") or 0
+ 
+        result.append({
+            "refund_id":      str(refund["_id"]),
+            "task_id":        task_id,
+            "task_name":      task.get("taskName", "Unnamed Task") if task else "Unknown",
+            "customer_id":    refund.get("requester_id", ""),
+            "refund_amount":  refund_amount,
+            "penalty_amount": penalty_amount,
+            "reason":         refund.get("reason", ""),
+            "refunded_at":    str(refund.get("updated_at", "")),
+            "refunded_by":    refund.get("resolved_by", ""),
+            "worker_email":   worker_email,
+            "worker_name":    (
+                f"{worker.get('firstName', '')} {worker.get('lastName', '')}".strip()
+                if worker else None
+            ),
+        })
+        total_refunded += refund_amount
+        total_penalty  += penalty_amount
+ 
+    return {
+        "count":          len(result),
+        "total_refunded": total_refunded,
+        "total_penalty":  total_penalty,
+        "refunds":        result,
+    }
+ 
+ 
+# ── FIX: async + real eSewa call on approve ───────────────────────────────────
+@router.patch("/update-status/{refund_id}")
+async def update_refund_status(
+    refund_id: str,
+    status: str = Form(...),
+    amount_customer: float | None = Form(None),
+    amount_worker:   float | None = Form(None),
+    admin_note: str = Form("")
+):
+    """
+    Admin approves or declines a refund request.
+    On approval: validates amounts, updates DB, then triggers real eSewa disbursement
+    to the customer's registered eSewa ID (phoneNo).
+    """
+    if status not in ("approved", "declined"):
+        raise HTTPException(status_code=400, detail="Invalid status. Must be 'approved' or 'declined'.")
+ 
+    try:
+        obj_id = ObjectId(refund_id)
+    except bson_errors.InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid refund ID format.")
+ 
+    refund = refund_collection.find_one({"_id": obj_id})
+    if not refund:
+        raise HTTPException(status_code=404, detail="Refund not found.")
+ 
+    if refund.get("status") not in ("pending", None):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Refund is already '{refund.get('status')}' and cannot be updated."
+        )
+ 
+    # Approval requires a customer amount
+    if status == "approved" and (amount_customer is None or amount_customer <= 0):
+        raise HTTPException(status_code=400, detail="A positive customer refund amount is required for approval.")
+ 
+    task        = None
+    task_id_str = refund.get("task_id")
+ 
+    if status == "approved":
+        if not task_id_str:
+            raise HTTPException(status_code=400, detail="No task linked to this refund.")
+ 
+        try:
+            task = collection_task.find_one({"_id": ObjectId(task_id_str)})
+        except bson_errors.InvalidId:
+            raise HTTPException(status_code=400, detail="Linked task has an invalid ID.")
+ 
+        if not task:
+            raise HTTPException(status_code=404, detail="Linked task not found.")
+ 
+        total_paid = float(task.get("totalCost") or task.get("basePrice") or 0)
+        if amount_customer > total_paid:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Refund amount ({amount_customer}) exceeds what the customer paid ({total_paid})."
+            )
+ 
+    # ── Build the update document ─────────────────────────────────────────────
+    now = datetime.utcnow()
+    update_fields = {
+        "status":      status,
+        "admin_note":  admin_note,
+        "resolved_at": now,
+        "resolved_by": "admin",
+    }
+ 
+    esewa_refund_result = None
+ 
+    if status == "approved":
+        update_fields["amount_customer"] = amount_customer
+        update_fields["amount_worker"]   = amount_worker or 0.0
+ 
+        # ── Trigger real eSewa refund to customer ─────────────────────────────
+        try:
+            customer_esewa_id = None
+            customer_obj_id   = refund.get("requester_id") or (task.get("userId") if task else None)
+ 
+            if customer_obj_id:
+                try:
+                    from ..config import database as db
+                    customer = db.collection_user.find_one({"_id": ObjectId(str(customer_obj_id))})
+                    if customer:
+                        customer_esewa_id = customer.get("phoneNo") or customer.get("esewaId")
+                except Exception as lookup_err:
+                    print(f"[REFUND] Customer lookup failed: {lookup_err}")
+ 
+            if customer_esewa_id:
+                transaction_uuid = str(uuid.uuid4())
+                esewa_response   = await disburse_to_esewa(
+                    esewa_id=customer_esewa_id,
+                    amount=amount_customer,
+                    transaction_uuid=transaction_uuid,
+                )
+ 
+                if esewa_response.get("status_code") == 200 and esewa_response.get("body", {}).get("status") == "SUCCESS":
+                    update_fields["esewa_refund_status"]      = "sent"
+                    update_fields["esewa_refund_transaction"] = transaction_uuid
+                    update_fields["esewa_refund_esewa_id"]    = customer_esewa_id
+                    esewa_refund_result = {
+                        "status":           "sent",
+                        "transaction_uuid": transaction_uuid,
+                        "esewa_id":         customer_esewa_id,
+                    }
+                else:
+                    update_fields["esewa_refund_status"] = "failed"
+                    update_fields["esewa_refund_error"]  = str(esewa_response.get("body", {}))
+                    esewa_refund_result = {
+                        "status": "failed",
+                        "error":  str(esewa_response.get("body", {})),
+                    }
+            else:
+                # No eSewa ID on file — mark as manual
+                update_fields["esewa_refund_status"] = "no_esewa_id"
+                esewa_refund_result = {
+                    "status": "no_esewa_id",
+                    "note":   "Customer has no eSewa ID registered. Process refund manually.",
+                }
+ 
+        except Exception as esewa_err:
+            # Don't block the approval — log the error and continue
+            print(f"[REFUND] eSewa disburse error for refund {refund_id}: {esewa_err}")
+            update_fields["esewa_refund_status"] = "error"
+            update_fields["esewa_refund_error"]  = str(esewa_err)
+            esewa_refund_result = {"status": "error", "error": str(esewa_err)}
+ 
+        # Mark the linked task as refunded
+        if task_id_str:
+            try:
+                collection_task.update_one(
+                    {"_id": ObjectId(task_id_str)},
+                    {"$set": {"taskStatus": "refunded", "refund_resolved_at": now}}
+                )
+            except Exception as task_err:
+                print(f"[REFUND] Failed to update task status: {task_err}")
+ 
+    # ── Persist to refund collection ──────────────────────────────────────────
+    refund_collection.update_one({"_id": obj_id}, {"$set": update_fields})
+ 
+    return {
+        "message":          f"Refund request {status} successfully.",
+        "refund_id":        refund_id,
+        "status":           status,
+        "amount_customer":  update_fields.get("amount_customer"),
+        "amount_worker":    update_fields.get("amount_worker"),
+        "admin_note":       admin_note,
+        "resolved_at":      now.isoformat(),
+        "esewa_refund":     esewa_refund_result,  # None on decline, dict on approve
     }

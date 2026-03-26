@@ -19,6 +19,7 @@ class ReportRepo:
             "reporterType": data.get("reporterType"),
             "reportedId":   data.get("reportedId"),
             "reportedType": data.get("reportedType"),
+            "taskId":       data.get("taskId"), 
             "reason":       data.get("reason"),
             "description":  data.get("description") or "",
             "evidenceUrl":  evidence_url,  # Path to the uploaded image
@@ -26,6 +27,7 @@ class ReportRepo:
             "createdAt":    datetime.utcnow(),
             "resolvedAt":   None,
             "adminNote":    "",
+            "refundStatus": "pending"
         }
         result = self.col.insert_one(doc)
         doc["id"] = str(result.inserted_id)

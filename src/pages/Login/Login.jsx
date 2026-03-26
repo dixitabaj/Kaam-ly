@@ -5,6 +5,8 @@ import { GoogleLogin } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 import { loginUsingGoogle } from "../../api/api";
 import logo from "../../images/logo.png";
+import eyeOpenIcon  from "../../images/open.png";
+import eyeCloseIcon from "../../images/closed.png";
 
 const VAPID_KEY = "BFID2OKKVjuBAh3Q0DyC8IpdgythnwvDa_55_gZwqGJIJVcufyrLS_zK92bODBdV525zC-C39QCRtU9siSEOVvc";
 
@@ -69,6 +71,9 @@ const Login = () => {
   const [showResetForm,      setShowResetForm]      = useState(false);
   const [showResetSuccess,   setShowResetSuccess]   = useState(false);
   const [error,              setError]              = useState('');
+  const [showPassword,        setShowPassword]        = useState(false);
+  const [showNewPassword,     setShowNewPassword]     = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -223,8 +228,8 @@ const Login = () => {
       setError("Passwords do not match.");
       return;
     }
-    if (formData.newPassword.length < 6) {
-      setError("Password must be at least 6 characters.");
+    if (formData.newPassword.length < 8) {
+      setError("Password must be at least 8 characters.");
       return;
     }
 
@@ -287,7 +292,7 @@ const Login = () => {
                 : showResetForm
                 ? "Enter your new password below."
                 : showOtpForm
-                ? "Enter the 6-digit code sent to your email."
+                ? "Enter the 4-digit code sent to your email."
                 : "Enter your email and we'll send you a reset code."}
             </p>
           </div>
@@ -303,12 +308,18 @@ const Login = () => {
                 />
               </div>
               <div className="form-group-login">
-                <label className="form-label-login">Password</label>
+              <label className="form-label-login">Password</label>
+              <div className="cr-pw-wrap">
                 <input
-                  type="password" name="password" value={formData.password}
-                  onChange={handleChange} className="form-input1" required
+                  type={showPassword ? 'text' : 'password'} name="password"
+                  value={formData.password} onChange={handleChange}
+                  className="form-input1" required
                 />
+                <button type="button" className="cr-eye-btn" onClick={() => setShowPassword(p => !p)}>
+                  <img src={showPassword ? eyeOpenIcon : eyeCloseIcon} alt="Toggle" className="cr-eye-icon" />
+                </button>
               </div>
+            </div>
               {error && <div className="error-message">{error}</div>}
               <div className="form-options">
                 <label className="checkbox-option">
@@ -375,21 +386,37 @@ const Login = () => {
 
           {/* ── New Password ── */}
           {showResetForm && (
-            <form onSubmit={handleResetPassword} className="forgot-password-form">
-              <div className="form-group-login">
-                <label className="form-label-login">New Password</label>
-                <input type="password" name="newPassword" value={formData.newPassword}
-                  onChange={handleChange} className="form-input1" required />
-              </div>
-              <div className="form-group-login">
-                <label className="form-label-login">Confirm Password</label>
-                <input type="password" name="confirmPassword" value={formData.confirmPassword}
-                  onChange={handleChange} className="form-input1" required />
-              </div>
-              {error && <div className="error-message">{error}</div>}
-              <button type="submit" className="auth-btn primary">Reset Password</button>
-            </form>
-          )}
+  <form onSubmit={handleResetPassword} className="forgot-password-form">
+    <div className="form-group-login">
+      <label className="form-label-login">New Password</label>
+      <div className="cr-pw-wrap">
+        <input
+          type={showNewPassword ? 'text' : 'password'} name="newPassword"
+          value={formData.newPassword} onChange={handleChange}
+          className="form-input1" required
+        />
+        <button type="button" className="cr-eye-btn" onClick={() => setShowNewPassword(p => !p)}>
+          <img src={showNewPassword ? eyeOpenIcon : eyeCloseIcon} alt="Toggle" className="cr-eye-icon" />
+        </button>
+      </div>
+    </div>
+    <div className="form-group-login">
+      <label className="form-label-login">Confirm Password</label>
+      <div className="cr-pw-wrap">
+        <input
+          type={showConfirmPassword ? 'text' : 'password'} name="confirmPassword"
+          value={formData.confirmPassword} onChange={handleChange}
+          className="form-input1" required
+        />
+        <button type="button" className="cr-eye-btn" onClick={() => setShowConfirmPassword(p => !p)}>
+          <img src={showConfirmPassword ? eyeOpenIcon : eyeCloseIcon} alt="Toggle" className="cr-eye-icon" />
+        </button>
+      </div>
+    </div>
+    {error && <div className="error-message">{error}</div>}
+    <button type="submit" className="auth-btn primary">Reset Password</button>
+  </form>
+)}
 
           {/* ── Success ── */}
           {showResetSuccess && (
