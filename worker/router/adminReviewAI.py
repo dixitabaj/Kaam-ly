@@ -14,10 +14,14 @@ from ..config.database import (
     collection_task,
     chat_collection,
 )
-
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 router = APIRouter(tags=["ai-review"])
 
 # Groq API config
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL   = "llama-3.3-70b-versatile"
 
 # Schemas
 class DraftRequest(BaseModel):

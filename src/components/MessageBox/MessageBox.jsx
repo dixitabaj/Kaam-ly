@@ -91,7 +91,7 @@ const MediaMessage = ({ mediaUrl, mediaType, fileName }) => {
 };
 
 // ── Offer Card ────────────────────────────────────────────────────────────────
-const OfferCard = ({ offer, isMyMessage, onAccept, onReject }) => {
+const OfferCard = ({ offer, isMyMessage, isWorker, onAccept, onReject }) => {
   const isPending  = offer.status === 'pending';
   const isAccepted = offer.status === 'accepted';
   const isRejected = offer.status === 'rejected';
@@ -169,12 +169,12 @@ const OfferCard = ({ offer, isMyMessage, onAccept, onReject }) => {
       )}
 
       {/* Accept/Reject buttons */}
-      {isPending && !isMyMessage && !isStatusMsg && (
-        <div className="mp-offer-actions">
-          <button className="mp-offer-reject" onClick={onReject}>Reject</button>
-          <button className="mp-offer-accept" onClick={onAccept}>Accept</button>
-        </div>
-      )}
+      {isPending && !isMyMessage && !isStatusMsg && !isWorker && (
+  <div className="mp-offer-actions">
+    <button className="mp-offer-reject" onClick={onReject}>Reject</button>
+    <button className="mp-offer-accept" onClick={onAccept}>Accept</button>
+  </div>
+)}
     </div>
   );
 };
@@ -851,6 +851,7 @@ if (error || !otherUser) return (
                                   <OfferCard
                                     offer={parsedOffer}
                                     isMyMessage={isMyMessage}
+                                    isWorker={isWorker}
                                     onAccept={() => handleOfferResponse(index, 'accepted')}
                                     onReject={() => handleOfferResponse(index, 'rejected')}
                                   />

@@ -14,7 +14,7 @@
 /* ── Layout ──────────────────────────────────────────────────────────────── */
 .mp-container {
   display: flex;
-  height: 690px;
+  height: 720px;
   font-family: 'DM Sans', sans-serif;
   background: #f5f4f0;
   overflow: hidden;

@@ -6,11 +6,23 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import random
 import time
+import os
+from dotenv import load_dotenv
+
+# Load .env — go one level up from current file's directory
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 app = FastAPI()
 
 # ===== Gmail SMTP config =====
-                     # TLS port
+SENDER_EMAIL = os.getenv("SENDER_EMAIL")
+LOGIN        = os.getenv("SMTP_LOGIN")
+PASSWORD     = os.getenv("SMTP_PASSWORD")
+SMTP_SERVER  = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+PORT         = int(os.getenv("SMTP_PORT", "587"))
+
+print("SENDER_EMAIL:", SENDER_EMAIL)  # debug
+print("SMTP_PASSWORD:", PASSWORD)     
 
 # ===== In-memory OTP storage =====
 otp_store = {}

@@ -420,7 +420,9 @@ export function TaskDetails({ taskId }) {
 
   const storedUser  = localStorage.getItem('user') || sessionStorage.getItem('user');
   const currentUser = storedUser ? JSON.parse(storedUser) : null;
+  console.log(currentUser);
   const role        = currentUser?.role ?? currentUser?.type ?? 'customer';
+  console.log(role);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -551,31 +553,101 @@ export function TaskDetails({ taskId }) {
         )}
 
         {/* ── FOOTER ACTIONS ── */}
-        <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-          <button style={{
+       {/* ── FOOTER ACTIONS ── */}
+{(() => {
+  const status = (taskData?.status ?? '').toLowerCase();
+  const isPaid = (taskData?.payment_status ?? '').toLowerCase() === 'paid';
+
+  // Worker actions
+  if (role === 'worker') {
+    return (
+      <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+       {status === 'pending' && (
+  <>
+    {(taskData?.offerStatus ?? '').toLowerCase() === 'accepted' ? (
+      <>
+        <button style={{
+          flex: 1, padding: '13px 0', borderRadius: 12,
+          background: `linear-gradient(135deg, ${C.orange}, ${C.orangeDark})`,
+          color: 'white', border: 'none', fontWeight: 700, fontSize: 14,
+          cursor: 'pointer', boxShadow: `0 4px 14px rgba(246,173,86,0.4)`,
+          transition: 'transform 0.12s, box-shadow 0.12s',
+        }}
+          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}
+        >
+          Accept Task
+        </button>
+        <button
+  style={{
+    flex: 1, padding: '13px 0', borderRadius: 12,
+    background: C.redLight, color: C.red,
+    border: `1.5px solid ${C.red}33`, fontWeight: 700, fontSize: 14,
+    cursor: 'pointer',
+  }}
+>
+  Reject Task
+</button>
+      </>
+    ) : (
+      <>
+        <button
+          onClick={() => alert('Please discuss the price with the customer first before accepting the task.')}
+          style={{
             flex: 1, padding: '13px 0', borderRadius: 12,
-            background: `linear-gradient(135deg, ${C.orange}, ${C.orangeDark})`,
-            color: 'white', border: 'none', fontWeight: 700, fontSize: 14,
-            cursor: 'pointer', boxShadow: `0 4px 14px rgba(246,173,86,0.4)`,
-            transition: 'transform 0.12s, box-shadow 0.12s',
+            background: '#f1f5f9', color: '#b0bec5',
+            border: `1.5px solid #e2e8f0`, fontWeight: 700, fontSize: 14,
+            cursor: 'not-allowed', boxShadow: 'none',
           }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = `0 6px 20px rgba(246,173,86,0.5)`; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = `0 4px 14px rgba(246,173,86,0.4)`; }}
-          >
-            Accept Task
-          </button>
-          <button style={{
-            flex: 1, padding: '13px 0', borderRadius: 12,
-            background: C.white, color: C.textMid,
-            border: `1.5px solid ${C.border}`, fontWeight: 600, fontSize: 14,
-            cursor: 'pointer', transition: 'border-color 0.15s, color 0.15s',
-          }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = C.orange; e.currentTarget.style.color = C.orange; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textMid; }}
-          >
-            Contact Support
-          </button>
-        </div>
+        >
+          Accept Task
+        </button>
+        <button
+  style={{
+    flex: 1, padding: '13px 0', borderRadius: 12,
+    background: C.redLight, color: C.red,
+    border: `1.5px solid ${C.red}33`, fontWeight: 700, fontSize: 14,
+    cursor: 'pointer',
+  }}
+>
+  Reject Task
+</button>
+      </>
+    )}
+  </>
+)}
+      </div>
+    );
+  }
+
+  // Customer actions
+  return (
+    <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+      <button style={{
+        flex: 1, padding: '13px 0', borderRadius: 12,
+        background: C.white, color: C.textMid,
+        border: `1.5px solid ${C.border}`, fontWeight: 600, fontSize: 14,
+        cursor: 'pointer', transition: 'border-color 0.15s, color 0.15s',
+      }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = C.orange; e.currentTarget.style.color = C.orange; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textMid; }}
+      >
+        Contact Support
+      </button>
+      {/* Cancel only if not yet paid */}
+      {!['completed', 'cancelled'].includes(status) && (
+        <button style={{
+          flex: 1, padding: '13px 0', borderRadius: 12,
+          background: C.redLight, color: C.red,
+          border: `1.5px solid ${C.red}33`, fontWeight: 700, fontSize: 14,
+          cursor: 'pointer',
+        }}>
+          Cancel Task
+        </button>
+      )}
+    </div>
+  );
+})()}
 
       </div>
     </div>
