@@ -12,6 +12,8 @@ dist
 dist-ssr
 *.local
 
+kaam-ly-firebase.json
+
 *.safetensors
 worker/model/
 __pycache__/

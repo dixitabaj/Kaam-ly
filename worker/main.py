@@ -16,8 +16,14 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from typing import Optional, List
 from .config import database
+import os
+from dotenv import load_dotenv
+
 # Create FastAPI app instance
 app = FastAPI()
+
+
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 # Add CORS middleware to allow requests from frontend apps
 app.add_middleware(
@@ -1294,6 +1300,8 @@ import os, asyncio, re, json
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 
+MONGO_URI       = os.getenv("MONGO_URI")
+GOOGLE_API_KEY  = os.getenv("GOOGLE_API_KEY")
 
 client = AsyncIOMotorClient(MONGO_URI)
 db = client.get_database("user")

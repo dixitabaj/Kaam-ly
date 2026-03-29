@@ -4,7 +4,12 @@ importScripts("https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js
 importScripts("https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js");
 
 firebase.initializeApp({
-
+  apiKey:            "AIzaSyD4MNdeLF9QnorEeHPzfZ5Y4Zmhl7HPh8M",
+  authDomain:        "kaam-ly.firebaseapp.com",
+  projectId:         "kaam-ly",
+  storageBucket:     "kaam-ly.firebasestorage.app",
+  messagingSenderId: "983636611425",
+  appId:             "1:983636611425:web:c66dfc1a19af0242b9f520",
 });
 
 const messaging = firebase.messaging();

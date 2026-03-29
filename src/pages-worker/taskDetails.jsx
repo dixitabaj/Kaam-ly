@@ -6,6 +6,7 @@ import {
   Star, Briefcase, FileText, CheckCircle, ImageIcon,
   X, ChevronLeft, ChevronRight, AlertCircle, RefreshCw,
 } from 'lucide-react';
+import { updateTaskStatus } from "../api/api";
 
 /* ─────────────────────────────────────────────
    DESIGN TOKENS
@@ -30,6 +31,91 @@ const C = {
   bg:          '#f8fafc',
   white:       '#ffffff',
   card:        '#ffffff',
+};
+
+/* ─────────────────────────────────────────────
+   TOAST SYSTEM
+───────────────────────────────────────────── */
+const useToast = () => {
+  const [toasts, setToasts] = useState([]);
+  const add = (toast) => {
+    const id = Date.now() + Math.random();
+    setToasts(p => [...p, { id, ...toast }]);
+    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 5000);
+  };
+  const remove = (id) => setToasts(p => p.filter(t => t.id !== id));
+  return { toasts, add, remove };
+};
+
+const ToastContainer = ({ toasts, removeToast }) => (
+  <div style={{
+    position: 'fixed', top: 24, right: 24, zIndex: 99999,
+    display: 'flex', flexDirection: 'column', gap: 10,
+    alignItems: 'flex-end', pointerEvents: 'none',
+  }}>
+    {toasts.map(t => (
+      <div key={t.id} style={{
+        pointerEvents: 'auto',
+        position: 'relative',
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '13px 16px',
+        borderRadius: 14,
+        minWidth: 270, maxWidth: 360,
+        background: C.white,
+        border: `1px solid ${C.border}`,
+        color: C.text,
+        fontSize: 13, fontWeight: 600,
+        boxShadow: '0 8px 28px rgba(0,0,0,0.10)',
+        animation: 'toastIn 0.3s cubic-bezier(.22,1,.36,1)',
+        overflow: 'hidden',
+      }}>
+        {/* Coloured dot */}
+        <div style={{ width: 9, height: 9, borderRadius: '50%', background: t.color, flexShrink: 0 }} />
+        {/* Icon */}
+        {t.icon && <div style={{ flexShrink: 0, display: 'flex' }}>{t.icon}</div>}
+        <div style={{ flex: 1, lineHeight: 1.5 }}>{t.message}</div>
+        <button onClick={() => removeToast(t.id)} style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: C.textLight, display: 'flex', padding: 0,
+        }}>
+          <X size={13} />
+        </button>
+        {/* Progress bar */}
+        <div style={{ position: 'absolute', bottom: 0, left: 0, height: 3, width: '100%', background: '#f1f5f9' }}>
+          <div style={{
+            height: '100%', background: t.color, opacity: 0.55,
+            animation: 'toastBar 5s linear forwards',
+          }} />
+        </div>
+      </div>
+    ))}
+    <style>{`
+      @keyframes toastIn  { from { opacity:0; transform:translateX(36px); } to { opacity:1; transform:translateX(0); } }
+      @keyframes toastBar { from { width:100%; } to { width:0%; } }
+    `}</style>
+  </div>
+);
+
+/* ─────────────────────────────────────────────
+   BROWSER PUSH NOTIFICATION HELPER
+───────────────────────────────────────────── */
+const showNativeNotification = (title, body, onClick) => {
+  if (!('Notification' in window)) return;
+  const fire = () => {
+    const n = new Notification(title, {
+      body,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      tag: 'task-action',
+      renotify: true,
+    });
+    if (onClick) n.onclick = () => { window.focus(); onClick(); n.close(); };
+  };
+  if (Notification.permission === 'granted') {
+    fire();
+  } else if (Notification.permission !== 'denied') {
+    Notification.requestPermission().then(perm => { if (perm === 'granted') fire(); });
+  }
 };
 
 /* ─────────────────────────────────────────────
@@ -121,9 +207,6 @@ const TimelineStepper = ({ task }) => {
     s.statuses.map(s => s.replace(/[_\s]/g, '')).includes(currentStatus)
   ).length;
 
-  // progress goes from first dot center to last dot center
-  // each dot is 28px wide, spread evenly across 100%
-  // segment width = 100% / (steps.length - 1)
   const progressPct = doneCount <= 1 ? 0 : ((doneCount - 1) / (steps.length - 1)) * 100;
 
   const fmt = (d) => {
@@ -131,25 +214,19 @@ const TimelineStepper = ({ task }) => {
     try { return format(parseISO(d), 'MMM d'); } catch { return null; }
   };
 
-  const DOT = 28; // dot diameter px
+  const DOT = 28;
 
   return (
     <div style={{ padding: '4px 0' }}>
       <SectionLabel>Timeline</SectionLabel>
       <div style={{ position: 'relative', padding: '14px 0 0' }}>
-
-        {/* Track — spans between first and last dot centers */}
         <div style={{
           position: 'absolute',
-          top: 14 + DOT / 2 - 1.5,           // vertically centered on dots
-          left:  `calc(${100 / (steps.length - 1) / 2}%)`,   // center of first dot
-          right: `calc(${100 / (steps.length - 1) / 2}%)`,   // center of last dot
-          height: 3,
-          background: C.border,
-          borderRadius: 99,
+          top: 14 + DOT / 2 - 1.5,
+          left:  `calc(${100 / (steps.length - 1) / 2}%)`,
+          right: `calc(${100 / (steps.length - 1) / 2}%)`,
+          height: 3, background: C.border, borderRadius: 99,
         }} />
-
-        {/* Progress fill */}
         <div style={{
           position: 'absolute',
           top: 14 + DOT / 2 - 1.5,
@@ -157,26 +234,18 @@ const TimelineStepper = ({ task }) => {
           width: `calc(${progressPct}% * ${(steps.length - 2) / (steps.length - 1)})`,
           height: 3,
           background: `linear-gradient(90deg, ${C.orange}, ${C.orangeDark})`,
-          borderRadius: 99,
-          transition: 'width 0.5s ease',
+          borderRadius: 99, transition: 'width 0.5s ease',
         }} />
-
-        {/* Dots + labels */}
         <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
           {steps.map((step, i) => {
             const done   = step.statuses.map(s => s.replace(/[_\s]/g, '')).includes(currentStatus);
             const active = doneCount === i + 1;
             return (
-              <div key={step.key} style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center',
-                gap: 6, flex: 1,
-              }}>
+              <div key={step.key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flex: 1 }}>
                 <div style={{
                   width: DOT, height: DOT, borderRadius: '50%',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: done
-                    ? `linear-gradient(135deg, ${C.orange}, ${C.orangeDark})`
-                    : C.white,
+                  background: done ? `linear-gradient(135deg, ${C.orange}, ${C.orangeDark})` : C.white,
                   border: done ? 'none' : `2px solid ${active ? C.orange : C.border}`,
                   boxShadow: done || active ? `0 0 0 4px rgba(246,173,86,0.18)` : 'none',
                   transition: 'all 0.3s',
@@ -186,17 +255,10 @@ const TimelineStepper = ({ task }) => {
                     : <div style={{ width: 8, height: 8, borderRadius: '50%', background: active ? C.orange : C.border }} />
                   }
                 </div>
-                <span style={{
-                  fontSize: 11, fontWeight: done || active ? 700 : 500,
-                  color: done ? C.text : active ? C.orange : C.textLight,
-                  whiteSpace: 'nowrap', textAlign: 'center',
-                }}>
+                <span style={{ fontSize: 11, fontWeight: done || active ? 700 : 500, color: done ? C.text : active ? C.orange : C.textLight, whiteSpace: 'nowrap', textAlign: 'center' }}>
                   {step.label}
                 </span>
-                <span style={{
-                  fontSize: 10, color: done ? C.textMid : C.border,
-                  fontWeight: 500, minHeight: 14, textAlign: 'center',
-                }}>
+                <span style={{ fontSize: 10, color: done ? C.textMid : C.border, fontWeight: 500, minHeight: 14, textAlign: 'center' }}>
                   {fmt(step.date) ?? ''}
                 </span>
               </div>
@@ -247,32 +309,18 @@ const OfferStatusBadge = ({ offerStatus }) => {
 ───────────────────────────────────────────── */
 const PersonCard = ({ person, isWorker }) => {
   if (!person) return null;
-  const firstName  = isWorker ? person.firstName  : person.first_name;
-  const lastName   = isWorker ? person.lastName   : person.last_name;
-  const phone      = person.phoneNo;
-  const email      = person.email;
-  const rating     = isWorker ? (person.ratings ?? 0) : 4;
+  const firstName   = isWorker ? person.firstName  : person.first_name;
+  const lastName    = isWorker ? person.lastName   : person.last_name;
+  const phone       = person.phoneNo;
+  const email       = person.email;
+  const rating      = isWorker ? (person.ratings ?? 0) : 4;
   const reviewCount = isWorker ? (person.reviewCount ?? 0) : 0;
-  const fullName   = `${firstName ?? ''} ${lastName ?? ''}`.trim() || 'Unknown';
-  const initials   = `${firstName?.[0] ?? '?'}${lastName?.[0] ?? '?'}`.toUpperCase();
+  const fullName    = `${firstName ?? ''} ${lastName ?? ''}`.trim() || 'Unknown';
+  const initials    = `${firstName?.[0] ?? '?'}${lastName?.[0] ?? '?'}`.toUpperCase();
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 16,
-      background: C.white, border: `1px solid ${C.border}`,
-      borderRadius: 14, padding: '18px 20px',
-      boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
-    }}>
-      {/* Avatar */}
-      <div style={{
-        width: 56, height: 56, borderRadius: '50%',
-        background: `linear-gradient(135deg, ${C.orange}, ${C.orangeDark})`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: 'white', fontWeight: 700, fontSize: 20, flexShrink: 0,
-        boxShadow: `0 4px 12px rgba(246,173,86,0.35)`,
-      }}>{initials}</div>
-
-      {/* Info */}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 16, background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+      <div style={{ width: 56, height: 56, borderRadius: '50%', background: `linear-gradient(135deg, ${C.orange}, ${C.orangeDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 20, flexShrink: 0, boxShadow: `0 4px 12px rgba(246,173,86,0.35)` }}>{initials}</div>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>{fullName}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
@@ -282,16 +330,8 @@ const PersonCard = ({ person, isWorker }) => {
           <span style={{ fontSize: 12.5, color: C.textMid, marginLeft: 4 }}>{rating} ({reviewCount} reviews)</span>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          {phone && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textMid }}>
-              <Phone size={13} color={C.orange} /> {phone}
-            </div>
-          )}
-          {email && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textMid }}>
-              <Mail size={13} color={C.orange} /> {email}
-            </div>
-          )}
+          {phone && <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textMid }}><Phone size={13} color={C.orange} /> {phone}</div>}
+          {email && <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textMid }}><Mail size={13} color={C.orange} /> {email}</div>}
         </div>
       </div>
     </div>
@@ -323,7 +363,6 @@ const PriceBreakdown = ({ task }) => {
             <span style={{ fontWeight: 600, color: C.text }}>{row.value}</span>
           </div>
         ))}
-        {/* Total row */}
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '13px 16px', background: C.orangeLight, fontSize: 14 }}>
           <span style={{ fontWeight: 700, color: C.text }}>Total Cost</span>
           <span style={{ fontWeight: 800, color: C.green, fontSize: 15 }}>Rs. {totalCost.toLocaleString()}</span>
@@ -343,9 +382,9 @@ const PaymentInfo = ({ task }) => {
       <SectionLabel>Payment</SectionLabel>
       <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginTop: 8 }}>
         {[
-          { label: 'Method', value: task.payment_method ?? 'N/A', accent: false },
-          { label: 'Payment Status', value: task.payment_status, accent: task.payment_status === 'paid' ? C.green : '#f59e0b' },
-          { label: 'Escrow Status', value: task.escrow_status ?? 'N/A', accent: task.escrow_status === 'released' ? C.green : '#f59e0b' },
+          { label: 'Method',         value: task.payment_method ?? 'N/A',  accent: false },
+          { label: 'Payment Status', value: task.payment_status,           accent: task.payment_status === 'paid' ? C.green : '#f59e0b' },
+          { label: 'Escrow Status',  value: task.escrow_status ?? 'N/A',   accent: task.escrow_status === 'released' ? C.green : '#f59e0b' },
         ].map((row, i, arr) => (
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 16px', borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : 'none', fontSize: 13.5, color: C.textMid }}>
             <span>{row.label}</span>
@@ -358,15 +397,10 @@ const PaymentInfo = ({ task }) => {
 };
 
 /* ─────────────────────────────────────────────
-   DETAIL CARD (grid item)
+   DETAIL CARD
 ───────────────────────────────────────────── */
 const DetailCard = ({ icon: Icon, label, value }) => (
-  <div style={{
-    display: 'flex', alignItems: 'center', gap: 12,
-    background: C.white, border: `1px solid ${C.border}`,
-    borderRadius: 12, padding: '13px 16px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-  }}>
+  <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: '13px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
     <div style={{ width: 36, height: 36, borderRadius: 10, background: C.orangeLight, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
       <Icon size={17} color={C.orange} />
     </div>
@@ -417,13 +451,80 @@ export function TaskDetails({ taskId }) {
   const [taskData, setTaskData] = useState(null);
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState(null);
+  const [actionLoading, setActionLoading] = useState(null); // 'accept' | 'reject' | null
+
+  const { toasts, add: addToast, remove: removeToast } = useToast();
 
   const storedUser  = localStorage.getItem('user') || sessionStorage.getItem('user');
   const currentUser = storedUser ? JSON.parse(storedUser) : null;
-  console.log(currentUser);
   const role        = currentUser?.role ?? currentUser?.type ?? 'customer';
-  console.log(role);
 
+  // ── Accept ────────────────────────────────────────────────────────────────
+  const handleAcceptTask = async () => {
+    const id = taskData?.id ?? taskData?._id;
+    if (!id) return;
+    setActionLoading('accept');
+    try {
+      await updateTaskStatus(id, 'confirmed');
+      setTaskData(prev => ({ ...prev, status: 'confirmed' }));
+
+      // Toast
+      addToast({
+        color:   C.green,
+        icon:    <CheckCircle size={15} color={C.green} />,
+        message: `Task "${taskData?.taskName || 'Task'}" accepted successfully!`,
+      });
+
+      // Browser push notification
+      showNativeNotification(
+        '✅ Task Accepted',
+        `You've accepted "${taskData?.taskName || 'the task'}". The customer will be notified.`,
+      );
+    } catch (err) {
+      addToast({
+        color:   C.red,
+        icon:    <AlertCircle size={15} color={C.red} />,
+        message: 'Failed to accept task: ' + (err?.message || 'Please try again.'),
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // ── Reject ────────────────────────────────────────────────────────────────
+  const handleRejectTask = async () => {
+    const id = taskData?.id ?? taskData?._id;
+    if (!id) return;
+    if (!window.confirm('Are you sure you want to reject this task?')) return;
+    setActionLoading('reject');
+    try {
+      await updateTaskStatus(id, 'declined');
+      setTaskData(prev => ({ ...prev, status: 'declined' }));
+
+      // Toast
+      addToast({
+        color:   C.red,
+        icon:    <X size={15} color={C.red} />,
+        message: `Task "${taskData?.taskName || 'Task'}" has been declined.`,
+      });
+
+      // Browser push notification
+      showNativeNotification(
+        '❌ Task Declined',
+        `You've declined "${taskData?.taskName || 'the task'}".`,
+      );
+    } catch (err) {
+      addToast({
+        color:   C.red,
+        icon:    <AlertCircle size={15} color={C.red} />,
+        message: 'Failed to decline task: ' + (err?.message || 'Please try again.'),
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // ── Fetch ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     const fetchData = async () => {
       if (!taskId) return;
@@ -454,6 +555,7 @@ export function TaskDetails({ taskId }) {
     try { return format(parseISO(d), 'EEEE - MMMM d, yyyy'); } catch { return d; }
   };
 
+  // ── Render guards ─────────────────────────────────────────────────────────
   if (!taskId) return (
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textLight, fontSize: 15 }}>
       Loading task info...
@@ -479,11 +581,15 @@ export function TaskDetails({ taskId }) {
     <div style={{ height: '100%', overflowY: 'auto', background: C.bg, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       <style>{`
         @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        @keyframes spin     { to { transform: rotate(360deg); } }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #f6ad56; }
       `}</style>
+
+      {/* Toast layer */}
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
 
       <div style={{ maxWidth: 960, margin: '0 auto', padding: '20px 28px 32px' }}>
 
@@ -518,21 +624,18 @@ export function TaskDetails({ taskId }) {
         {/* ── DETAILS ── */}
         <Card>
           <SectionLabel>Details</SectionLabel>
-
           {taskData?.taskDescrip && (
             <div style={{ background: C.bg, borderRadius: 10, padding: '11px 14px', marginBottom: 16, fontSize: 13.5, color: C.textMid, lineHeight: 1.6, border: `1px solid ${C.border}`, display: 'flex', gap: 8 }}>
               <FileText size={15} color={C.textLight} style={{ flexShrink: 0, marginTop: 2 }} />
               <span>{taskData.taskDescrip}</span>
             </div>
           )}
-
           <TaskImages taskImg={taskData?.taskImg} />
-
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 4 }}>
-            <DetailCard icon={Calendar}    label="Date"      value={formatDate(taskData?.serviceDate)} />
-            <DetailCard icon={Clock}       label="Time"      value={taskData?.serviceTime ?? 'N/A'} />
-            <DetailCard icon={MapPin}      label="Location"  value={taskData?.address ?? 'N/A'} />
-            <DetailCard icon={DollarSign}  label="Base Rate" value={`Rs. ${taskData?.basePrice ?? 'N/A'}/hr`} />
+            <DetailCard icon={Calendar}   label="Date"      value={formatDate(taskData?.serviceDate)} />
+            <DetailCard icon={Clock}      label="Time"      value={taskData?.serviceTime ?? 'N/A'} />
+            <DetailCard icon={MapPin}     label="Location"  value={taskData?.address ?? 'N/A'} />
+            <DetailCard icon={DollarSign} label="Base Rate" value={`Rs. ${taskData?.basePrice ?? 'N/A'}/hr`} />
           </div>
         </Card>
 
@@ -546,109 +649,123 @@ export function TaskDetails({ taskId }) {
         {taskData?.note && (
           <Card>
             <SectionLabel>Notes</SectionLabel>
-            <p style={{ fontSize: 13.5, color: C.textMid, lineHeight: 1.7, margin: 0 }}>
-              {taskData.note}
-            </p>
+            <p style={{ fontSize: 13.5, color: C.textMid, lineHeight: 1.7, margin: 0 }}>{taskData.note}</p>
           </Card>
         )}
 
         {/* ── FOOTER ACTIONS ── */}
-       {/* ── FOOTER ACTIONS ── */}
-{(() => {
-  const status = (taskData?.status ?? '').toLowerCase();
-  const isPaid = (taskData?.payment_status ?? '').toLowerCase() === 'paid';
+        {(() => {
+          const status = (taskData?.status ?? '').toLowerCase();
+          const offerAccepted = (taskData?.offerStatus ?? '').toLowerCase() === 'accepted';
 
-  // Worker actions
-  if (role === 'worker') {
-    return (
-      <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-       {status === 'pending' && (
-  <>
-    {(taskData?.offerStatus ?? '').toLowerCase() === 'accepted' ? (
-      <>
-        <button style={{
-          flex: 1, padding: '13px 0', borderRadius: 12,
-          background: `linear-gradient(135deg, ${C.orange}, ${C.orangeDark})`,
-          color: 'white', border: 'none', fontWeight: 700, fontSize: 14,
-          cursor: 'pointer', boxShadow: `0 4px 14px rgba(246,173,86,0.4)`,
-          transition: 'transform 0.12s, box-shadow 0.12s',
-        }}
-          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; }}
-          onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}
-        >
-          Accept Task
-        </button>
-        <button
-  style={{
-    flex: 1, padding: '13px 0', borderRadius: 12,
-    background: C.redLight, color: C.red,
-    border: `1.5px solid ${C.red}33`, fontWeight: 700, fontSize: 14,
-    cursor: 'pointer',
-  }}
->
-  Reject Task
-</button>
-      </>
-    ) : (
-      <>
-        <button
-          onClick={() => alert('Please discuss the price with the customer first before accepting the task.')}
-          style={{
-            flex: 1, padding: '13px 0', borderRadius: 12,
-            background: '#f1f5f9', color: '#b0bec5',
-            border: `1.5px solid #e2e8f0`, fontWeight: 700, fontSize: 14,
-            cursor: 'not-allowed', boxShadow: 'none',
-          }}
-        >
-          Accept Task
-        </button>
-        <button
-  style={{
-    flex: 1, padding: '13px 0', borderRadius: 12,
-    background: C.redLight, color: C.red,
-    border: `1.5px solid ${C.red}33`, fontWeight: 700, fontSize: 14,
-    cursor: 'pointer',
-  }}
->
-  Reject Task
-</button>
-      </>
-    )}
-  </>
-)}
-      </div>
-    );
-  }
+          // ── Worker ──────────────────────────────────────────────────────
+          if (role === 'worker') {
+            return (
+              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                {status === 'pending' && (
+                  <>
+                    {/* Accept */}
+                    {offerAccepted ? (
+                      <button
+                        onClick={handleAcceptTask}
+                        disabled={actionLoading === 'accept'}
+                        style={{
+                          flex: 1, padding: '13px 0', borderRadius: 12,
+                          background: actionLoading === 'accept'
+                            ? C.orangeLight
+                            : `linear-gradient(135deg, ${C.orange}, ${C.orangeDark})`,
+                          color: actionLoading === 'accept' ? C.orange : 'white',
+                          border: 'none', fontWeight: 700, fontSize: 14,
+                          cursor: actionLoading === 'accept' ? 'not-allowed' : 'pointer',
+                          boxShadow: actionLoading === 'accept' ? 'none' : `0 4px 14px rgba(246,173,86,0.4)`,
+                          transition: 'transform 0.12s, box-shadow 0.12s',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        }}
+                        onMouseEnter={e => { if (!actionLoading) e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}
+                      >
+                        {actionLoading === 'accept' ? (
+                          <>
+                            <div style={{ width: 14, height: 14, border: `2px solid ${C.orange}`, borderTop: `2px solid transparent`, borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                            Accepting…
+                          </>
+                        ) : (
+                          <><CheckCircle size={15} /> Accept Task</>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        disabled
+                        style={{
+                          flex: 1, padding: '13px 0', borderRadius: 12,
+                          background: '#f1f5f9', color: '#b0bec5',
+                          border: `1.5px solid #e2e8f0`, fontWeight: 700, fontSize: 14,
+                          cursor: 'not-allowed',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        }}
+                        title="Discuss and agree on a price first"
+                      >
+                        <CheckCircle size={15} /> Accept Task
+                      </button>
+                    )}
 
-  // Customer actions
-  return (
-    <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-      <button style={{
-        flex: 1, padding: '13px 0', borderRadius: 12,
-        background: C.white, color: C.textMid,
-        border: `1.5px solid ${C.border}`, fontWeight: 600, fontSize: 14,
-        cursor: 'pointer', transition: 'border-color 0.15s, color 0.15s',
-      }}
-        onMouseEnter={e => { e.currentTarget.style.borderColor = C.orange; e.currentTarget.style.color = C.orange; }}
-        onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textMid; }}
-      >
-        Contact Support
-      </button>
-      {/* Cancel only if not yet paid */}
-      {!['completed', 'cancelled'].includes(status) && (
-        <button style={{
-          flex: 1, padding: '13px 0', borderRadius: 12,
-          background: C.redLight, color: C.red,
-          border: `1.5px solid ${C.red}33`, fontWeight: 700, fontSize: 14,
-          cursor: 'pointer',
-        }}>
-          Cancel Task
-        </button>
-      )}
-    </div>
-  );
-})()}
+                    {/* Reject */}
+                    <button
+                      onClick={handleRejectTask}
+                      disabled={!!actionLoading}
+                      style={{
+                        flex: 1, padding: '13px 0', borderRadius: 12,
+                        background: actionLoading === 'reject' ? '#fde8e8' : C.redLight,
+                        color: C.red,
+                        border: `1.5px solid ${C.red}33`, fontWeight: 700, fontSize: 14,
+                        cursor: actionLoading ? 'not-allowed' : 'pointer',
+                        opacity: actionLoading && actionLoading !== 'reject' ? 0.5 : 1,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        transition: 'opacity 0.15s',
+                      }}
+                    >
+                      {actionLoading === 'reject' ? (
+                        <>
+                          <div style={{ width: 14, height: 14, border: `2px solid ${C.red}`, borderTop: `2px solid transparent`, borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                          Declining…
+                        </>
+                      ) : (
+                        <><X size={15} /> Reject Task</>
+                      )}
+                    </button>
+                  </>
+                )}
+              </div>
+            );
+          }
 
+          // ── Customer ─────────────────────────────────────────────────────
+          return (
+            <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+              <button style={{
+                flex: 1, padding: '13px 0', borderRadius: 12,
+                background: C.white, color: C.textMid,
+                border: `1.5px solid ${C.border}`, fontWeight: 600, fontSize: 14,
+                cursor: 'pointer', transition: 'border-color 0.15s, color 0.15s',
+              }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = C.orange; e.currentTarget.style.color = C.orange; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textMid; }}
+              >
+                Contact Support
+              </button>
+              {!['completed', 'cancelled'].includes(status) && (
+                <button style={{
+                  flex: 1, padding: '13px 0', borderRadius: 12,
+                  background: C.redLight, color: C.red,
+                  border: `1.5px solid ${C.red}33`, fontWeight: 700, fontSize: 14,
+                  cursor: 'pointer',
+                }}>
+                  Cancel Task
+                </button>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

@@ -19,10 +19,9 @@ from ..config.database import (
 )
 
 # ── Firebase ──────────────────────────────────────────────────────────────────
-SERVICE_ACCOUNT_PATH = os.getenv(
-    "FIREBASE_SERVICE_ACCOUNT",
-    os.path.join(os.path.dirname(__file__), "kaam-ly-firebase.json"),
-)
+import os
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SERVICE_ACCOUNT_PATH = os.path.join(BASE_DIR, "kaam-ly-firebase.json")
 if not firebase_admin._apps:
     try:
         cred = credentials.Certificate(SERVICE_ACCOUNT_PATH)
