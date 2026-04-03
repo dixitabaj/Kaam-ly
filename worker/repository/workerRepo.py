@@ -73,29 +73,12 @@ def showWorkers(skip: int = 0, limit: int = 50, search: str = None):
 # 3️⃣ Show worker by ID
 # -----------------------------
 def showWorkerByID(worker_id: str):
-    w = collection_worker.find_one({"_id": worker_id}, {"password": 0})
-    if not w:
+    worker = collection_worker.find_one({"_id": worker_id}, {"password": 0})
+    if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
 
-    service_area = w.get("serviceArea", {})
-    return WorkerResponseSchema(
-        id=str(w["_id"]),
-        firstName=w.get("firstName", ""),
-        lastName=w.get("lastName", ""),
-        ratings=w.get("ratings", 0.0),
-        taskType=w.get("taskType", ""),
-        skills=w.get("skills", []),
-        noOfCompletedTask=w.get("noOfCompletedTask", 0),
-        responseTime=w.get("responseTime", 0),
-        profilePhoto=w.get("profilePhoto", ""),
-        description=w.get("description", ""),
-        isAvailable=w.get("isAvailable", True),
-        minHours=w.get("minHours", 0),
-        serviceArea={
-            "primaryCity": service_area.get("primaryCity", ""),
-            "cities":      service_area.get("cities", []),
-        },
-    )
+    service_area = worker.get("serviceArea", {})
+    return worker
 
 
 # -----------------------------

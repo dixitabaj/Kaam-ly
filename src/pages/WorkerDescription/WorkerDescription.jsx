@@ -414,13 +414,7 @@ export default function WorkerDescription() {
                       </p>
                     </div>
                   </div>
-                  <div className="worker-detail-item">
-                    <Clock size={18} className="worker-detail-icon" />
-                    <div>
-                      <p className="worker-detail-label">Response Time</p>
-                      <p className="worker-detail-value">{worker.responseTime || 'Within 1 hour'}</p>
-                    </div>
-                  </div>
+                  
                   <div className="worker-detail-item">
                     <Award size={18} className="worker-detail-icon" />
                     <div>
@@ -444,7 +438,7 @@ export default function WorkerDescription() {
                   </li>
                   <li className="worker-trust-item">
                     <CheckCircle size={16} className="worker-check-icon" />
-                    Skills verified
+                    Esrow payment protection
                   </li>
                 </ul>
               </div>

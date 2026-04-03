@@ -141,3 +141,20 @@ async def cancel_refund_request(refund_id: str):
 
     database.refund_collection.delete_one({"_id": refund_id})
     return {"message": "Refund request cancelled"}
+
+@router.put("/update-status/{refund_id}")
+async def update_refund_status(refund_id: str, status: str, admin_note: Optional[str] = None):
+    refund = database.refund_collection.find_one({"_id": refund_id})
+    if not refund:
+        raise HTTPException(404, "Refund not found")
+
+    if status not in ("pending", "approved", "rejected"):
+        raise HTTPException(400, "Invalid status value")
+
+    update_data = {
+        "status": status,
+        "admin_note": admin_note,
+        "resolved_at": datetime.utcnow(),
+    }
+    database.refund_collection.update_one({"_id": refund_id}, {"$set": update_data})
+    return {"message": f"Refund status updated to {status}"}

@@ -77,16 +77,31 @@ def calculate_average_rating(workerId: str):
     reviews = list(collection_reviews.find({"workerId": workerId}))
     if not reviews:
         return 0
-    avg = mean([r.get("stars", 0) for r in reviews])
+    
+    scores = []
+    for r in reviews:
+        # Handle both field name variants in DB
+        score = r.get("stars") or r.get("rating") or 0
+        scores.append(score)
+    
+    avg = mean(scores)
     return round(avg, 1)
 
 
 def update_worker_rating(workerId: str):
     avg_rating = calculate_average_rating(workerId)
-    collection_worker.update_one(
-        {"_id": workerId},
+    
+    # Try ObjectId first, fall back to string
+    updated = collection_worker.update_one(
+        {"_id": (workerId)},
         {"$set": {"ratings": avg_rating}}
     )
+    if updated.matched_count == 0:
+        # Fallback if _id is stored as string
+        collection_worker.update_one(
+            {"_id": workerId},
+            {"$set": {"ratings": avg_rating}}
+        )
 
 
 def find_reviews_by_customer(customer_id: str):

@@ -34,14 +34,13 @@ const Sparkline = ({ color = "#22c55e", up = true }) => (
   </svg>
 );
 
-const StatCard = ({ icon, label, value, sub, trendUp, sparkColor }) => (
+const StatCard = ({ label, value, sub, trendUp, sparkColor }) => (
   <div className="task-card" style={{ flex: 1, minWidth: 150, background: "#fff", border: "1px solid #ebebeb", borderRadius: 14, padding: "1rem 1.25rem", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
       <div>
-        <div style={{ fontSize: "0.75rem", color: "#999", marginBottom: 4, display: "flex", alignItems: "center", gap: 5 }}>
-          <span>{icon}</span>{label}
-        </div>
-        <div style={{ fontSize: "1.55rem", fontWeight: 700, color: "#111", lineHeight: 1.1 }}>{value}</div>
+         <div style={{ fontSize: "11px", color: "#888",   marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
+    <div style={{ fontSize: "22px", fontWeight: 700, fontFamily: "'inter'", color: "#1a1a1a" }}>{value}</div>
+  
         {sub && <div style={{ fontSize: "0.72rem", color: trendUp ? "#16a34a" : "#dc2626", marginTop: 4 }}>{trendUp ? "↑" : "↓"} {sub}</div>}
       </div>
       <Sparkline color={sparkColor} up={trendUp} />
@@ -131,24 +130,23 @@ export default function Tasks() {
     <>
       <FontLink />
       <BookingNavbar />
-      <div style={{ display: "flex", minHeight: "100vh", background: "#f7f7f5", fontFamily: "'DM Sans', sans-serif" }}>
+      <div style={{ display: "flex", minHeight: "100vh", background: "#F7F5EF", fontFamily: "'DM Sans', sans-serif", }}>
         <Sidebar workerId={workerId} />
-
-        <main style={{ flex: 1, padding: "2rem", maxWidth: 1200, margin: "0 auto" }}>
+        <main style={{ flex: 1, padding: "2rem", maxWidth: 1100, margin: "0 auto", backgroundColor: "#F7F5EF", minHeight: "100vh" }}>
 
           {/* HEADER */}
           <div style={{ marginBottom: "1.75rem" }}>
-            <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: "1.75rem", margin: 0,   marginTop: "10px"  }}>Task Overview</h1>
-            <p style={{ margin: "4px 0 0", fontSize: "0.83rem", color: "#aaa" }}>Your task performance and upcoming schedule</p>
+            <h1 style={{ fontFamily: "'inter', serif", fontSize: "1.75rem", margin: 0,   marginTop: "10px"  }}>Task Overview</h1>
+            <p style={{ margin: "0px 0 0", fontSize: "0.83rem", color: "#aaa" }}>Your task performance and upcoming schedule</p>
           </div>
 
           {/* STAT CARDS */}
-          <div style={{ display: "flex", gap: "1rem", marginBottom: "1.5rem", flexWrap: "wrap",  marginTop: "40px"  }}>
-            <StatCard icon="📋" label="Total Tasks"    value={total}      sub={`${compRate}% completion rate`}  trendUp={true}         sparkColor="#6366f1" />
-            <StatCard icon="✅" label="Completed"      value={completed}  sub="tasks done"                      trendUp={true}         sparkColor="#22c55e" />
-            <StatCard icon="⏳" label="Pending"        value={pending}    sub="awaiting start"                  trendUp={false}        sparkColor="#f59e0b" />
-            <StatCard icon="🔧" label="In Progress"    value={inProgress} sub="currently active"                trendUp={inProgress>0} sparkColor="#0ea5e9" />
-            <StatCard icon="💰" label="Avg Task Value" value={`Rs. ${avgCost.toLocaleString()}`} sub="per task" trendUp={true}        sparkColor="#8b5cf6" />
+          <div style={{ display: "flex", gap: "1rem", marginBottom: "1.5rem", flexWrap: "wrap",  marginTop: "20px"  }}>
+            <StatCard label="Total Tasks"    value={total}      sub={`${compRate}% completion rate`}  trendUp={true}         sparkColor="#6366f1" />
+            <StatCard label="Completed"      value={completed}  sub="tasks done"                      trendUp={true}         sparkColor="#22c55e" />
+            <StatCard label="Pending"        value={pending}    sub="awaiting start"                  trendUp={false}        sparkColor="#f59e0b" />
+            <StatCard label="In Progress"    value={inProgress} sub="currently active"                trendUp={inProgress>0} sparkColor="#0ea5e9" />
+            <StatCard label="Avg Task Value" value={`Rs. ${avgCost.toLocaleString()}`} sub="per task" trendUp={true}        sparkColor="#8b5cf6" />
           </div>
 
           {/* MAIN ROW: Left = Upcoming Tasks (wide), Right = stacked panels */}

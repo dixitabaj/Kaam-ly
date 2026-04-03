@@ -4,13 +4,16 @@ import {
   Eye, User, Briefcase, RefreshCw, RotateCcw, AlertCircle,
   MoreVertical, Link2, Wallet, CreditCard, Receipt, Calendar,
   ThumbsUp, ThumbsDown, ShieldAlert, Hash, Info, FileText,
-  Shield, ChevronRight, Package, BarChart2, DollarSign, Activity
+  Shield, ChevronRight, Package, BarChart2, DollarSign, Activity,
+  Zap, Send
 } from "lucide-react";
 import BookingNavbar from "../../components/Navbar/Navbar";
+
 const BASE = "http://localhost:8000/api";
 
+// ── Sandbox mode: set to false for production / real eSewa API ──
+const USE_SANDBOX_MODE = true;  // ← Set to false when you have production credentials
 
-// ── Design tokens ──────────────────────────────────────────────────────────
 const C = {
   brand:        "#E8843A",  brandLight:   "#E8843A18",
   bg:           "#F7F5EF",  surface:      "#FFFFFF",
@@ -25,7 +28,6 @@ const C = {
   dispute:      "#C2440C",  disputeLight: "#C2440C15", disputeMid: "#C2440C30",
 };
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
 const fmt = (d) => {
   try { return d ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"; }
   catch { return "—"; }
@@ -57,23 +59,22 @@ const apiCall = async (url, options = {}) => {
   });
 };
 
-// ── FIX: patchStatus — explicit field handling for approve vs decline ─────────
-// - On "approved": always sends amount_customer (required) and amount_worker
-// - On "declined": never sends amount fields (backend ignores them anyway)
-// - Removed the fragile `!= null` check that could silently drop fields
+/**
+ * patchStatus — sets amounts and moves refund to "refund_in_progress".
+ * Does NOT trigger eSewa here. eSewa happens at Pay All time.
+ */
 const patchStatus = async (refundId, status, adminNote, amountCustomer, amountWorker) => {
   const token = getToken();
   const form  = new URLSearchParams();
 
   form.append("status",     status);
   form.append("admin_note", adminNote ?? "");
+  form.append("sandbox",    String(USE_SANDBOX_MODE));  // ← Uses global sandbox setting
 
   if (status === "approved") {
-    // amount_customer is required for approval — backend will 400 without it
     form.append("amount_customer", String(Number(amountCustomer) || 0));
     form.append("amount_worker",   String(Number(amountWorker)   || 0));
   }
-  // For "declined" we intentionally omit amounts — backend doesn't use them
 
   return fetch(`${BASE}/update-status/${refundId}`, {
     method: "PATCH",
@@ -99,11 +100,13 @@ const Avatar = ({ type, size = 38 }) => {
 
 const StatusBadge = ({ status }) => {
   const map = {
-    pending:  { color: C.brand,  icon: Clock,        label: "Pending"  },
-    approved: { color: C.green,  icon: CheckCircle,  label: "Approved" },
-    rejected: { color: C.red,    icon: XCircle,      label: "Rejected" },
-    refunded: { color: C.green,  icon: CheckCircle,  label: "Refunded" },
-    declined: { color: C.red,    icon: XCircle,      label: "Declined" },
+    pending:            { color: C.brand,  icon: Clock,        label: "Pending"      },
+    approved:           { color: C.green,  icon: CheckCircle,  label: "Approved"     },
+    rejected:           { color: C.red,    icon: XCircle,      label: "Rejected"     },
+    refunded:           { color: C.green,  icon: CheckCircle,  label: "Refunded"     },
+    declined:           { color: C.red,    icon: XCircle,      label: "Declined"     },
+    refund_in_progress: { color: C.amber,  icon: Clock,        label: "In Progress"  },
+    processing:         { color: C.amber,  icon: RefreshCw,    label: "Processing"   },
   };
   const c    = map[status] ?? map.pending;
   const Icon = c.icon;
@@ -142,44 +145,9 @@ const DisputeBadge = () => (
   </span>
 );
 
-// ── FIX: EsewaRefundStatus — shows real eSewa result from backend ────────────
-const EsewaRefundStatus = ({ esewaRefund }) => {
-  if (!esewaRefund) return null;
-  const { status, transaction_uuid, esewa_id, error, note } = esewaRefund;
-
-  if (status === "sent") {
-    return (
-      <div style={{ background: C.greenLight, borderRadius: 12, padding: "12px 16px", border: `1px solid ${C.green}30`, display: "flex", flexDirection: "column", gap: 4 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <CheckCircle size={15} color={C.green} />
-          <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>eSewa refund sent successfully</span>
-        </div>
-        {transaction_uuid && <span style={{ fontSize: 11, color: C.green, paddingLeft: 23 }}>Txn: {transaction_uuid}</span>}
-        {esewa_id          && <span style={{ fontSize: 11, color: C.green, paddingLeft: 23 }}>To: {esewa_id}</span>}
-      </div>
-    );
-  }
-  if (status === "no_esewa_id") {
-    return (
-      <div style={{ background: C.amberLight, borderRadius: 12, padding: "12px 16px", border: `1px solid ${C.amber}30`, display: "flex", alignItems: "center", gap: 8 }}>
-        <AlertTriangle size={15} color={C.amber} />
-        <span style={{ fontSize: 13, color: C.amber }}>No eSewa ID on file — refund must be processed manually.</span>
-      </div>
-    );
-  }
-  if (status === "failed" || status === "error") {
-    return (
-      <div style={{ background: C.redLight, borderRadius: 12, padding: "12px 16px", border: `1px solid ${C.red}30`, display: "flex", flexDirection: "column", gap: 4 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <XCircle size={15} color={C.red} />
-          <span style={{ fontSize: 13, color: C.red, fontWeight: 600 }}>eSewa disbursement failed — process manually</span>
-        </div>
-        {error && <span style={{ fontSize: 11, color: C.red, paddingLeft: 23 }}>{error}</span>}
-      </div>
-    );
-  }
-  return null;
-};
+const Spinner = ({ size = 28, color = C.teal }) => (
+  <div style={{ width: size, height: size, border: `3px solid ${C.border}`, borderTop: `3px solid ${color}`, borderRadius: "50%", animation: "spin 0.75s linear infinite", flexShrink: 0 }} />
+);
 
 const Toast = ({ message, type = "success", onClose }) => {
   useEffect(() => { const t = setTimeout(onClose, 3500); return () => clearTimeout(t); }, [onClose]);
@@ -221,46 +189,163 @@ const StatCard = ({ label, value, color, icon: Icon, sub }) => (
   </div>
 );
 
-// ── Context Menu ─────────────────────────────────────────────────────────────
-const ContextMenu = ({ refund, onAction, onClose }) => {
-  const ref = useRef(null);
-  useEffect(() => {
-    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [onClose]);
+// ── Sandbox Indicator Banner ─────────────────────────────────────────────────
 
-  const isDispute = isDisputeCharge(refund);
-  const isPending = refund.status === "pending";
-  const actions = [
-    { label: "View Details",     icon: Eye,         action: "view",    color: C.blue    },
-    ...(isPending && !isDispute ? [
-      { label: "Approve",        icon: CheckCircle, action: "approve", color: C.green   },
-      { label: "Reject",         icon: XCircle,     action: "reject",  color: C.red     },
-    ] : []),
-    ...(isDispute && isPending ? [
-      { label: "Waive Charge",   icon: Shield,      action: "waive",   color: C.green   },
-      { label: "Enforce Charge", icon: ShieldAlert, action: "enforce", color: C.dispute },
-    ] : []),
-    { label: "Delete",           icon: Trash2,      action: "delete",  color: C.red     },
-  ];
+
+// ── Pay All Modal — targets in-progress refunds ────────────────────────────
+const PayAllModal = ({ inProgressCount, inProgressAmount, onConfirm, onCancel, processing }) => (
+  <div style={{ position: "fixed", inset: 0, zIndex: 10001, background: "rgba(28,20,16,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+    <div style={{ background: C.surface, borderRadius: 24, width: 480, boxShadow: "0 30px 60px rgba(0,0,0,0.28)", animation: "scaleIn 0.2s ease", overflow: "hidden" }}>
+      <div style={{ background: `linear-gradient(135deg, ${C.green} 0%, ${C.teal} 100%)`, padding: "24px 28px", textAlign: "center" }}>
+        <div style={{ width: 64, height: 64, borderRadius: "50%", background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+          <Send size={32} color="white" />
+        </div>
+        <h2 style={{ color: "white", margin: "0 0 8px", fontSize: 22, fontWeight: 700 }}>Disburse All In-Progress</h2>
+        <p style={{ color: "rgba(255,255,255,0.8)", margin: 0, fontSize: 14 }}>
+          {inProgressCount} refund{inProgressCount !== 1 ? "s" : ""} totaling {fmtNPR(inProgressAmount)}
+        </p>
+        {USE_SANDBOX_MODE && (
+          <div style={{ 
+            marginTop: 12, 
+            background: "rgba(255,255,255,0.15)", 
+            borderRadius: 20, 
+            padding: "4px 12px",
+            display: "inline-block",
+            fontSize: 11,
+            fontWeight: 600,
+            color: "white"
+          }}>
+            🔒 Sandbox Mode — Mock Only
+          </div>
+        )}
+      </div>
+      <div style={{ padding: "24px 28px" }}>
+        <div style={{ background: C.amberLight, borderRadius: 12, padding: "14px 16px", marginBottom: 24, border: `1px solid ${C.amber}30`, display: "flex", gap: 10 }}>
+          <AlertCircle size={16} color={C.amber} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div style={{ fontSize: 13, color: C.amber, lineHeight: 1.6 }}>
+            <strong>Only refunds that have been approved with amounts set</strong> will be processed.
+            {USE_SANDBOX_MODE && " In sandbox mode, eSewa calls are mocked — no actual money moves."}
+            eSewa disbursements will be triggered for all eligible in-progress refunds.
+            Worker deductions will use their registered phone number as eSewa ID.
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+          <button onClick={onCancel} disabled={processing}
+            style={{ padding: "11px 24px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.surface, cursor: processing ? "not-allowed" : "pointer", fontSize: 14, color: C.textSecond, fontFamily: "inherit", opacity: processing ? 0.5 : 1 }}>
+            Cancel
+          </button>
+          <button onClick={onConfirm} disabled={processing}
+            style={{ padding: "11px 28px", borderRadius: 12, border: "none", background: `linear-gradient(135deg, ${C.green} 0%, ${C.teal} 100%)`, cursor: processing ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, color: "white", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 8, opacity: processing ? 0.7 : 1 }}>
+            {processing ? <><Spinner size={16} color="white" /> Processing…</> : <><Send size={16} /> Disburse All — {fmtNPR(inProgressAmount)}</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+// ── Pay All Results Modal ──────────────────────────────────────────────────
+const PayAllResultModal = ({ result, onClose }) => {
+  if (!result) return null;
+  const { success = [], failed = [], total_success_amount, sandbox_mode } = result;
+  const total = success.length + failed.length;
+  const isMock = sandbox_mode || USE_SANDBOX_MODE;
 
   return (
-    <div ref={ref} style={{ position: "absolute", right: 0, top: "100%", zIndex: 100000, background: "white", borderRadius: 14, boxShadow: "0 10px 40px rgba(0,0,0,0.15)", border: `1px solid ${C.border}`, minWidth: 190, marginTop: 4, animation: "scaleIn 0.1s ease" }}>
-      {actions.map(({ label, icon: Icon, action, color }) => (
-        <button key={action} onClick={() => { onAction(action); onClose(); }}
-          style={{ width: "100%", padding: "11px 16px", border: "none", background: "white", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, fontSize: 13, fontWeight: 500, color, textAlign: "left", borderBottom: `1px solid ${C.divider}` }}
-          onMouseEnter={e => e.currentTarget.style.background = C.bg}
-          onMouseLeave={e => e.currentTarget.style.background = "white"}
-        >
-          <Icon size={15} />{label}
-        </button>
-      ))}
+    <div style={{ position: "fixed", inset: 0, zIndex: 10001, background: "rgba(28,20,16,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: C.surface, borderRadius: 24, width: 620, maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 30px 60px rgba(0,0,0,0.28)", animation: "scaleIn 0.2s ease" }}>
+        <div style={{ background: `linear-gradient(135deg, ${isMock ? C.blue : C.green} 0%, ${isMock ? C.purple : C.teal} 100%)`, padding: "20px 28px", borderRadius: "24px 24px 0 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 46, height: 46, borderRadius: 13, background: "rgba(255,255,255,0.18)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Send size={22} color="white" />
+            </div>
+            <div>
+              <h2 style={{ color: "white", margin: 0, fontSize: 19, fontWeight: 700 }}>
+                Disbursement Results {isMock && <span style={{ fontSize: 12, background: "rgba(255,255,255,0.2)", padding: "2px 8px", borderRadius: 20, marginLeft: 8 }}>MOCK MODE</span>}
+              </h2>
+              <p style={{ color: "rgba(255,255,255,0.7)", margin: "4px 0 0", fontSize: 12 }}>
+                Processed {total} refund{total !== 1 ? "s" : ""} {isMock && "(No actual money transferred)"}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: "rgba(255,255,255,0.2)", border: "none", borderRadius: "50%", width: 34, height: 34, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "white" }}>
+            <X size={15} />
+          </button>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, padding: "20px 28px", borderBottom: `1px solid ${C.border}`, background: C.bg }}>
+          <div style={{ textAlign: "center", padding: "14px", background: C.greenLight, borderRadius: 12, border: `1px solid ${C.green}30` }}>
+            <div style={{ fontSize: 26, fontWeight: 800, color: C.green }}>{fmtNPR(total_success_amount)}</div>
+            <div style={{ fontSize: 11, color: C.green, fontWeight: 600, textTransform: "uppercase" }}>Successfully Disbursed</div>
+          </div>
+          <div style={{ textAlign: "center", padding: "14px", background: C.redLight, borderRadius: 12, border: `1px solid ${C.red}30` }}>
+            <div style={{ fontSize: 26, fontWeight: 800, color: C.red }}>{failed.length}</div>
+            <div style={{ fontSize: 11, color: C.red, fontWeight: 600, textTransform: "uppercase" }}>Failed Transactions</div>
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto", padding: "20px 28px" }}>
+          {success.length > 0 && (
+            <div style={{ marginBottom: 20 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: C.green, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                <CheckCircle size={14} /> Successful ({success.length})
+              </h3>
+              <div style={{ maxHeight: 200, overflowY: "auto" }}>
+                {success.map((item, i) => (
+                  <div key={i} style={{ background: C.greenLight, borderRadius: 10, padding: "10px 14px", marginBottom: 8, border: `1px solid ${C.green}20` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: C.textPrimary, marginBottom: 2 }}>{shortId(item.refund_id)}</div>
+                        <div style={{ fontSize: 11, color: C.textSecond }}>{fmtNPR(item.amount)} → {item.customer_esewa || "Customer"}</div>
+                        {item.worker_payout && (
+                          <div style={{ fontSize: 11, marginTop: 4, color: item.worker_payout.status === "sent" ? C.green : item.worker_payout.status === "no_phone" ? C.amber : C.red }}>
+                            Worker: {
+                              item.worker_payout.status === "sent"     ? `Payout sent → ${item.worker_payout.phone}` :
+                              item.worker_payout.status === "no_phone" ? "No phone on file — process manually" :
+                              item.worker_payout.error || "Failed"
+                            }
+                          </div>
+                        )}
+                      </div>
+                      {item.transaction_uuid && (
+                        <span style={{ fontSize: 9, color: C.green, fontFamily: "monospace" }}>Txn: {item.transaction_uuid.slice(-8)}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {failed.length > 0 && (
+            <div>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: C.red, textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                <XCircle size={14} /> Failed ({failed.length})
+              </h3>
+              <div style={{ maxHeight: 200, overflowY: "auto" }}>
+                {failed.map((item, i) => (
+                  <div key={i} style={{ background: C.redLight, borderRadius: 10, padding: "10px 14px", marginBottom: 8, border: `1px solid ${C.red}20` }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: C.textPrimary, marginBottom: 2 }}>{shortId(item.refund_id)}</div>
+                    <div style={{ fontSize: 11, color: C.red }}>{item.error || "eSewa API error"}</div>
+                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 4 }}>{fmtNPR(item.amount)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding: "16px 28px", borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={{ padding: "10px 24px", borderRadius: 12, border: "none", background: C.teal, color: "white", cursor: "pointer", fontSize: 14, fontWeight: 600, fontFamily: "inherit" }}>
+            Done
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
 
-// ── Task Details Tab ──────────────────────────────────────────────────────────
+// ── Task Details Tab ──────────────────────────────────────────────────────
 const TaskDetailsTab = ({ refund }) => {
   const [task,    setTask]    = useState(null);
   const [loading, setLoading] = useState(false);
@@ -330,10 +415,10 @@ const TaskDetailsTab = ({ refund }) => {
               {task.taskName ?? task.taskDescrip ?? "Unnamed Task"}
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {task.taskStatus    && <Chip label={task.taskStatus}                    color={C.teal}   icon={Activity}    />}
-              {task.escrow_status && <Chip label={`Escrow: ${task.escrow_status}`}    color={C.blue}   icon={Shield}      />}
-              {task.payout_status && <Chip label={`Payout: ${task.payout_status}`}    color={task.payout_status === "paid" ? C.green : C.amber} icon={DollarSign} />}
-              {task.payment_method && <Chip label={task.payment_method}               color={C.purple} />}
+              {task.taskStatus    && <Chip label={task.taskStatus}                 color={C.teal}   icon={Activity}    />}
+              {task.escrow_status && <Chip label={`Escrow: ${task.escrow_status}`} color={C.blue}   icon={Shield}      />}
+              {task.payout_status && <Chip label={`Payout: ${task.payout_status}`} color={task.payout_status === "paid" ? C.green : C.amber} icon={DollarSign} />}
+              {task.payment_method && <Chip label={task.payment_method}            color={C.purple} />}
             </div>
           </div>
           <div style={{ textAlign: "right", flexShrink: 0 }}>
@@ -366,11 +451,11 @@ const TaskDetailsTab = ({ refund }) => {
 
       <div style={{ background: C.surface, borderRadius: 14, padding: 18, border: `1px solid ${C.border}` }}>
         <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>Task Information</div>
-        <KV label="Task ID"        value={shortId(task._id ?? task.id)} />
-        <KV label="Category"       value={task.taskCategory ?? task.category} />
-        <KV label="Location"       value={task.location ?? task.address} />
-        <KV label="eSewa Ref"      value={task.esewa_ref_id} />
-        <KV label="Posted On"      value={`${fmt(task.createdAt ?? task.created_at)} ${fmtTime(task.createdAt ?? task.created_at)}`} />
+        <KV label="Task ID"      value={shortId(task._id ?? task.id)} />
+        <KV label="Category"     value={task.taskCategory ?? task.category} />
+        <KV label="Location"     value={task.location ?? task.address} />
+        <KV label="eSewa Ref"    value={task.esewa_ref_id} />
+        <KV label="Posted On"    value={`${fmt(task.createdAt ?? task.created_at)} ${fmtTime(task.createdAt ?? task.created_at)}`} />
         {task.completedAt && <KV label="Completed On" value={`${fmt(task.completedAt)} ${fmtTime(task.completedAt)}`} />}
         {task.released_at && <KV label="Released At"  value={`${fmt(task.released_at)} ${fmtTime(task.released_at)}`} />}
         {task.taskDescrip && task.taskName && (
@@ -380,47 +465,23 @@ const TaskDetailsTab = ({ refund }) => {
           </div>
         )}
       </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-        {[
-          { label: "Customer", id: task.userId,           type: "customer" },
-          { label: "Worker",   id: task.assignedWorkerId, type: "worker"   },
-        ].filter(p => p.id).map(({ label, id, type }) => (
-          <div key={label} style={{ background: C.surface, borderRadius: 14, padding: 16, border: `1px solid ${C.border}` }}>
-            <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 10 }}>{label}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <Avatar type={type} size={38} />
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 3 }}>
-                  {typeof id === "string" && id.includes("@") ? id : shortId(id)}
-                </div>
-                <TypeBadge type={type} />
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 };
 
-// ── Refund Detail Modal (tabbed) ───────────────────────────────────────────────
+// ── Refund Detail Modal ────────────────────────────────────────────────────
 const RefundDetailModal = ({ refund, onClose, onApprove, onReject, onDelete, onWaive, onEnforce }) => {
   const [activeTab,  setActiveTab]  = useState("refund");
   const [confirm,    setConfirm]    = useState(null);
   const [adminNote,  setAdminNote]  = useState(refund.admin_note || "");
   const [amtCust,    setAmtCust]    = useState(String(refund.amount_customer ?? refund.refund_amount ?? ""));
   const [amtWorker,  setAmtWorker]  = useState(String(refund.amount_worker   ?? refund.penalty_amount ?? ""));
-  // FIX: track eSewa result returned from backend after approve
-  const [esewaResult, setEsewaResult] = useState(refund.esewa_refund ?? null);
   const backdropRef = useRef(null);
 
   const isDispute = isDisputeCharge(refund);
   const isPending = refund.status === "pending";
   const accent    = isDispute ? C.dispute : C.teal;
   const refundId  = refund._id;
-  console.log("refund Id", refundId
-  );
   const dispAmt   = Number(refund.amount_customer ?? refund.refund_amount ?? refund.amount ?? 0);
   const dispWkr   = Number(refund.amount_worker   ?? refund.penalty_amount ?? 0);
   const hasTask   = !!(refund.task_id ?? refund.taskId);
@@ -488,9 +549,9 @@ const RefundDetailModal = ({ refund, onClose, onApprove, onReject, onDelete, onW
                   </>
                 ) : (
                   <>
-                    <button onClick={() => setConfirm({ type: "approve", message: `Approve refund of ${fmtNPR(Number(amtCust) || dispAmt)} to customer? eSewa refund will be triggered.` })}
+                    <button onClick={() => setConfirm({ type: "approve", message: `Set refund of ${fmtNPR(Number(amtCust) || dispAmt)} to customer? This will queue it for eSewa disbursement — use Pay All to send.` })}
                       style={{ padding: "8px 16px", borderRadius: 9, border: "none", background: "rgba(255,255,255,0.95)", color: C.green, fontWeight: 700, fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit" }}>
-                      <ThumbsUp size={14} /> Approve Refund
+                      <ThumbsUp size={14} /> Approve & Queue
                     </button>
                     <button onClick={() => setConfirm({ type: "reject", message: "Reject this refund request?", danger: true })}
                       style={{ padding: "8px 16px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.35)", background: "transparent", color: "white", fontWeight: 600, fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit" }}>
@@ -522,8 +583,6 @@ const RefundDetailModal = ({ refund, onClose, onApprove, onReject, onDelete, onW
 
           {/* Tab body */}
           <div style={{ flex: 1, overflowY: "auto", padding: 24, background: C.bg }}>
-
-            {/* REFUND TAB */}
             {activeTab === "refund" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
 
@@ -540,6 +599,27 @@ const RefundDetailModal = ({ refund, onClose, onApprove, onReject, onDelete, onW
                     {isDispute ? <ShieldAlert size={26} color={accent} /> : <Wallet size={26} color={accent} />}
                   </div>
                 </div>
+
+                {/* Sandbox indicator on refund details */}
+                {USE_SANDBOX_MODE && refund.status === "refunded" && (
+                  <div style={{ background: C.blueLight, borderRadius: 12, padding: "12px 16px", border: `1px solid ${C.blue}30`, display: "flex", alignItems: "center", gap: 10 }}>
+                    <Zap size={16} color={C.blue} />
+                    <span style={{ fontSize: 12, color: C.blue, fontWeight: 500 }}>
+                      🔒 Processed in SANDBOX MODE — No actual money transferred
+                    </span>
+                  </div>
+                )}
+
+                {/* In-progress info banner */}
+                {refund.status === "refund_in_progress" && (
+                  <div style={{ background: C.amberLight, borderRadius: 14, padding: 16, border: `1px solid ${C.amber}30`, display: "flex", gap: 10 }}>
+                    <Clock size={15} color={C.amber} style={{ flexShrink: 0, marginTop: 1 }} />
+                    <div style={{ fontSize: 13, color: C.amber, lineHeight: 1.6 }}>
+                      <strong>Queued for disbursement.</strong> Amounts have been set. Use the <strong>Pay All</strong> button to trigger eSewa transfers for all in-progress refunds.
+                      {USE_SANDBOX_MODE && " (Mock mode — no real money will move)"}
+                    </div>
+                  </div>
+                )}
 
                 {isDispute && (
                   <div style={{ background: C.disputeLight, borderRadius: 14, padding: 16, border: `1px solid ${C.disputeMid}` }}>
@@ -563,16 +643,22 @@ const RefundDetailModal = ({ refund, onClose, onApprove, onReject, onDelete, onW
                 {/* Editable amounts for pending non-dispute refunds */}
                 {isPending && !isDispute && (
                   <div style={{ background: C.surface, borderRadius: 14, padding: 18, border: `1px solid ${C.border}` }}>
-                    <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 12 }}>Set Refund Amounts</div>
+                    <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>Set Refund Amounts</div>
+                    <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
+                      <Info size={12} color={C.textMuted} />
+                      Approving queues this refund. eSewa disbursement happens when you click <strong>Pay All</strong>.
+                      {USE_SANDBOX_MODE && " (Mock mode — no real money)"}
+                    </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                       {[
-                        { label: "Customer Refund",  value: amtCust,   setter: setAmtCust,   required: true  },
-                        { label: "Worker Deduction", value: amtWorker, setter: setAmtWorker, required: false },
-                      ].map(({ label, value, setter, required }) => (
+                        { label: "Customer Refund",  value: amtCust,   setter: setAmtCust,   required: true,  hint: "Sent to customer via eSewa (ref_id)"    },
+                        { label: "Worker Deduction", value: amtWorker, setter: setAmtWorker, required: false, hint: "Sent to worker via eSewa (phone number)" },
+                      ].map(({ label, value, setter, required, hint }) => (
                         <div key={label}>
-                          <label style={{ fontSize: 11, fontWeight: 600, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 6 }}>
+                          <label style={{ fontSize: 11, fontWeight: 600, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 4 }}>
                             {label} (NPR){required && <span style={{ color: C.red }}> *</span>}
                           </label>
+                          <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 6 }}>{hint}</div>
                           <div style={{ position: "relative" }}>
                             <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 11, fontWeight: 600, color: C.textMuted }}>NPR</span>
                             <input type="number" min="0" placeholder="0" value={value}
@@ -619,9 +705,31 @@ const RefundDetailModal = ({ refund, onClose, onApprove, onReject, onDelete, onW
                   {refund.resolved_at && <DRow icon={CheckCircle} label="Resolved On" value={`${fmt(refund.resolved_at)} ${fmtTime(refund.resolved_at)}`} />}
                 </div>
 
-                {/* FIX: show real eSewa result — replaces the old hardcoded "triggered ✓" banner */}
-                {!isDispute && (refund.status === "approved" || refund.status === "refunded") && (
-                  <EsewaRefundStatus esewaRefund={esewaResult ?? refund.esewa_refund} />
+                {/* eSewa result (only for fully refunded) */}
+                {!isDispute && refund.status === "refunded" && (
+                  <div style={{ background: USE_SANDBOX_MODE ? C.blueLight : C.greenLight, borderRadius: 12, padding: "12px 16px", border: `1px solid ${USE_SANDBOX_MODE ? C.blue : C.green}30`, display: "flex", flexDirection: "column", gap: 4 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <CheckCircle size={15} color={USE_SANDBOX_MODE ? C.blue : C.green} />
+                      <span style={{ fontSize: 13, color: USE_SANDBOX_MODE ? C.blue : C.green, fontWeight: 600 }}>
+                        eSewa disbursement {USE_SANDBOX_MODE ? "simulated (MOCK MODE)" : "sent successfully"}
+                      </span>
+                    </div>
+                    {refund.esewa_refund?.transaction_uuid && <span style={{ fontSize: 11, color: USE_SANDBOX_MODE ? C.blue : C.green, paddingLeft: 23 }}>Txn: {refund.esewa_refund.transaction_uuid}</span>}
+                    {USE_SANDBOX_MODE && (
+                      <div style={{ paddingLeft: 23, fontSize: 11, color: C.blue }}>
+                        🔒 No actual money transferred — sandbox simulation
+                      </div>
+                    )}
+                    {refund.worker_payout && (
+                      <div style={{ paddingLeft: 23, fontSize: 11, color: refund.worker_payout.status === "sent" ? C.green : refund.worker_payout.status === "no_phone" ? C.amber : C.red }}>
+                        Worker payout: {
+                          refund.worker_payout.status === "sent"     ? `Sent via eSewa (${refund.worker_payout.phone})` :
+                          refund.worker_payout.status === "no_phone" ? "No phone on file — process manually" :
+                          refund.worker_payout.error || "Failed"
+                        }
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {/* Admin note input */}
@@ -660,7 +768,6 @@ const RefundDetailModal = ({ refund, onClose, onApprove, onReject, onDelete, onW
               </div>
             )}
 
-            {/* TASK TAB */}
             {activeTab === "task" && <TaskDetailsTab refund={refund} />}
           </div>
         </div>
@@ -673,11 +780,7 @@ const RefundDetailModal = ({ refund, onClose, onApprove, onReject, onDelete, onW
           onConfirm={async () => {
             const cAmt = Number(amtCust)   || dispAmt;
             const wAmt = Number(amtWorker) || dispWkr;
-            if (confirm.type === "approve") {
-              // FIX: capture esewa_refund from response and show it in the modal
-              const result = await onApprove(refundId, adminNote, cAmt, wAmt);
-              if (result?.esewa_refund) setEsewaResult(result.esewa_refund);
-            }
+            if (confirm.type === "approve") onApprove(refundId, adminNote, cAmt, wAmt);
             if (confirm.type === "reject")  onReject(refundId, adminNote);
             if (confirm.type === "enforce") onEnforce?.(refundId, adminNote);
             if (confirm.type === "waive")   onWaive?.(refundId, adminNote);
@@ -763,204 +866,229 @@ const RefundRow = ({ refund, onSelect, onApprove, onReject, onDelete, onWaive, o
   );
 };
 
-// ── Main RefundManagement ─────────────────────────────────────────────────────
+// ── Context Menu ─────────────────────────────────────────────────────────────
+const ContextMenu = ({ refund, onAction, onClose }) => {
+  const ref = useRef(null);
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [onClose]);
+
+  const isDispute = isDisputeCharge(refund);
+  const isPending = refund.status === "pending";
+  const actions = [
+    { label: "View Details",     icon: Eye,         action: "view",    color: C.blue    },
+    ...(isPending && !isDispute ? [
+      { label: "Approve & Queue", icon: CheckCircle, action: "approve", color: C.green   },
+      { label: "Reject",          icon: XCircle,     action: "reject",  color: C.red     },
+    ] : []),
+    ...(isDispute && isPending ? [
+      { label: "Waive Charge",    icon: Shield,      action: "waive",   color: C.green   },
+      { label: "Enforce Charge",  icon: ShieldAlert, action: "enforce", color: C.dispute },
+    ] : []),
+    { label: "Delete",            icon: Trash2,      action: "delete",  color: C.red     },
+  ];
+
+  return (
+    <div ref={ref} style={{ position: "absolute", right: 0, top: "100%", zIndex: 100000, background: "white", borderRadius: 14, boxShadow: "0 10px 40px rgba(0,0,0,0.15)", border: `1px solid ${C.border}`, minWidth: 190, marginTop: 4, animation: "scaleIn 0.1s ease" }}>
+      {actions.map(({ label, icon: Icon, action, color }) => (
+        <button key={action} onClick={() => { onAction(action); onClose(); }}
+          style={{ width: "100%", padding: "11px 16px", border: "none", background: "white", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, fontSize: 13, fontWeight: 500, color, textAlign: "left", borderBottom: `1px solid ${C.divider}` }}
+          onMouseEnter={e => e.currentTarget.style.background = C.bg}
+          onMouseLeave={e => e.currentTarget.style.background = "white"}
+        >
+          <Icon size={15} />{label}
+        </button>
+      ))}
+    </div>
+  );
+};
+
+// ── Main RefundManagement Component ─────────────────────────────────────────
 export default function RefundManagement() {
-  const [refunds,      setRefunds]      = useState([]);
-  const [loading,      setLoading]      = useState(true);
-  const [error,        setError]        = useState(null);
-  const [stats,        setStats]        = useState({ total: 0, pending: 0, approved: 0, rejected: 0, totalAmount: 0, approvedAmount: 0, disputePending: 0 });
-  const [search,       setSearch]       = useState("");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [filterType,   setFilterType]   = useState("all");
-  const [selected,     setSelected]     = useState(null);
-  const [toast,        setToast]        = useState(null);
-  const [confirm,      setConfirm]      = useState(null);
-  const [currentPage,  setCurrentPage]  = useState(1);
-  const [totalCount,   setTotalCount]   = useState(0);
+  const [refunds,          setRefunds]          = useState([]);
+  const [loading,          setLoading]          = useState(true);
+  const [error,            setError]            = useState(null);
+  const [stats,            setStats]            = useState({
+    total: 0, pending: 0, approved: 0, rejected: 0,
+    totalAmount: 0, approvedAmount: 0,
+    disputePending: 0,
+    inProgress: 0, inProgressAmount: 0,
+  });
+  const [search,           setSearch]           = useState("");
+  const [filterStatus,     setFilterStatus]     = useState("all");
+  const [filterType,       setFilterType]       = useState("all");
+  const [selected,         setSelected]         = useState(null);
+  const [toast,            setToast]            = useState(null);
+  const [confirm,          setConfirm]          = useState(null);
+  const [currentPage,      setCurrentPage]      = useState(1);
+  const [totalCount,       setTotalCount]       = useState(0);
+  const [payAllModal,      setPayAllModal]      = useState(false);
+  const [payAllResult,     setPayAllResult]     = useState(null);
+  const [payAllProcessing, setPayAllProcessing] = useState(false);
   const PAGE_SIZE = 50;
   const isFirst   = useRef(true);
 
   const showToast = (msg, type = "success") => setToast({ msg, type });
 
-  const normalize = useCallback((list) => {
-    console.log("normalize() input:", list);
-    return list.map(r => ({
-      ...r,
-      _id:             String(r._id ?? r.refund_id ?? r.id ?? ""),
-      amount_customer: r.amount_customer ?? r.refund_amount ?? r.amount ?? 0,
-      amount_worker:   r.amount_worker   ?? r.penalty_amount ?? 0,
-      status:          r.refund_status   ?? r.status ?? "pending",
-      
-    }));
-  }, []);
+  const normalize = useCallback((list) => list.map(r => ({
+    ...r,
+    _id:             String(r._id ?? r.refund_id ?? r.id ?? ""),
+    amount_customer: r.amount_customer ?? r.refund_amount ?? r.amount ?? 0,
+    amount_worker:   r.amount_worker   ?? r.penalty_amount ?? 0,
+    status:          r.refund_status   ?? r.status ?? "pending",
+  })), []);
 
   const fetchPage = useCallback(async (page, q = search) => {
-  try {
-    setLoading(true);
-    setError(null);
-    const skip = (page - 1) * PAGE_SIZE;
-    const params = new URLSearchParams({ skip, limit: PAGE_SIZE });
-    
-    if (q?.trim()) params.append("search", q.trim());
-    if (filterType === "dispute") params.append("type", "dispute");
-    if (filterType === "refund") params.append("type", "refund");
+    try {
+      setLoading(true); setError(null);
+      const skip   = (page - 1) * PAGE_SIZE;
+      const params = new URLSearchParams({ skip, limit: PAGE_SIZE });
+      if (q?.trim()) params.append("search", q.trim());
+      if (filterType === "dispute") params.append("type", "dispute");
+      if (filterType === "refund")  params.append("type", "refund");
 
-    // Handle different tabs with specific endpoints
-    let endpoint = "";
-    let response = null;
-    
-    if (filterStatus === "pending") {
-      endpoint = `${BASE}/refunds/pending`;
-      response = await apiCall(`${endpoint}?${params}`).catch(() => null);
-    } 
-    else if (filterStatus === "approved") {
-      endpoint = `${BASE}/refunds/approved`;
-      response = await apiCall(`${endpoint}?${params}`).catch(() => null);
-    }
-    else if (filterStatus === "rejected") {
-      endpoint = `${BASE}/refunds/rejected`;
-      response = await apiCall(`${endpoint}?${params}`).catch(() => null);
-    }
-    else {
-      // "all" tab - try unified endpoint first
-      const unified = await apiCall(`${BASE}/refunds?${params}`).catch(() => null);
-      if (unified?.ok) {
-        const d = await unified.json();
-        const list = normalize(d.refunds ?? d.items ?? d.data ?? d ?? []);
-        setRefunds(list);
-        setTotalCount(d.total ?? list.length);
-        setCurrentPage(page);
-        setLoading(false);
+      let response = null;
+
+      if (filterStatus === "pending") {
+        response = await apiCall(`${BASE}/refunds/pending?${params}`).catch(() => null);
+      } else if (filterStatus === "approved") {
+        response = await apiCall(`${BASE}/refunds/approved?${params}`).catch(() => null);
+      } else if (filterStatus === "rejected") {
+        response = await apiCall(`${BASE}/refunds/rejected?${params}`).catch(() => null);
+      } else if (filterStatus === "in_progress") {
+        response = await apiCall(`${BASE}/refunds/in-progress?${params}`).catch(() => null);
+      } else {
+        const unified = await apiCall(`${BASE}/refunds?${params}`).catch(() => null);
+        if (unified?.ok) {
+          const d    = await unified.json();
+          const list = normalize(d.refunds ?? d.items ?? d.data ?? d ?? []);
+          setRefunds(list); setTotalCount(d.total ?? list.length);
+          setCurrentPage(page); setLoading(false);
+          return;
+        }
+
+        const [pRes, aRes, rRes, iRes] = await Promise.all([
+          apiCall(`${BASE}/refunds/pending`).catch(() => null),
+          apiCall(`${BASE}/refunds/approved`).catch(() => null),
+          apiCall(`${BASE}/refunds/rejected`).catch(() => null),
+          apiCall(`${BASE}/refunds/in-progress`).catch(() => null),
+        ]);
+
+        let combined = [];
+        const merge = (res, fallbackStatus) => {
+          if (res?.ok) return res.json().then(d => (d.refunds ?? []).map(r => ({ ...r, status: r.refund_status ?? fallbackStatus })));
+          return Promise.resolve([]);
+        };
+        const [p, a, r, i] = await Promise.all([
+          merge(pRes, "pending"), merge(aRes, "approved"),
+          merge(rRes, "rejected"), merge(iRes, "refund_in_progress"),
+        ]);
+        combined = [...p, ...a, ...r, ...i];
+
+        if (q?.trim()) {
+          const lq = q.trim().toLowerCase();
+          combined = combined.filter(r =>
+            String(r.refund_id ?? r._id ?? "").toLowerCase().includes(lq) ||
+            String(r.reason ?? "").toLowerCase().includes(lq) ||
+            String(r.task_name ?? "").toLowerCase().includes(lq)
+          );
+        }
+
+        const list = normalize(combined);
+        setRefunds(list.slice(skip, skip + PAGE_SIZE));
+        setTotalCount(list.length); setCurrentPage(page); setLoading(false);
         return;
       }
-      
-      // Fallback: merge pending + approved + rejected
-      const [pRes, aRes, rRes] = await Promise.all([
+
+      if (response?.ok) {
+        const d    = await response.json();
+        const list = normalize(d.refunds ?? d.items ?? d.data ?? d ?? []);
+        setRefunds(list); setTotalCount(d.total ?? list.length);
+        setCurrentPage(page);
+      } else {
+        throw new Error(`Failed to fetch ${filterStatus} refunds`);
+      }
+    } catch (e) {
+      setError(`Failed to load refunds: ${e.message}`);
+      showToast(e.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [search, filterStatus, filterType, normalize]);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const [pRes, aRes, rRes, iRes] = await Promise.all([
         apiCall(`${BASE}/refunds/pending`).catch(() => null),
         apiCall(`${BASE}/refunds/approved`).catch(() => null),
         apiCall(`${BASE}/refunds/rejected`).catch(() => null),
+        apiCall(`${BASE}/refunds/in-progress`).catch(() => null),
       ]);
-      
-      let combined = [];
-      if (pRes?.ok) {
-        const d = await pRes.json();
-        const pendingList = (d.refunds ?? []).map(r => ({ ...r, status: r.refund_status ?? "pending" }));
-        combined.push(...pendingList);
-      }
-      if (aRes?.ok) {
-        const d = await aRes.json();
-        const approvedList = (d.refunds ?? []).map(r => ({ ...r, status: r.refund_status ?? "approved" }));
-        combined.push(...approvedList);
-      }
-      if (rRes?.ok) {
-        const d = await rRes.json();
-        const rejectedList = (d.refunds ?? []).map(r => ({ ...r, status: r.refund_status ?? "rejected" }));
-        combined.push(...rejectedList);
-      }
-      
-      if (q?.trim()) {
-        const lq = q.trim().toLowerCase();
-        combined = combined.filter(r =>
-          String(r.refund_id ?? r._id ?? "").toLowerCase().includes(lq) ||
-          String(r.reason ?? "").toLowerCase().includes(lq) ||
-          String(r.task_name ?? "").toLowerCase().includes(lq)
-        );
-      }
-      
-      const list = normalize(combined);
-      setRefunds(list.slice(skip, skip + PAGE_SIZE));
-      setTotalCount(list.length);
-      setCurrentPage(page);
-      setLoading(false);
-      return;
-    }
-    
-    // Handle pending, approved, or rejected specific endpoints
-    if (response?.ok) {
-      const d = await response.json();
-      const list = normalize(d.refunds ?? d.items ?? d.data ?? d ?? []);
-      setRefunds(list);
-      setTotalCount(d.total ?? list.length);
-      setCurrentPage(page);
-    } else {
-      throw new Error(`Failed to fetch ${filterStatus} refunds`);
-    }
-    
-  } catch (e) {
-    setError(`Failed to load refunds: ${e.message}`);
-    showToast(e.message, "error");
-  } finally {
-    setLoading(false);
-  }
-}, [search, filterStatus, filterType, normalize]);
-  const fetchStats = useCallback(async () => {
-  try {
-    // Fetch from all endpoints
-    const [pRes, aRes, rRes] = await Promise.all([
-      apiCall(`${BASE}/refunds/pending`).catch(() => null),
-      apiCall(`${BASE}/refunds/approved`).catch(() => null),
-      apiCall(`${BASE}/refunds/rejected`).catch(() => null),
-    ]);
-    
-    let pendingCount = 0;
-    let pendingAmount = 0;
-    let approvedCount = 0;
-    let approvedAmount = 0;
-    let rejectedCount = 0;
-    let rejectedAmount = 0;
-    
-    // Process pending refunds
-    if (pRes?.ok) { 
-      const d = await pRes.json(); 
-      const pendingRefunds = d.refunds ?? [];
-      pendingCount = pendingRefunds.length;
-      pendingAmount = pendingRefunds.reduce((sum, r) => sum + (Number(r.amount_customer) || Number(r.refund_amount) || Number(r.amount) || 0), 0);
-    }
-    
-    // Process approved refunds
-    if (aRes?.ok) { 
-      const d = await aRes.json(); 
-      const approvedRefunds = d.refunds ?? [];
-      approvedCount = approvedRefunds.length;
-      approvedAmount = approvedRefunds.reduce((sum, r) => sum + (Number(r.amount_customer) || Number(r.refund_amount) || Number(r.amount) || 0), 0);
-    }
-    
-    // Process rejected refunds
-    if (rRes?.ok) { 
-      const d = await rRes.json(); 
-      const rejectedRefunds = d.refunds ?? [];
-      rejectedCount = rejectedRefunds.length;
-      rejectedAmount = rejectedRefunds.reduce((sum, r) => sum + (Number(r.amount_customer) || Number(r.refund_amount) || Number(r.amount) || 0), 0);
-    }
-    
-    // Get total from all
-    const totalRefunds = pendingCount + approvedCount + rejectedCount;
-    
-    setStats({ 
-      total: totalRefunds, 
-      pending: pendingCount, 
-      approved: approvedCount, 
-      rejected: rejectedCount,
-      totalAmount: pendingAmount + approvedAmount + rejectedAmount,
-      approvedAmount: approvedAmount,
-      rejectedAmount: rejectedAmount,
-      disputePending: 0 
-    });
-  } catch (error) {
-    console.error("Error fetching stats:", error);
-  }
-}, []);
 
-  useEffect(() => { fetchPage(1, ""); fetchStats(); }, []);
-  useEffect(() => {
-    if (isFirst.current) { isFirst.current = false; return; }
-    const t = setTimeout(() => fetchPage(1, search), 400);
-    return () => clearTimeout(t);
-  }, [search]);
-  useEffect(() => { if (!isFirst.current) fetchPage(1, search); }, [filterStatus, filterType]);
+      const sum = (list, key) => list.reduce((acc, r) => acc + (Number(r[key]) || 0), 0);
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
-  // FIX: handleApprove now returns the backend response so modal can show eSewa status
+      let pending = [], approved = [], rejected = [], inProgress = [];
+      if (pRes?.ok) { const d = await pRes.json(); pending    = d.refunds ?? []; }
+      if (aRes?.ok) { const d = await aRes.json(); approved   = d.refunds ?? []; }
+      if (rRes?.ok) { const d = await rRes.json(); rejected   = d.refunds ?? []; }
+      if (iRes?.ok) { const d = await iRes.json(); inProgress = d.refunds ?? []; }
+
+      const inProgressAmount = sum(inProgress, "amount_customer");
+
+      setStats({
+        total:           pending.length + approved.length + rejected.length + inProgress.length,
+        pending:         pending.length,
+        approved:        approved.length,
+        rejected:        rejected.length,
+        inProgress:      inProgress.length,
+        inProgressAmount,
+        totalAmount:     sum(pending, "amount_customer") + sum(approved, "amount_customer") + inProgressAmount,
+        approvedAmount:  sum(approved, "amount_customer"),
+        disputePending:  pending.filter(isDisputeCharge).length,
+      });
+    } catch (e) {
+      console.error("Error fetching stats:", e);
+    }
+  }, []);
+
+  // ── Pay All — uses sandbox mode from global constant ─────────────────────────────────
+  const handlePayAll = async () => {
+    setPayAllProcessing(true);
+    try {
+      const url = `${BASE}/refunds/pay-all-in-progress?sandbox=${USE_SANDBOX_MODE}`;
+      const res = await apiCall(url, { method: "POST" });
+
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || "Disbursement failed");
+      }
+
+      const result = await res.json();
+      setPayAllResult(result);
+
+      await fetchPage(currentPage, search);
+      await fetchStats();
+
+      const ok   = result.success?.length || 0;
+      const fail = result.failed?.length  || 0;
+      const mockNote = USE_SANDBOX_MODE ? " (MOCK MODE - Test only)" : "";
+      showToast(
+        fail === 0
+          ? `✓ All ${ok} refunds disbursed via eSewa${mockNote}`
+          : `Disbursed ${ok}, ${fail} failed — check results`,
+        fail === 0 ? "success" : "warning"
+      );
+    } catch (e) {
+      showToast(`Disbursement failed: ${e.message}`, "error");
+    } finally {
+      setPayAllProcessing(false);
+      setPayAllModal(false);
+    }
+  };
+
+  // ── Individual Handlers ───────────────────────────────────────────────────
   const handleApprove = async (id, note, amtC, amtW) => {
     const res = await patchStatus(id, "approved", note, amtC, amtW);
     if (!res.ok) {
@@ -969,21 +1097,12 @@ export default function RefundManagement() {
       return null;
     }
     const data = await res.json().catch(() => ({}));
-    const esewaStatus = data.esewa_refund?.status;
-    const toastMsg = esewaStatus === "sent"
-      ? "Refund approved — eSewa disbursement sent ✓"
-      : esewaStatus === "no_esewa_id"
-      ? "Approved — no eSewa ID on file, refund manually"
-      : esewaStatus === "failed" || esewaStatus === "error"
-      ? "Approved but eSewa disbursement failed — process manually"
-      : "Refund approved ✓";
-
-    setRefunds(p => p.map(r => r._id === id ? { ...r, status: "approved", admin_note: note, esewa_refund: data.esewa_refund } : r));
-    if (selected?._id === id) setSelected(p => ({ ...p, status: "approved", admin_note: note, esewa_refund: data.esewa_refund }));
-    setStats(p => ({ ...p, pending: Math.max(0, p.pending - 1), approved: p.approved + 1 }));
-    showToast(toastMsg, esewaStatus === "sent" ? "success" : "warning");
+    setRefunds(p => p.map(r => r._id === id ? { ...r, status: "refund_in_progress", admin_note: note, amount_customer: amtC, amount_worker: amtW, sandbox_mode: USE_SANDBOX_MODE } : r));
+    if (selected?._id === id) setSelected(p => ({ ...p, status: "refund_in_progress", admin_note: note, amount_customer: amtC, amount_worker: amtW, sandbox_mode: USE_SANDBOX_MODE }));
+    setStats(p => ({ ...p, pending: Math.max(0, p.pending - 1), inProgress: p.inProgress + 1, inProgressAmount: p.inProgressAmount + amtC }));
+    showToast(`Refund approved — queued for eSewa disbursement. Use Pay All to send.${USE_SANDBOX_MODE ? " (Mock mode)" : ""}`, "success");
     fetchStats();
-    return data; // FIX: return so modal can pick up esewa_refund
+    return data;
   };
 
   const handleReject = async (id, note) => {
@@ -992,15 +1111,17 @@ export default function RefundManagement() {
     setRefunds(p => p.map(r => r._id === id ? { ...r, status: "declined", admin_note: note } : r));
     if (selected?._id === id) setSelected(p => ({ ...p, status: "declined", admin_note: note }));
     setStats(p => ({ ...p, pending: Math.max(0, p.pending - 1), rejected: p.rejected + 1 }));
-    showToast("Refund rejected"); fetchStats();
+    showToast("Refund rejected");
+    fetchStats();
   };
 
   const handleEnforce = async (id, note) => {
     const res = await patchStatus(id, "approved", note, null, null);
     if (!res.ok) { showToast("Failed to enforce", "error"); return; }
-    setRefunds(p => p.map(r => r._id === id ? { ...r, status: "approved", admin_note: note } : r));
-    if (selected?._id === id) setSelected(p => ({ ...p, status: "approved", admin_note: note }));
-    showToast("Dispute charge enforced"); fetchStats();
+    setRefunds(p => p.map(r => r._id === id ? { ...r, status: "refund_in_progress", admin_note: note } : r));
+    if (selected?._id === id) setSelected(p => ({ ...p, status: "refund_in_progress", admin_note: note }));
+    showToast("Dispute charge enforced — queued for processing");
+    fetchStats();
   };
 
   const handleWaive = async (id, note) => {
@@ -1008,7 +1129,8 @@ export default function RefundManagement() {
     if (!res.ok) { showToast("Failed to waive", "error"); return; }
     setRefunds(p => p.map(r => r._id === id ? { ...r, status: "declined", admin_note: note } : r));
     if (selected?._id === id) setSelected(p => ({ ...p, status: "declined", admin_note: note }));
-    showToast("Dispute charge waived"); fetchStats();
+    showToast("Dispute charge waived");
+    fetchStats();
   };
 
   const handleDelete = async (id) => {
@@ -1019,16 +1141,25 @@ export default function RefundManagement() {
         const token = getToken();
         const res = await fetch(`${BASE}/refunds/${id}`, {
           method: "DELETE",
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
         }).catch(() => null);
         if (!res?.ok) { showToast(res?.status === 404 ? "Delete endpoint not available" : "Failed to delete", "error"); return; }
         setRefunds(p => p.filter(r => r._id !== id));
         setTotalCount(p => p - 1);
         if (selected?._id === id) setSelected(null);
-        showToast("Record deleted"); fetchStats();
+        showToast("Record deleted");
+        fetchStats();
       },
     });
   };
+
+  useEffect(() => { fetchPage(1, ""); fetchStats(); }, []);
+  useEffect(() => {
+    if (isFirst.current) { isFirst.current = false; return; }
+    const t = setTimeout(() => fetchPage(1, search), 400);
+    return () => clearTimeout(t);
+  }, [search]);
+  useEffect(() => { if (!isFirst.current) fetchPage(1, search); }, [filterStatus, filterType]);
 
   const totalPages   = Math.ceil(totalCount / PAGE_SIZE);
   const disputeCount = refunds.filter(isDisputeCharge).length;
@@ -1051,6 +1182,16 @@ export default function RefundManagement() {
     <div style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", background: C.bg, minHeight: "100vh", padding: 24 }}>
       {toast   && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
       {confirm && <ConfirmDialog message={confirm.message} danger={confirm.danger} onConfirm={confirm.onConfirm} onCancel={() => setConfirm(null)} />}
+      {payAllModal && (
+        <PayAllModal
+          inProgressCount={stats.inProgress}
+          inProgressAmount={stats.inProgressAmount}
+          onConfirm={handlePayAll}
+          onCancel={() => setPayAllModal(false)}
+          processing={payAllProcessing}
+        />
+      )}
+      {payAllResult && <PayAllResultModal result={payAllResult} onClose={() => setPayAllResult(null)} />}
 
       <style>{`
         @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
@@ -1069,36 +1210,60 @@ export default function RefundManagement() {
             <span style={{ color: C.dispute, fontWeight: 600 }}> {disputeCount} dispute charges</span> on this page
           </p>
         </div>
-        <button onClick={() => { fetchPage(1, search); fetchStats(); }}
-          style={{ padding: "10px 18px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.surface, cursor: "pointer", fontSize: 14, color: C.textSecond, display: "flex", alignItems: "center", gap: 8, fontFamily: "inherit" }}
-          onMouseEnter={e => { e.currentTarget.style.background = C.bg; e.currentTarget.style.color = C.teal; }}
-          onMouseLeave={e => { e.currentTarget.style.background = C.surface; e.currentTarget.style.color = C.textSecond; }}>
-          <RefreshCw size={15} /> Refresh
-        </button>
+        <div style={{ display: "flex", gap: 10 }}>
+          {stats.inProgress > 0 && (
+            <button
+              onClick={() => setPayAllModal(true)}
+              style={{ padding: "11px 24px", borderRadius: 12, border: "none", background: `linear-gradient(135deg, ${C.green} 0%, ${C.teal} 100%)`, cursor: "pointer", fontSize: 14, fontWeight: 700, color: "white", display: "flex", alignItems: "center", gap: 10, fontFamily: "inherit", boxShadow: "0 4px 12px rgba(61,158,110,0.3)", transition: "all 0.2s" }}
+              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 16px rgba(61,158,110,0.4)"; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)";    e.currentTarget.style.boxShadow = "0 4px 12px rgba(61,158,110,0.3)"; }}
+            >
+              <Send size={16} /> Pay All — {fmtNPR(stats.inProgressAmount)}
+            </button>
+          )}
+          <button onClick={() => { fetchPage(1, search); fetchStats(); }}
+            style={{ padding: "10px 18px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.surface, cursor: "pointer", fontSize: 14, color: C.textSecond, display: "flex", alignItems: "center", gap: 8, fontFamily: "inherit" }}
+            onMouseEnter={e => { e.currentTarget.style.background = C.bg; e.currentTarget.style.color = C.teal; }}
+            onMouseLeave={e => { e.currentTarget.style.background = C.surface; e.currentTarget.style.color = C.textSecond; }}>
+            <RefreshCw size={15} /> Refresh
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 12, marginBottom: 22 }}>
-        <StatCard label="Total"           value={stats.total}                                                  color={C.teal}    icon={Receipt}    />
-        <StatCard label="Pending"         value={stats.pending}                                                color={C.brand}   icon={Clock}       sub="Awaiting decision" />
-        <StatCard label="Approved"        value={stats.approved}                                               color={C.green}   icon={CheckCircle} />
-        <StatCard label="Rejected"        value={stats.rejected}                                               color={C.red}     icon={XCircle}     />
-        <StatCard label="Total Requested" value={`NPR ${Number(stats.totalAmount    ?? 0).toLocaleString()}`} color={C.blue}    icon={Wallet}      />
-        <StatCard label="Total Refunded"  value={`NPR ${Number(stats.approvedAmount ?? 0).toLocaleString()}`} color={C.green}   icon={CreditCard}  sub="eSewa processed" />
-        <StatCard label="Dispute Pending" value={stats.disputePending ?? 0}                                    color={C.dispute} icon={ShieldAlert} sub="Charges to review" />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 12, marginBottom: 22 }}>
+        <StatCard label="Total"           value={stats.total}                                                   color={C.teal}    icon={Receipt}     />
+        <StatCard label="Pending"         value={stats.pending}                                                 color={C.brand}   icon={Clock}       sub="Awaiting admin decision" />
+        <StatCard label="In Progress"     value={stats.inProgress}                                              color={C.amber}   icon={RefreshCw}   sub={`${fmtNPR(stats.inProgressAmount)} to disburse${USE_SANDBOX_MODE ? " (mock)" : ""}`} />
+        <StatCard label="Approved"        value={stats.approved}                                                color={C.green}   icon={CheckCircle} />
+        <StatCard label="Rejected"        value={stats.rejected}                                                color={C.red}     icon={XCircle}     />
+        <StatCard label="Total Requested" value={`NPR ${Number(stats.totalAmount    ?? 0).toLocaleString()}`}  color={C.blue}    icon={Wallet}      />
+        <StatCard label="Total Refunded"  value={`NPR ${Number(stats.approvedAmount ?? 0).toLocaleString()}`}  color={C.green}   icon={CreditCard}  sub={`eSewa ${USE_SANDBOX_MODE ? "simulated" : "processed"}`} />
+        <StatCard label="Dispute Pending" value={stats.disputePending ?? 0}                                     color={C.dispute} icon={ShieldAlert} sub="Charges to review" />
       </div>
 
-      {/* Dispute banner */}
-      {(stats.disputePending ?? 0) > 0 && (
-        <div style={{ background: C.disputeLight, borderRadius: 14, padding: "14px 20px", marginBottom: 18, border: `1px solid ${C.disputeMid}`, display: "flex", alignItems: "center", gap: 12 }}>
-          <ShieldAlert size={18} color={C.dispute} />
+      {/* Pending admin decision banner */}
+      {stats.pending > 0 && (
+        <div style={{ background: C.brandLight, borderRadius: 14, padding: "14px 20px", marginBottom: 18, border: `1px solid ${C.brand}30`, display: "flex", alignItems: "center", gap: 12 }}>
+          <Clock size={18} color={C.brand} />
           <div>
-            <span style={{ fontWeight: 700, color: C.dispute, fontSize: 14 }}>{stats.disputePending} dispute charge{stats.disputePending > 1 ? "s" : ""} pending review</span>
-            <span style={{ fontSize: 13, color: C.textSecond, marginLeft: 8 }}>— these are <strong>not</strong> eSewa refunds; they deduct from worker settlement</span>
+            <span style={{ fontWeight: 700, color: C.brand, fontSize: 14 }}>{stats.pending} refund{stats.pending > 1 ? "s" : ""} awaiting your decision</span>
+            <span style={{ fontSize: 13, color: C.textSecond, marginLeft: 8 }}>— open each refund to set amounts and approve</span>
           </div>
-          <button onClick={() => setFilterType("dispute")}
-            style={{ marginLeft: "auto", padding: "6px 14px", borderRadius: 20, border: `1px solid ${C.disputeMid}`, background: C.dispute, color: "white", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-            View Disputes
+        </div>
+      )}
+
+      {/* In-progress ready for Pay All banner */}
+      {stats.inProgress > 0 && (
+        <div style={{ background: C.amberLight, borderRadius: 14, padding: "14px 20px", marginBottom: 18, border: `1px solid ${C.amber}30`, display: "flex", alignItems: "center", gap: 12 }}>
+          <RefreshCw size={18} color={C.amber} />
+          <div>
+            <span style={{ fontWeight: 700, color: C.amber, fontSize: 14 }}>{stats.inProgress} refund{stats.inProgress > 1 ? "s" : ""} ready for eSewa disbursement</span>
+            <span style={{ fontSize: 13, color: C.textSecond, marginLeft: 8 }}>— amounts set, {fmtNPR(stats.inProgressAmount)} total · customer ref_id + worker phone used{USE_SANDBOX_MODE ? " (mock mode)" : ""}</span>
+          </div>
+          <button onClick={() => setPayAllModal(true)}
+            style={{ marginLeft: "auto", padding: "8px 20px", borderRadius: 20, border: "none", background: `linear-gradient(135deg, ${C.green} 0%, ${C.teal} 100%)`, color: "white", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 8 }}>
+            <Send size={14} /> Pay All — {fmtNPR(stats.inProgressAmount)}
           </button>
         </div>
       )}
@@ -1116,7 +1281,13 @@ export default function RefundManagement() {
             />
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {[["all","All Status"], ["pending","Pending"], ["approved","Approved",C.green], ["rejected","Rejected",C.red]].map(([v,l,c]) => (
+            {[
+              ["all","All Status"],
+              ["pending","Pending",C.brand],
+              ["in_progress","In Progress",C.amber],
+              ["approved","Approved",C.green],
+              ["rejected","Rejected",C.red],
+            ].map(([v,l,c]) => (
               <Pill key={v} active={filterStatus === v} onClick={() => setFilterStatus(v)} label={l} color={c} />
             ))}
           </div>

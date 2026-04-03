@@ -21,7 +21,8 @@ from ..config.database import (
 # ── Firebase ──────────────────────────────────────────────────────────────────
 import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SERVICE_ACCOUNT_PATH = os.path.join(BASE_DIR, "kaam-ly-firebase.json")
+SERVICE_ACCOUNT_PATH = "/Users/dixitabajracharya/kaam-ly/Kaam-ly/worker/router/kaam-ly-firebase.json"
+print("SERVICE_ACCOUNT_PATH:", SERVICE_ACCOUNT_PATH)
 if not firebase_admin._apps:
     try:
         cred = credentials.Certificate(SERVICE_ACCOUNT_PATH)
@@ -96,20 +97,22 @@ def _resolve_token(user_id: str, is_worker: bool = False) -> tuple[Optional[str]
 
 
 def _send_fcm_sync(token: str, title: str, body: str, data: dict = None) -> bool:
-    print(f"[FCM SYNC] ▶ token={token[:30]}... title={title}")
+    # FCM requires ALL data values to be strings
+    safe_data = {
+        "title": str(title or ""),
+        "body":  str(body  or ""),
+    }
+    if data:
+        for k, v in data.items():
+            safe_data[str(k)] = str(v) if v is not None else ""
+
     msg = messaging.Message(
         notification=messaging.Notification(title=title, body=body),
-        data={
-            "title": title,
-            "body":  body,
-            **(data or {}),
-        },
+        data=safe_data,
         webpush=messaging.WebpushConfig(
             notification=messaging.WebpushNotification(
-                title=title,
-                body=body,
-                icon="/icon-192.png",
-                badge="/icon-192.png",
+                title=title, body=body,
+                icon="/icon-192.png", badge="/icon-192.png",
             ),
         ),
         token=token,
@@ -124,7 +127,6 @@ def _send_fcm_sync(token: str, title: str, body: str, data: dict = None) -> bool
     except Exception as e:
         print(f"[FCM SYNC] ❌ {type(e).__name__}: {e}")
         raise
-
 
 async def _send_fcm(token: str, title: str, body: str, data: dict = None) -> bool:
     print(f"[FCM ASYNC] ▶ Dispatching to thread pool...")
@@ -316,3 +318,75 @@ async def get_all_notifications(userId: str):
         return {"notifications": docs}
     except Exception as e:
         return {"notifications": [], "error": str(e)}
+    
+# ─────────────────────────────────────────────────────────────────────────────
+# PASTE 1 — add this import at the top of notifications.py (with your other imports)
+# ─────────────────────────────────────────────────────────────────────────────
+
+from ..config.database import db          # the raw pymongo db object
+from ..manager import websocket_manager   # so we can call manager.set_db()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PASTE 2 — add this block right after firebase_admin.initialize_app(cred)
+#            (i.e. during module load, after Firebase is ready)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Wire the DB into the WebSocket manager so it can persist/flush messages
+websocket_manager.manager.set_db(db)
+
+# Create an index so pending-message queries are fast
+try:
+    db.ws_message_queue.create_index(
+        [("userId", 1), ("delivered", 1), ("createdAt", 1)]
+    )
+    print("[DB] ws_message_queue index created ✓")
+except Exception as _e:
+    print(f"[DB] Index warning (non-critical): {_e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PASTE 3 — add this new route inside notifications_router
+#            (paste it alongside your other @notifications_router routes)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@notifications_router.get("/pending/{userId}")
+async def get_pending_ws_messages(userId: str):
+    """
+    Called by the frontend on every WebSocket (re)connect.
+    Returns all undelivered WS messages for this user and marks them delivered.
+    """
+    try:
+        pending = list(
+            db.ws_message_queue.find(
+                {"userId": userId, "delivered": False}
+            ).sort("createdAt", 1)
+        )
+
+        if not pending:
+            return {"messages": []}
+
+        ids = [doc["_id"] for doc in pending]
+
+        # Parse the stored JSON strings back to objects so the frontend
+        # receives proper dicts, not raw strings
+        messages = []
+        for doc in pending:
+            try:
+                import json
+                messages.append(json.loads(doc["message"]))
+            except Exception:
+                messages.append({"raw": doc["message"]})
+
+        # Mark as delivered now that the client is picking them up
+        db.ws_message_queue.update_many(
+            {"_id": {"$in": ids}},
+            {"$set": {"delivered": True, "deliveredAt": datetime.utcnow()}}
+        )
+
+        print(f"[PENDING] Flushed {len(messages)} messages to {userId}")
+        return {"messages": messages}
+
+    except Exception as e:
+        print(f"[PENDING] Error: {e}")
+        return {"messages": [], "error": str(e)}

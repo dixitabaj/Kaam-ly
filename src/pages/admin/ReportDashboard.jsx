@@ -7,12 +7,10 @@ import {
   AlertCircle, FileText, Calendar, MoreVertical, Info,
   Ban, Check, AlertOctagon, HelpCircle, Brain,
   ThumbsUp, ThumbsDown, Scale, Gavel, Zap, PenTool, RotateCcw,
-  Star, MessageCircle, Layers
+  Star, MessageCircle, Layers, History, ShoppingBag, Award,
+  DollarSign, CreditCard, MapPin, Phone, Mail, CalendarIcon, 
 } from "lucide-react";
 import BookingNavbar from "../../components/Navbar/Navbar";
-
-// CreateRefundModal is exported from RefundManagement
-// import { CreateRefundModal } from "./RefundManagement";
 
 const BASE = "http://localhost:8000/api";
 
@@ -233,6 +231,596 @@ const StatCard = ({ label, value, color, icon: Icon, sub }) => (
     {sub && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 8 }}>{sub}</div>}
   </div>
 );
+
+// ── Customer History Panel ────────────────────────────────────────────────────
+// ── Customer History Panel ────────────────────────────────────────────────────
+const CustomerHistoryPanel = ({ customerId, customerEmail }) => {
+  const [customer, setCustomer] = useState(null);
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!customerId && !customerEmail) return;
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        // Fetch customer details
+        const customerRes = await fetch(`${BASE}/customer/${customerId}`);
+        if (customerRes.ok) {
+          const customerData = await customerRes.json();
+          setCustomer(customerData);
+        }
+        
+        // Fetch customer's tasks
+        const tasksRes = await fetch(`${BASE}/tasks/user/${customerId}`);
+        if (tasksRes.ok) {
+          const tasksData = await tasksRes.json();
+          setTasks(tasksData.tasks || []);
+        }
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, [customerId, customerEmail]);
+
+  if (loading) return <div style={{ padding: 40, textAlign: "center" }}>Loading customer history...</div>;
+  if (error) return <div style={{ padding: 40, textAlign: "center", color: C.red }}>Error: {error}</div>;
+  if (!customer) return <div style={{ padding: 40, textAlign: "center", color: C.textMuted }}>No customer history available</div>;
+
+  const completedTasks = tasks.filter(t => t.status === "completed").length;
+  const cancelledTasks = tasks.filter(t => t.status === "cancelled").length;
+  const totalSpent = tasks.reduce((sum, t) => sum + (t.totalCost || 0), 0);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Customer Profile Summary */}
+      <div style={{ background: C.surface, borderRadius: 16, padding: 20, border: `1px solid ${C.border}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
+          <div style={{ width: 60, height: 60, borderRadius: "50%", background: C.purpleLight, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+            {customer.profile_picture ? (
+              <img src={customer.profile_picture} alt="profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ) : (
+              <User size={30} color={C.purple} />
+            )}
+          </div>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.textPrimary }}>
+              {customer.first_name} {customer.last_name}
+            </h3>
+            <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+              <TypeBadge type="customer" />
+              <StatusBadge status={customer.status || "active"} />
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+          {[
+            ["Email", customer.email, Mail],
+            ["Phone", customer.phoneNo || "—", Phone],
+            ["Address", customer.address || "—", MapPin],
+            ["Member Since", fmt(customer.createdAt), CalendarIcon],
+            ["Date of Birth", fmt(customer.date_of_birth), CalendarIcon],
+            ["Gender", customer.gender || "—", User],
+          ].map(([label, value, Icon]) => (
+            <div key={label} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: C.bg, borderRadius: 10 }}>
+              <Icon size={16} color={C.textMuted} />
+              <div>
+                <div style={{ fontSize: 11, color: C.textMuted }}>{label}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary }}>{value || "—"}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Statistics Cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+        {[
+          ["Total Tasks", tasks.length, C.brand, ShoppingBag],
+          ["Completed", completedTasks, C.green, CheckCircle],
+          ["Cancelled", cancelledTasks, C.red, XCircle],
+          ["Total Spent", `NPR ${totalSpent.toLocaleString()}`, C.purple, DollarSign],
+        ].map(([label, value, color, Icon]) => (
+          <div key={label} style={{ background: C.surface, borderRadius: 12, padding: 14, textAlign: "center", border: `1px solid ${C.border}` }}>
+            <Icon size={18} color={color} style={{ marginBottom: 6 }} />
+            <div style={{ fontSize: 20, fontWeight: 700, color }}>{value}</div>
+            <div style={{ fontSize: 11, color: C.textMuted }}>{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Task History List */}
+      <div style={{ background: C.surface, borderRadius: 16, padding: 20, border: `1px solid ${C.border}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+          <History size={18} color={C.brand} />
+          <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.textPrimary }}>Task History ({tasks.length})</h4>
+        </div>
+        {tasks.length === 0 ? (
+          <p style={{ textAlign: "center", color: C.textMuted, padding: 20 }}>No tasks found</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, maxHeight: 400, overflowY: "auto" }}>
+            {tasks.map((task, idx) => (
+              <div key={idx} style={{ padding: 14, background: C.bg, borderRadius: 12, border: `1px solid ${C.border}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, color: C.textPrimary }}>{task.taskName || "Untitled Task"}</div>
+                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>ID: {shortId(task._id)}</div>
+                  </div>
+                  <StatusBadge status={task.status} />
+                </div>
+                <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 8 }}>
+                  {[
+                    ["Date", task.serviceDate ? fmt(task.serviceDate) : "—"],
+                    ["Time", task.serviceTime || "—"],
+                    ["Amount", `NPR ${task.totalCost?.toLocaleString() || 0}`],
+                    ["Worker", task.assignedWorkerId ? shortId(task.assignedWorkerId) : "—"],
+                  ].map(([label, val]) => (
+                    <div key={label}>
+                      <div style={{ fontSize: 10, color: C.textMuted }}>{label}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: C.textSecond }}>{val}</div>
+                    </div>
+                  ))}
+                </div>
+                {task.cancelReason && (
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.divider}`, fontSize: 11, color: C.red }}>
+                    Cancelled: {task.cancelReason}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// const RefundAmountModal = ({ report, onClose, onConfirm }) => {
+//   const [workerAmount, setWorkerAmount] = useState("");
+//   const [customerAmount, setCustomerAmount] = useState("");
+//   const [loading, setLoading] = useState(false);
+
+//   const totalAmount = report.totalCost || report.amount || 0;
+  
+//   const handleSubmit = async () => {
+//     const workerAmt = parseFloat(workerAmount) || 0;
+//     const customerAmt = parseFloat(customerAmount) || 0;
+    
+//     if (workerAmt + customerAmt > totalAmount) {
+//       alert("Total refund amount cannot exceed the task amount!");
+//       return;
+//     }
+    
+//     setLoading(true);
+//     try {
+//       // Call your refund API here
+//       const response = await apiCall(`${BASE}/refunds/create`, {
+//         method: "POST",
+//         body: JSON.stringify({
+//           reportId: report.id,
+//           taskId: report.taskId,
+//           workerRefundAmount: workerAmt,
+//           customerRefundAmount: customerAmt,
+//           totalAmount: totalAmount,
+//         }),
+//       });
+      
+//       if (response.ok) {
+//         onConfirm({ workerAmount: workerAmt, customerAmount: customerAmt });
+//         onClose();
+//       } else {
+//         alert("Failed to create refund");
+//       }
+//     } catch (err) {
+//       alert("Error: " + err.message);
+//     } finally {
+//       setLoading(false);
+//     }
+//   };
+
+//   return (
+//     <div style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+//       <div style={{ background: C.surface, borderRadius: 24, padding: 28, width: 450, maxWidth: "90%", boxShadow: "0 25px 50px rgba(0,0,0,0.3)" }}>
+//         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+//           <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: C.textPrimary }}>Request Refund</h3>
+//           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+//             <X size={20} color={C.textMuted} />
+//           </button>
+//         </div>
+        
+//         <div style={{ background: C.bg, borderRadius: 12, padding: 16, marginBottom: 20 }}>
+//           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+//             <span style={{ fontSize: 13, color: C.textMuted }}>Total Task Amount:</span>
+//             <span style={{ fontSize: 16, fontWeight: 700, color: C.textPrimary }}>NPR {totalAmount.toLocaleString()}</span>
+//           </div>
+//         </div>
+        
+//         <div style={{ marginBottom: 20 }}>
+//           <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 8 }}>
+//             <Briefcase size={14} style={{ display: "inline", marginRight: 6 }} />
+//             Refund to Worker
+//           </label>
+//           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+//             <span style={{ fontSize: 14, color: C.textSecond }}>NPR</span>
+//             <input
+//               type="number"
+//               value={workerAmount}
+//               onChange={(e) => setWorkerAmount(e.target.value)}
+//               placeholder="Enter amount"
+//               min="0"
+//               max={totalAmount}
+//               style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 14, outline: "none", fontFamily: "inherit" }}
+//               onFocus={e => e.target.style.borderColor = C.brand}
+//               onBlur={e => e.target.style.borderColor = C.border}
+//             />
+//           </div>
+//         </div>
+        
+//         <div style={{ marginBottom: 24 }}>
+//           <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 8 }}>
+//             <User size={14} style={{ display: "inline", marginRight: 6 }} />
+//             Refund to Customer
+//           </label>
+//           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+//             <span style={{ fontSize: 14, color: C.textSecond }}>NPR</span>
+//             <input
+//               type="number"
+//               value={customerAmount}
+//               onChange={(e) => setCustomerAmount(e.target.value)}
+//               placeholder="Enter amount"
+//               min="0"
+//               max={totalAmount}
+//               style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 14, outline: "none", fontFamily: "inherit" }}
+//               onFocus={e => e.target.style.borderColor = C.brand}
+//               onBlur={e => e.target.style.borderColor = C.border}
+//             />
+//           </div>
+//         </div>
+        
+//         <div style={{ background: C.aiLight, borderRadius: 10, padding: 12, marginBottom: 24 }}>
+//           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+//             <span style={{ color: C.textMuted }}>Total Refund:</span>
+//             <span style={{ fontWeight: 700, color: C.aiAccent }}>
+//               NPR {(parseFloat(workerAmount || 0) + parseFloat(customerAmount || 0)).toLocaleString()}
+//             </span>
+//           </div>
+//           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginTop: 6 }}>
+//             <span style={{ color: C.textMuted }}>Remaining:</span>
+//             <span style={{ color: totalAmount - (parseFloat(workerAmount || 0) + parseFloat(customerAmount || 0)) < 0 ? C.red : C.green }}>
+//               NPR {(totalAmount - (parseFloat(workerAmount || 0) + parseFloat(customerAmount || 0))).toLocaleString()}
+//             </span>
+//           </div>
+//         </div>
+        
+//         <div style={{ display: "flex", gap: 12 }}>
+//           <button onClick={onClose} style={{ flex: 1, padding: "12px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, cursor: "pointer", fontSize: 14, color: C.textSecond, fontFamily: "inherit" }}>
+//             Cancel
+//           </button>
+//           <button onClick={handleSubmit} disabled={loading} style={{ flex: 1, padding: "12px", borderRadius: 10, border: "none", background: C.green, color: "white", fontWeight: 600, fontSize: 14, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: loading ? 0.7 : 1 }}>
+//             {loading ? <><RefreshCw size={14} style={{ animation: "spin 1s linear infinite" }} /> Processing...</> : "Confirm Refund"}
+//           </button>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// };
+
+// ── Worker History Panel ────────────────────────────────────────────────────
+const WorkerHistoryPanel = ({ workerId, workerEmail }) => {
+  const [worker, setWorker] = useState(null);
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!workerId && !workerEmail) return;
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        // Fetch worker details by email (since workerId is email)
+        const workerRes = await apiCall(`${BASE}/worker/${workerId}`);
+        if (workerRes.ok) {
+          const workerData = await workerRes.json();
+          setWorker(workerData);
+        }
+        
+        // Fetch worker's tasks
+        const tasksRes = await apiCall(`${BASE}/tasks/worker/${workerId}`);
+        if (tasksRes.ok) {
+          const tasksData = await tasksRes.json();
+          setTasks(tasksData.tasks || []);
+        }
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, [workerId, workerEmail]);
+
+  // Helper function to safely get skill name from object or string
+  const getSkillName = (skill) => {
+    if (!skill) return "";
+    if (typeof skill === 'string') return skill;
+    if (typeof skill === 'object') {
+      return skill.name || skill.skillName || JSON.stringify(skill);
+    }
+    return String(skill);
+  };
+
+  if (loading) return <div style={{ padding: 40, textAlign: "center" }}>Loading worker history...</div>;
+  if (error) return <div style={{ padding: 40, textAlign: "center", color: C.red }}>Error: {error}</div>;
+  if (!worker) return <div style={{ padding: 40, textAlign: "center", color: C.textMuted }}>No worker history available</div>;
+
+  const completedTasks = tasks.filter(t => t.status === "completed").length;
+  const cancelledTasks = tasks.filter(t => t.status === "cancelled").length;
+  const totalEarned = tasks.reduce((sum, t) => sum + (t.totalCost || 0), 0);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Worker Profile Summary */}
+      <div style={{ background: C.surface, borderRadius: 16, padding: 20, border: `1px solid ${C.border}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
+          <div style={{ width: 60, height: 60, borderRadius: "50%", background: C.blueLight, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+            {worker.profilePhoto ? (
+              <img src={worker.profilePhoto} alt="profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ) : (
+              <Briefcase size={30} color={C.blue} />
+            )}
+          </div>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.textPrimary }}>
+              {worker.firstName} {worker.lastName}
+            </h3>
+            <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+              <TypeBadge type="worker" />
+              <StatusBadge status={worker.status || "active"} />
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+          {[
+            ["Email", worker.email, Mail],
+            ["Phone", worker.phoneNo || worker.phone_no ||  "—", Phone],
+            ["Task Type", worker.taskType || "—", Briefcase],
+            ["Base Price", `NPR ${worker.basePrice?.toLocaleString() || 0}`, DollarSign],
+            ["Rating", `⭐ ${worker.rating || worker.ratings || 0}`, Star],
+            ["Completed Tasks", worker.noOfCompletedTask || 0, CheckCircle],
+            ["Total Earnings", `NPR ${worker.total_earnings?.toLocaleString() || 0}`, DollarSign],
+            ["Status", worker.status || "active", User],
+          ].map(([label, value, Icon]) => (
+            <div key={label} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: C.bg, borderRadius: 10 }}>
+              <Icon size={16} color={C.textMuted} />
+              <div>
+                <div style={{ fontSize: 11, color: C.textMuted }}>{label}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary }}>{value}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        {worker.skills && worker.skills.length > 0 && (
+          <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${C.divider}` }}>
+            <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 8 }}>Skills</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {worker.skills.map((skill, idx) => (
+                <span key={idx} style={{ padding: "4px 10px", background: C.blueLight, color: C.blue, borderRadius: 20, fontSize: 11, fontWeight: 600 }}>
+                  {getSkillName(skill)}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Statistics Cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+        {[
+          ["Total Tasks", tasks.length, C.brand, ShoppingBag],
+          ["Completed", completedTasks, C.green, CheckCircle],
+          ["Cancelled", cancelledTasks, C.red, XCircle],
+          ["Total Earned", `NPR ${totalEarned.toLocaleString()}`, C.green, DollarSign],
+        ].map(([label, value, color, Icon]) => (
+          <div key={label} style={{ background: C.surface, borderRadius: 12, padding: 14, textAlign: "center", border: `1px solid ${C.border}` }}>
+            <Icon size={18} color={color} style={{ marginBottom: 6 }} />
+            <div style={{ fontSize: 20, fontWeight: 700, color }}>{value}</div>
+            <div style={{ fontSize: 11, color: C.textMuted }}>{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Task History List */}
+      <div style={{ background: C.surface, borderRadius: 16, padding: 20, border: `1px solid ${C.border}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+          <History size={18} color={C.brand} />
+          <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.textPrimary }}>Assigned Tasks ({tasks.length})</h4>
+        </div>
+        {tasks.length === 0 ? (
+          <p style={{ textAlign: "center", color: C.textMuted, padding: 20 }}>No tasks assigned</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, maxHeight: 400, overflowY: "auto" }}>
+            {tasks.map((task, idx) => (
+              <div key={idx} style={{ padding: 14, background: C.bg, borderRadius: 12, border: `1px solid ${C.border}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, color: C.textPrimary }}>{task.taskName || "Untitled Task"}</div>
+                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>ID: {shortId(task._id)}</div>
+                  </div>
+                  <StatusBadge status={task.status} />
+                </div>
+                <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 8 }}>
+                  {[
+                    ["Date", task.serviceDate ? fmt(task.serviceDate) : "—"],
+                    ["Time", task.serviceTime || "—"],
+                    ["Amount", `NPR ${task.totalCost?.toLocaleString() || 0}`],
+                    ["Customer", task.userId ? shortId(task.userId) : "—"],
+                  ].map(([label, val]) => (
+                    <div key={label}>
+                      <div style={{ fontSize: 10, color: C.textMuted }}>{label}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: C.textSecond }}>{val}</div>
+                    </div>
+                  ))}
+                </div>
+                {task.payment_status && (
+                  <div style={{ marginTop: 8, fontSize: 11, color: task.payment_status === "paid" ? C.green : C.brand }}>
+                    Payment: {task.payment_status} · Escrow: {task.escrow_status}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ── Task History Panel ──────────────────────────────────────────────────────
+const TaskHistoryPanel = ({ taskId }) => {
+  const [task, setTask] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!taskId) return;
+    const loadTask = async () => {
+      setLoading(true);
+      try {
+        const res = await apiCall(`${BASE}/task/${taskId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setTask(data);
+        } else {
+          setError("Failed to load task details");
+        }
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadTask();
+  }, [taskId]);
+
+  if (loading) return <div style={{ padding: 40, textAlign: "center" }}>Loading task details...</div>;
+  if (error) return <div style={{ padding: 40, textAlign: "center", color: C.red }}>Error: {error}</div>;
+  if (!task) return <div style={{ padding: 40, textAlign: "center", color: C.textMuted }}>No task details available</div>;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Task Header */}
+      <div style={{ background: C.surface, borderRadius: 16, padding: 20, border: `1px solid ${C.border}` }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.textPrimary }}>{task.taskName || "Task Details"}</h3>
+            <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>ID: {shortId(task._id)}</div>
+          </div>
+          <StatusBadge status={task.status} />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+          {[
+            ["Task Type", task.taskType || "—", Briefcase],
+            ["Service", task.selectedService || "—", Award],
+            ["Description", task.taskDescrip || "—", FileText],
+            ["Address", task.address || "—", MapPin],
+            ["Scheduled Date", task.serviceDate ? fmt(task.serviceDate) : "—", CalendarIcon],
+            ["Scheduled Time", task.serviceTime || "—", Clock],
+            ["Customer", task.userId ? shortId(task.userId) : "—", User],
+            ["Worker", task.assignedWorkerId ? shortId(task.assignedWorkerId) : "—", Briefcase],
+          ].map(([label, value, Icon]) => (
+            <div key={label} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: C.bg, borderRadius: 10 }}>
+              <Icon size={16} color={C.textMuted} />
+              <div>
+                <div style={{ fontSize: 11, color: C.textMuted }}>{label}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary }}>{value}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Pricing Section */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+        {[
+          ["Base Price", `NPR ${task.basePrice?.toLocaleString() || 0}`, C.brand],
+          ["Additional Cost", `NPR ${task.additionalCost?.toLocaleString() || 0}`, C.purple],
+          ["Total Cost", `NPR ${task.totalCost?.toLocaleString() || 0}`, C.green],
+        ].map(([label, value, color]) => (
+          <div key={label} style={{ background: C.surface, borderRadius: 12, padding: 14, textAlign: "center", border: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4 }}>{label}</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color }}>{value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Cancellation/Refund Info */}
+      {task.cancelledAt && (
+        <div style={{ background: C.redLight, borderRadius: 16, padding: 20, border: `1px solid ${C.red}30` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <XCircle size={18} color={C.red} />
+            <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.red }}>Cancellation Details</h4>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+            {[
+              ["Cancelled At", task.cancelledAt ? fmt(task.cancelledAt) : "—"],
+              ["Cancelled By", task.cancelledBy || "—"],
+              ["Refund Amount", `NPR ${task.refundAmount?.toLocaleString() || 0}`],
+              ["Penalty", `NPR ${task.penaltyAmount?.toLocaleString() || 0}`],
+              ["Refund Status", task.refundStatus || "—"],
+              ["Cancel Reason", task.cancelReason || "—"],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <div style={{ fontSize: 11, color: C.textMuted }}>{label}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: label === "Refund Status" && value === "approved" ? C.green : C.textPrimary }}>
+                  {value}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Payment Details */}
+      {task.payment_method && (
+        <div style={{ background: C.surface, borderRadius: 16, padding: 20, border: `1px solid ${C.border}` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <CreditCard size={18} color={C.brand} />
+            <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.textPrimary }}>Payment Details</h4>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+            {[
+              ["Method", task.payment_method || "—"],
+              ["Transaction UUID", task.esewa_transaction_uuid || "—"],
+              ["Reference ID", task.esewa_ref_id || "—"],
+              ["Status", task.payment_status || "—"],
+              ["Escrow Status", task.escrow_status || "—"],
+              ["Paid At", task.paid_at ? fmt(task.paid_at) : "—"],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <div style={{ fontSize: 11, color: C.textMuted }}>{label}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: value === "paid" ? C.green : value === "held" ? C.brand : C.textPrimary }}>
+                  {value || "—"}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Note */}
+      {task.note && (
+        <div style={{ background: C.surface, borderRadius: 16, padding: 20, border: `1px solid ${C.border}` }}>
+          <h4 style={{ margin: 0, marginBottom: 12, fontSize: 15, fontWeight: 700, color: C.textPrimary }}>Note</h4>
+          <p style={{ margin: 0, fontSize: 14, color: C.textSecond, lineHeight: 1.6 }}>{task.note}</p>
+        </div>
+      )}
+    </div>
+  );
+};
 
 // ── AI Analysis Panel ─────────────────────────────────────────────────────────
 const AIAnalysisPanel = ({ report }) => {
@@ -697,6 +1285,120 @@ const AIAnalysisPanel = ({ report }) => {
 };
 
 // ── Report Detail Modal ───────────────────────────────────────────────────────
+// ── Refund Amount Modal ──────────────────────────────────────────────────────────────
+const RefundAmountModal = ({ report, onClose, onConfirm }) => {
+  // Initialize with existing amounts if available, otherwise empty
+  const [workerAmount, setWorkerAmount] = useState(report.amount_worker || "");
+  const [customerAmount, setCustomerAmount] = useState(report.amount_customer || "");
+  const [loading, setLoading] = useState(false);
+
+  const totalAmount = report.totalCost || report.amount || 0;
+  
+  const handleSubmit = async () => {
+    const workerAmt = parseFloat(workerAmount) || 0;
+    const customerAmt = parseFloat(customerAmount) || 0;
+    
+    if (workerAmt + customerAmt > totalAmount) {
+      alert("Total refund amount cannot exceed the task amount!");
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      // Changed to a single "upsert" or "update" endpoint
+      // Using taskId ensures we only ever have ONE record for this task
+      const response = await apiCall(`${BASE}/refunds/upsert/${report.taskId}`, {
+  method: "PATCH",
+  body: JSON.stringify({
+    // ENSURE THESE NAMES MATCH THE PYTHON SCHEMA ABOVE
+    amount_customer: parseFloat(customerAmount) || 0,
+    amount_worker: parseFloat(workerAmount) || 0,
+    reason: report.reason || "Adjustment",
+    requested_by: "admin",
+    status: "refund_in_progress" 
+  }),
+});
+      
+      if (response.ok) {
+        const updatedDoc = await response.json();
+        onConfirm(updatedDoc); // Pass the updated document back to parent
+        onClose();
+      } else {
+        alert("Failed to update refund record");
+      }
+    } catch (err) {
+      alert("Error: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: C.surface, borderRadius: 24, padding: 28, width: 450, maxWidth: "90%", boxShadow: "0 25px 50px rgba(0,0,0,0.3)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: C.textPrimary }}>Adjust Refund</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+            <X size={20} color={C.textMuted} />
+          </button>
+        </div>
+        
+        <div style={{ background: C.bg, borderRadius: 12, padding: 16, marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+            <span style={{ fontSize: 13, color: C.textMuted }}>Total Task Amount:</span>
+            <span style={{ fontSize: 16, fontWeight: 700, color: C.textPrimary }}>NPR {totalAmount.toLocaleString()}</span>
+          </div>
+        </div>
+        
+        {/* Input for Worker */}
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 8 }}>
+            <Briefcase size={14} style={{ display: "inline", marginRight: 6 }} />
+            Adjustment: Worker Payout
+          </label>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 14, color: C.textSecond }}>NPR</span>
+            <input
+              type="number"
+              value={workerAmount}
+              onChange={(e) => setWorkerAmount(e.target.value)}
+              placeholder="0.00"
+              style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 14 }}
+            />
+          </div>
+        </div>
+        
+        {/* Input for Customer */}
+        <div style={{ marginBottom: 24 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 8 }}>
+            <User size={14} style={{ display: "inline", marginRight: 6 }} />
+            Adjustment: Customer Refund
+          </label>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 14, color: C.textSecond }}>NPR</span>
+            <input
+              type="number"
+              value={customerAmount}
+              onChange={(e) => setCustomerAmount(e.target.value)}
+              placeholder="0.00"
+              style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 14 }}
+            />
+          </div>
+        </div>
+        
+        <div style={{ display: "flex", gap: 12 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "12px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, cursor: "pointer" }}>
+            Cancel
+          </button>
+          <button onClick={handleSubmit} disabled={loading} style={{ flex: 1, padding: "12px", borderRadius: 10, border: "none", background: C.green, color: "white", fontWeight: 600, cursor: loading ? "not-allowed" : "pointer" }}>
+            {loading ? "Updating..." : "Update Amount"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ReportDetailModal = ({ report, onClose, onResolve, onDecline, onDelete, onRefundCreated }) => {
   const [adminNote,       setAdminNote]       = useState(report.adminNote || "");
   const [confirm,         setConfirm]         = useState(null);
@@ -719,6 +1421,14 @@ const ReportDetailModal = ({ report, onClose, onResolve, onDecline, onDelete, on
     load();
   }, [report.id]);
 
+  const handleRefundConfirm = async (refundData) => {
+    setRefundCount(prev => prev + 1);
+    if (onRefundCreated) {
+      onRefundCreated(refundData);
+    }
+    setShowRefundModal(false);
+  };
+
   const DetailRow = ({ icon: Icon, label, value }) => (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "8px 0", borderBottom: `1px solid ${C.divider}` }}>
       <div style={{ width: 32, height: 32, borderRadius: 10, background: C.bg, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -737,7 +1447,7 @@ const ReportDetailModal = ({ report, onClose, onResolve, onDecline, onDelete, on
         onClick={e => { if (e.target === backdropRef.current) onClose(); }}
         style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(28,20,16,0.5)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
         <div onClick={e => e.stopPropagation()}
-          style={{ background: C.surface, borderRadius: 28, width: 800, height: "92vh", display: "flex", flexDirection: "column", boxShadow: "0 25px 60px rgba(0,0,0,0.3)", animation: "scaleIn 0.2s ease", overflow: "hidden" }}>
+          style={{ background: C.surface, borderRadius: 28, width: 900, height: "92vh", display: "flex", flexDirection: "column", boxShadow: "0 25px 60px rgba(0,0,0,0.3)", animation: "scaleIn 0.2s ease", overflow: "hidden" }}>
 
           {/* Header */}
           <div style={{ background: O.header, paddingTop: "20px", paddingLeft: "28px", paddingRight: "28px", flexShrink: 0, position: "relative" }}>
@@ -764,13 +1474,16 @@ const ReportDetailModal = ({ report, onClose, onResolve, onDecline, onDelete, on
               <StatusBadge status={report.status} />
               <ReasonBadge reason={report.reason} />
             </div>
-            <div style={{ display: "flex", gap: 4 }}>
+            <div style={{ display: "flex", gap: 4, overflowX: "auto" }}>
               {[
-                { key: "details",     icon: FileText, label: "Details"     },
-                { key: "ai-analysis", icon: Brain,    label: "AI Analysis" },
+                { key: "details",       icon: FileText,     label: "Details" },
+                { key: "customer-history", icon: User,      label: "Customer History" },
+                { key: "worker-history",  icon: Briefcase,  label: "Worker History" },
+                { key: "task-history",    icon: TrendingUp, label: "Task History" },
+                { key: "ai-analysis",     icon: Brain,      label: "AI Analysis" },
               ].map(({ key, icon: Icon, label }) => (
                 <button key={key} onClick={() => setActiveTab(key)}
-                  style={{ padding: "8px 16px", borderRadius: "20px 20px 0 0", border: "none", background: activeTab === key ? "white" : "rgba(255,255,255,0.15)", color: activeTab === key ? O[600] : "white", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit", transition: "all 0.15s" }}>
+                  style={{ padding: "8px 16px", borderRadius: "20px 20px 0 0", border: "none", background: activeTab === key ? "white" : "rgba(255,255,255,0.15)", color: activeTab === key ? O[600] : "white", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit", transition: "all 0.15s", whiteSpace: "nowrap" }}>
                   <Icon size={14} />{label}
                 </button>
               ))}
@@ -791,7 +1504,7 @@ const ReportDetailModal = ({ report, onClose, onResolve, onDecline, onDelete, on
                 <XCircle size={16} /> Decline
               </button>
 
-              {/* Request Refund — shows badge if refunds already exist */}
+              {/* Request Refund — opens refund amount modal */}
               <button
                 onClick={() => setShowRefundModal(true)}
                 style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: "#2E9E8E", color: "white", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "inherit", position: "relative" }}>
@@ -818,15 +1531,15 @@ const ReportDetailModal = ({ report, onClose, onResolve, onDecline, onDelete, on
               <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                   {[
-                    { label: "Filed By", id: report.reporterId, type: report.reporterType },
-                    { label: "Reported", id: report.reportedId,  type: report.reportedType },
-                  ].map(({ label, id, type }) => (
+                    { label: "Filed By", id: report.reporterId, type: report.reporterType, email: report.reporterEmail },
+                    { label: "Reported", id: report.reportedId,  type: report.reportedType, email: report.reportedEmail },
+                  ].map(({ label, id, type, email }) => (
                     <div key={label} style={{ background: C.surface, borderRadius: 16, padding: 18, border: `1px solid ${C.border}` }}>
                       <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 12 }}>{label}</div>
                       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                         <Avatar type={type} size={44} />
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary, wordBreak: "break-all", marginBottom: 4 }}>{id}</div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary, wordBreak: "break-all", marginBottom: 4 }}>{id || email || "—"}</div>
                           <TypeBadge type={type} />
                         </div>
                       </div>
@@ -884,6 +1597,12 @@ const ReportDetailModal = ({ report, onClose, onResolve, onDecline, onDelete, on
                   </button>
                 )}
               </div>
+            ) : activeTab === "customer-history" ? (
+              <CustomerHistoryPanel customerId={report.reporterId} customerEmail={report.reporterEmail} />
+            ) : activeTab === "worker-history" ? (
+              <WorkerHistoryPanel workerId={report.reportedId} workerEmail={report.reportedEmail} />
+            ) : activeTab === "task-history" ? (
+              <TaskHistoryPanel taskId={report.taskId} />
             ) : (
               <AIAnalysisPanel report={report} />
             )}
@@ -891,25 +1610,17 @@ const ReportDetailModal = ({ report, onClose, onResolve, onDecline, onDelete, on
         </div>
       </div>
 
-      {/* CreateRefundModal — passes all required fields to match create_refund_doc signature */}
-      {/* {showRefundModal && (
-        <CreateRefundModal
+      {/* Refund Amount Modal */}
+      {showRefundModal && (
+        <RefundAmountModal
           report={{
-            id:           report.id,
-            taskId:       report.taskId   ?? report.task_id   ?? null,
-            reporterId:   report.reporterId,
-            reportedId:   report.reportedId,
-            reporterType: report.reporterType,
-            reportedType: report.reportedType,
-            reason:       report.reason,
+            ...report,
+            totalCost: report.totalCost || report.amount || 0,
           }}
           onClose={() => setShowRefundModal(false)}
-          onCreated={(newRefund) => {
-            setRefundCount(c => c + 1);
-            onRefundCreated?.(newRefund);
-          }}
+          onConfirm={handleRefundConfirm}
         />
-      )} */}
+      )}
 
       {confirm && (
         <ConfirmDialog
@@ -980,6 +1691,7 @@ const ReportRow = ({ report, onSelect, onResolve, onDecline, onDelete }) => {
         </div>
       </td>
     </tr>
+    
   );
 };
 
@@ -1028,7 +1740,7 @@ export default function ReportManagement() {
   };
 
   const fetchStats = async () => {
-    try { const res = await apiCall(`${BASE}/reports/stats`); if (res.ok) setStats(await res.json()); }
+    try { const res = await fetch(`${BASE}/reports/stats`); if (res.ok) setStats(await res.json()); }
     catch {}
   };
 
@@ -1045,22 +1757,84 @@ export default function ReportManagement() {
   }, [filterStatus, filterReporterType, filterReportedType]);
 
   const handleResolve = async (reportId, adminNote) => {
-    const res = await apiCall(`${BASE}/reports/${reportId}/status`, { method: "PATCH", body: JSON.stringify({ status: "resolved", adminNote }) });
-    if (!res.ok) { showToast("Failed to resolve", "error"); return; }
-    setReports(prev => prev.map(r => r.id === reportId ? { ...r, status: "resolved", adminNote } : r));
-    if (selectedReport?.id === reportId) setSelectedReport(p => ({ ...p, status: "resolved", adminNote }));
-    setStats(p => ({ ...p, pending: p.pending - 1, resolved: p.resolved + 1 }));
-    showToast("Report resolved");
-  };
+  // Try JSON format first (most REST APIs expect this)
+  let res = await apiCall(`${BASE}/reports/${reportId}/status`, { 
+    method: "PATCH", 
+    body: JSON.stringify({ status: "resolved", adminNote }),
+    headers: {
+      "Content-Type": "application/json"
+    }
+  });
+  
+  // If JSON fails with 422, try form-urlencoded (like Swagger)
+  if (res.status === 422) {
+    const formData = new URLSearchParams();
+    formData.append("status", "resolved");
+    if (adminNote) formData.append("adminNote", adminNote);
+    
+    res = await fetch(`${BASE}/reports/${reportId}/status`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        ...(localStorage.getItem("access_token") ? { Authorization: `Bearer ${localStorage.getItem("access_token")}` } : {})
+      },
+      body: formData
+    });
+  }
+  
+  if (!res.ok) { 
+    const errorText = await res.text();
+    console.error("Failed to resolve:", errorText);
+    showToast("Failed to resolve", "error"); 
+    return; 
+  }
+  
+  setReports(prev => prev.map(r => r.id === reportId ? { ...r, status: "resolved", adminNote } : r));
+  if (selectedReport?.id === reportId) setSelectedReport(p => ({ ...p, status: "resolved", adminNote }));
+  setStats(p => ({ ...p, pending: p.pending - 1, resolved: p.resolved + 1 }));
+  showToast("Report resolved");
+};
 
   const handleDecline = async (reportId, adminNote) => {
-    const res = await apiCall(`${BASE}/reports/${reportId}/status`, { method: "PATCH", body: JSON.stringify({ status: "declined", adminNote }) });
-    if (!res.ok) { showToast("Failed to decline", "error"); return; }
+    // Try JSON format first
+    let res = await apiCall(`${BASE}/reports/${reportId}/status`, { 
+      method: "PATCH", 
+      body: JSON.stringify({ status: "declined", adminNote }),
+      headers: {
+        "Content-Type": "application/json"
+      }
+    });
+    
+    // If JSON fails with 422, try form-urlencoded (like Swagger)
+    if (res.status === 422) {
+      const formData = new URLSearchParams();
+      formData.append("status", "declined");
+      if (adminNote) formData.append("adminNote", adminNote);
+      
+      res = await fetch(`${BASE}/reports/${reportId}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          ...(localStorage.getItem("access_token") ? { Authorization: `Bearer ${localStorage.getItem("access_token")}` } : {})
+        },
+        body: formData
+      });
+    }
+    
+    if (!res.ok) { 
+      const errorText = await res.text();
+      console.error("Failed to decline:", errorText);
+      showToast("Failed to decline", "error"); 
+      return; 
+    }
+    
     setReports(prev => prev.map(r => r.id === reportId ? { ...r, status: "declined", adminNote } : r));
     if (selectedReport?.id === reportId) setSelectedReport(p => ({ ...p, status: "declined", adminNote }));
     setStats(p => ({ ...p, pending: p.pending - 1, declined: p.declined + 1 }));
     showToast("Report declined");
   };
+
+ 
 
   const handleDelete = async (reportId) => {
     setConfirm({

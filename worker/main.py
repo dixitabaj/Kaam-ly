@@ -3,7 +3,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Query, WebSocket, WebSock
 
 
 
-from .router import registerCustomer, refundCustomer,refund, updateProfile, skillVerification, faceVerify, adminPayout, registerWorker, login, otp, createTask, chat, duplicateCheck, faceVerify, recommend_router, esewaVerify, predictTask, review_route, search_router, image_classify_router, report, adminReviewAI, pendingActivities, notifications
+from .router import registerCustomer, dashboard, availability,fraud_router, refundCustomer,refund, updateProfile, skillVerification, faceVerify, adminPayout, registerWorker, login, otp, createTask, chat, duplicateCheck, faceVerify, recommend_router, esewaVerify, predictTask, review_route, search_router, image_classify_router, report, adminReviewAI, pendingActivities, notifications
 from .schemas.schemas import WorkerCreateSchema, WorkerResponseSchema, WorkerStatsResponse
 from worker.config.database import collection, collection_worker, chat_collection, collection_reviews, collection_task, collection_reports
 from .services.hashing import Hash
@@ -19,8 +19,21 @@ from .config import database
 import os
 from dotenv import load_dotenv
 
-# Create FastAPI app instance
-app = FastAPI()
+from contextlib import asynccontextmanager
+from apscheduler.schedulers.background import BackgroundScheduler
+from .repository.taskRepo import auto_release_job
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(auto_release_job, "interval", hours=1,
+                      id="auto_release", max_instances=1)
+    scheduler.start()
+    yield
+    scheduler.shutdown()
+
+app = FastAPI(lifespan=lifespan)
+
+
 
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
@@ -38,6 +51,22 @@ from datetime import datetime
 from bson import ObjectId
 
 
+
+from motor.motor_asyncio import AsyncIOMotorClient
+
+MONGO_URI = "mongodb+srv://dixita1:Shuvechhya@cluster0.ue3kxzv.mongodb.net/?appName=Cluster0"
+
+@app.on_event("startup")
+async def startup_db_client():
+    print("Starting DB...")
+    app.state.db_client = AsyncIOMotorClient(MONGO_URI)
+    app.state.db = app.state.db_client["user"]  # explicitly set your DB name
+    print("DB initialized ✅")
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    print("Closing DB...")
+    app.state.db_client.close()
 
 @app.get("/api/worker/category/{category}/subcategory/{subcategory}")
 async def get_workers_by_subcategory(category: str, subcategory: str):
@@ -105,21 +134,28 @@ async def updateCompletedTask(worker_id, task_id):
         raise HTTPException(status_code=500, detail=str(e))   
 
 
+# REPLACE your websocket endpoint with this:
 @app.websocket("/ws/task-updates/{user_id}")
 async def task_websocket(websocket: WebSocket, user_id: str):
     await manager.connect(user_id, websocket)
     try:
         while True:
-            await asyncio.sleep(25)  # ping every 25 seconds
-            await websocket.send_text(json.dumps({"type": "ping"}))
+            try:
+                # Actually read incoming messages (pings from client)
+                data = await asyncio.wait_for(
+                    websocket.receive_text(), timeout=30
+                )
+                msg = json.loads(data)
+                if msg.get("type") == "ping":
+                    await websocket.send_text(json.dumps({"type": "pong"}))
+            except asyncio.TimeoutError:
+                # No message in 30s — send our own ping to keep alive
+                await websocket.send_text(json.dumps({"type": "ping"}))
     except WebSocketDisconnect:
         await manager.disconnect(user_id, websocket)
     except Exception as e:
-        print(f"⚠️ Task WS error for {user_id}: {e}")
+        print(f"[WS] Error for {user_id}: {e}")
         await manager.disconnect(user_id, websocket)
-
-
-
 
 
 from bson import ObjectId
@@ -820,7 +856,7 @@ load_dotenv()
 BASE_URL            = os.getenv("BASE_URL", "http://localhost:5173")
 ESEWA_MERCHANT_CODE = os.getenv("ESEWA_MERCHANT_CODE", "EPAYTEST")
 ESEWA_SECRET_KEY    = os.getenv("ESEWA_SECRET_KEY", "8gBm/:&EnhH.1/q")
-ESEWA_BASE_URL      = "https://rc-epay.esewa.com.np"  # change to https://epay.esewa.com.np in production
+ESEWA_BASE_URL      = "https://rc.esewa.com.np"  # change to https://epay.esewa.com.np in production
 
 
 # ─────────────────────────────────────────────────────────────
@@ -888,6 +924,8 @@ def build_esewa_form(task_id: str, amount: float, success_path: str) -> dict:
     # ← signature must use the SAME value as the form (int, not float)
     message   = f"total_amount={total_amount},transaction_uuid={transaction_uuid},product_code={ESEWA_MERCHANT_CODE}"
     signature = generate_esewa_signature(message)
+    print("transaction_uuid", transaction_uuid)
+    print("signature", signature)
     
     return {
         "esewa_url": f"{ESEWA_BASE_URL}/api/epay/main/v2/form",
@@ -912,9 +950,9 @@ from datetime import datetime
 from bson import ObjectId
 
 from .services.OAuth2 import get_current_user
-
+from fastapi import Request
 @app.patch("/customer/release/{task_id}", tags=["payment"])
-def release_to_worker(task_id: str, current_user=Depends(get_current_user)):
+def release_to_worker(task_id: str, current_user: dict = Depends(get_current_user)):
     """
     Securely releases escrowed funds to worker.
     Only the task owner (customer) can release.
@@ -1015,7 +1053,9 @@ def pay_via_esewa(task_id: str):
     transaction_uuid = str(uuid.uuid4())
     message          = f"total_amount={total_amount},transaction_uuid={transaction_uuid},product_code={ESEWA_MERCHANT_CODE}"
     signature        = generate_esewa_signature(message)
-
+    print("Generated eSewa signature:", signature)
+    print("eSewa transaction UUID:", transaction_uuid)
+    print("Message for signature:", message)
     collection_task.update_one(
         {"_id": ObjectId(task_id)},
         {"$set": {
@@ -1494,90 +1534,9 @@ async def search_workers_by_name(q: str, limit: int = 5):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
-# main.py — add these imports at the top
-from fastapi import Request
-from fastapi.responses import JSONResponse
-from .repository.fraud_engine import FraudScorer, RiskLevel
-from .router.fraud_router import router as fraud_router
-
-# ── After you create your `app = FastAPI(...)` ──────────────────────────
-
-# Attach your existing MongoDB db to app.state so fraud router can access it
-# (replace `your_db` with whatever your MongoDB db variable is called)
-@app.on_event("startup")
-async def startup():
-    from worker.config.database import collection_task  # already imported at top
-    from pymongo import MongoClient
-    mongo_client = MongoClient("mongodb+srv://dixita1:Shuvechhya@cluster0.ue3kxzv.mongodb.net/?appName=Cluster0")
-    app.state.db = mongo_client["user"]
-
-# ── Fraud middleware — add BEFORE your other middleware ─────────────────
-
-EXEMPT_PATHS = {"/api/auth/login", "/api/auth/register", "/docs", "/openapi.json", "/redoc"}
-
-SENSITIVE_PATHS = {
-    "/api/payments/withdraw",
-    "/api/tasks",            # adjust to your actual routes
-    "/api/reviews",
-}
-
-@app.middleware("http")
-async def fraud_middleware(request: Request, call_next):
-    EXEMPT_PATHS = {"/api/auth/login", "/api/auth/register", "/docs", "/openapi.json", "/redoc", "/chatbot"}
-
-    SENSITIVE_PATHS = {
-        "/customer/release",
-        "/task",
-        "/api/reviews",
-    }
-
-    if request.url.path in EXEMPT_PATHS:
-        return await call_next(request)
-
-    # ── Reuse your existing OAuth2 token extraction ──
-    token = request.headers.get("Authorization", "").strip()
-    if not token.startswith("Bearer "):
-        return await call_next(request)
-    token = token.removeprefix("Bearer ").strip()
-
-    try:
-        # ── Use the SAME secret/algorithm your OAuth2.py uses ──
-        from jose import jwt
-        from worker.services.OAuth2 import SECRET_KEY, ALGORITHM  # ← import your constants
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = str(payload.get("user_id") or payload.get("sub") or "")
-        if not user_id:
-            return await call_next(request)
-    except Exception:
-        return await call_next(request)   # invalid token — let the route handle it
-
-    db     = request.app.state.db
-    cached = db.fraud_reports.find_one({"user_id": user_id})
-
-    # Block suspended accounts on every request
-    if cached and cached.get("risk_level") == RiskLevel.SUSPEND.value:
-        return JSONResponse(
-            {"error": "Your account has been suspended. Contact support@kaamly.com"},
-            status_code=403,
-        )
-
-    # Re-score on sensitive actions only
-    is_sensitive = any(request.url.path.startswith(p) for p in SENSITIVE_PATHS)
-    if is_sensitive:
-        from .repository.fraud_engine import FraudScorer
-        scorer = FraudScorer(db)
-        report = scorer.score(user_id)
-        if report.risk_level == RiskLevel.SUSPEND:
-            return JSONResponse(
-                {"error": "Action blocked due to suspicious activity."},
-                status_code=403,
-            )
-
-    return await call_next(request)
-
 
 # ── Register the fraud admin router ────────────────────────────────────
-app.include_router(fraud_router)
+app.include_router(fraud_router.router, prefix="/api")
 app.include_router(recommend_router.router)
 app.include_router(faceVerify.router, prefix="/api")
 #include routers
@@ -1609,3 +1568,5 @@ from worker.router.taskActions  import tasks_router
 
 app.include_router(notifications_router)
 app.include_router(tasks_router)
+app.include_router(availability.router, prefix="/api")
+app.include_router(dashboard.router, prefix="/api")

@@ -49,12 +49,20 @@ const makeToast = (status, taskName) => {
 
 const useToast = () => {
   const [toasts, setToasts] = useState([]);
-  const add = (toast) => {
+  const shownRef = useRef(new Set());
+
+  const add = useCallback((toast, dedupeKey) => {
+    if (dedupeKey) {
+      if (shownRef.current.has(dedupeKey)) return; // already shown, skip
+      shownRef.current.add(dedupeKey);
+      setTimeout(() => shownRef.current.delete(dedupeKey), 15000);
+    }
     const id = Date.now() + Math.random();
     setToasts(p => [...p, { id, ...toast }]);
     setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 10000);
-  };
-  const remove = id => setToasts(p => p.filter(t => t.id !== id));
+  }, []);
+
+  const remove = useCallback((id) => setToasts(p => p.filter(t => t.id !== id)), []);
   return { toasts, add, remove };
 };
 
@@ -99,10 +107,14 @@ const useReconnectingWebSocket = (url, onMessage) => {
   const timerRef     = useRef(null);
   const activeRef    = useRef(true);
   const onMessageRef = useRef(onMessage);
+  const connectedUrl = useRef(null);
   useEffect(() => { onMessageRef.current = onMessage; }, [onMessage]);
 
   const connect = useCallback(() => {
     if (!activeRef.current || !url) return;
+    if (connectedUrl.current === url && wsRef.current?.readyState === WebSocket.OPEN) return;
+    wsRef.current?.close();
+    connectedUrl.current = url;
     const ws = new WebSocket(url);
     wsRef.current = ws;
     ws.onopen    = () => { retryRef.current = 0; };
@@ -110,16 +122,25 @@ const useReconnectingWebSocket = (url, onMessage) => {
       try { const d = JSON.parse(e.data); if (d.type !== "ping") onMessageRef.current(d); } catch {}
     };
     ws.onclose = () => {
+      connectedUrl.current = null;
       if (!activeRef.current) return;
-      timerRef.current = setTimeout(connect, Math.min(1000 * 2 ** retryRef.current++, 30000));
+      timerRef.current = setTimeout(() => {
+        if (activeRef.current) connect();
+      }, Math.min(1000 * 2 ** retryRef.current++, 30000));
     };
     ws.onerror = () => ws.close();
   }, [url]);
 
   useEffect(() => {
     if (!url) return;
-    activeRef.current = true; connect();
-    return () => { activeRef.current = false; clearTimeout(timerRef.current); wsRef.current?.close(); };
+    activeRef.current = true;
+    connect();
+    return () => {
+      activeRef.current = false;
+      clearTimeout(timerRef.current);
+      wsRef.current?.close();
+      connectedUrl.current = null;
+    };
   }, [url, connect]);
 };
 
@@ -155,7 +176,8 @@ const PaymentDeadlineBadge = ({ confirmedAt }) => {
   const [timeLeft, setTimeLeft] = useState("");
   useEffect(() => {
     if (!confirmedAt) return;
-    const deadline = new Date(confirmedAt).getTime() + 24 * 60 * 60 * 1000;
+    const completedAtUTC = confirmedAt.endsWith("Z") ? confirmedAt : confirmedAt + "Z";
+    const deadline = new Date(completedAtUTC).getTime() + 24 * 60 * 60 * 1000;
     const tick = () => {
       const diff = deadline - Date.now();
       if (diff <= 0) { setTimeLeft("Expired"); return; }
@@ -181,6 +203,54 @@ const PaymentDeadlineBadge = ({ confirmedAt }) => {
       border:     `1px solid ${expired ? "#fecaca" : "#fed7aa"}`,
     }}>
       {expired ? "⚠ Payment overdue" : `Pay within: ${timeLeft}`}
+    </span>
+  );
+};
+
+
+
+// ── Worker/Admin Payment Release Deadline ──────────────────────────────────
+export const ReleaseDeadlineBadge = ({ completedAt }) => {
+  const [timeLeft, setTimeLeft] = useState("");
+
+  useEffect(() => {
+    if (!completedAt) return;
+    const completedAtUTC = completedAt.endsWith("Z") ? completedAt : completedAt + "Z";
+    const deadline = new Date(completedAtUTC).getTime() + 2 * 24 * 60 * 60 * 1000;
+    const tick = () => {
+      const diff = deadline - Date.now();
+      if (diff <= 0) {
+        setTimeLeft("Release overdue");
+        return;
+      }
+      const d = Math.floor(diff / 86400000);
+      const h = Math.floor((diff % 86400000) / 3600000);
+      setTimeLeft(d > 0 ? `${d}d ${h}h left to release` : `${h}h left to release`);
+    };
+
+    tick();
+    const iv = setInterval(tick, 60000); // update every 1 min for efficiency
+    return () => clearInterval(iv);
+  }, [completedAt]);
+
+  if (!timeLeft) return null;
+  
+
+  const overdue = timeLeft === "Release overdue";
+  return (
+    <span style={{
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "4px",
+      padding: "4px 10px",
+      borderRadius: "9999px",
+      fontSize: "11px",
+      fontWeight: "700",
+      background: overdue ? "#fef2f2" : "#ecfdf5",
+      color: overdue ? "#991b1b" : "#065f46",
+      border: `1px solid ${overdue ? "#fecaca" : "#6ee7b7"}`,
+    }}>
+      {overdue ? "⚠ Release overdue" : timeLeft}
     </span>
   );
 };
@@ -434,17 +504,30 @@ const RateReviewModal = ({ task, worker, customerId, onClose, onSubmitted }) => 
   const [error, setError]           = useState(null);
 
   const handleSubmit = async () => {
-    if (!rating) { setError("Please select a rating."); return; }
-    setSubmitting(true); setError(null);
-    try {
-      const res = await fetch(`${API_BASE}/reviews`, {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ taskId:task._id, workerId:task.assignedWorkerId, customerId, rating, comment }),
-      });
-      if (!res.ok) throw new Error("Failed to submit review");
-      onSubmitted(); onClose();
-    } catch(e) { setError(e.message); } finally { setSubmitting(false); }
-  };
+  if (!rating) { setError("Please select a rating."); return; }
+  setSubmitting(true); setError(null);
+  try {
+    const res = await fetch(`${API_BASE}/reviews`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ taskId:task._id, workerId:task.assignedWorkerId, customerId, rating, comment }),
+    });
+
+    // ADD THIS:
+    if (res.status === 409 || res.status === 400) {
+      const data = await res.json();
+      const msg = data.detail || data.message || "";
+      if (msg.toLowerCase().includes("already") || msg.toLowerCase().includes("exist")) {
+        onClose();
+        onSubmitted("already_reviewed"); // pass signal up
+        return;
+      }
+    }
+
+    if (!res.ok) throw new Error("Failed to submit review");
+    onSubmitted("success");
+    onClose();
+  } catch(e) { setError(e.message); } finally { setSubmitting(false); }
+};
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:2000, backdropFilter:"blur(4px)" }} onClick={onClose}>
@@ -672,7 +755,11 @@ const TaskCard = ({
   const paid           = isPaid(task);
   const estimatedHours = task.estimatedHours || task.completionTime;
   const showDeadline   = task.status === "confirmed" && !paid && task.confirmedAt;
-
+  console.log(showDeadline, task.status, paid, task.confirmedAt);
+  console.log(task);
+  // CHANGE:
+  console.log("completedAt raw:", task.completedAt);
+  console.log("completedAt parsed:", new Date(task.completedAt).toLocaleString());
   return (
     <div
       onClick={() => handleViewDetails(task)}
@@ -725,6 +812,12 @@ const TaskCard = ({
               <PaymentDeadlineBadge confirmedAt={task.confirmedAt}/>
             </div>
           )}
+          {task.status === "completed" && !isReleased(task) && task.completedAt && (
+  <div style={{ marginTop:"8px" }}>
+    <ReleaseDeadlineBadge completedAt={task.completedAt}/>
+  </div>
+)}
+           
         </div>
 
         {/* Middle: Details */}
@@ -782,12 +875,39 @@ const TaskCard = ({
                 </Btn>
               </>
             )}
+             {activeTab==="pending"&&(
+              <>
+                {paid
+                  ? <Btn variant="blue" onClick={e=>{e.stopPropagation();openPaymentModal(task._id,task.assignedWorkerId,customerId);}}>View Payment</Btn>
+                  : <Btn variant="primary" onClick={e=>{e.stopPropagation();openPaymentModal(task._id,task.assignedWorkerId,customerId);}}>Make Payment</Btn>
+                }
+                <Btn variant="primary" onClick={e=>{e.stopPropagation();openChat(task);}}>
+                  <MessageCircle size={12}/> Chat
+                </Btn>
+              </>
+            )}
 
             {activeTab==="in_progress"&&(
               <>
                 <Btn variant="blue" onClick={e=>{e.stopPropagation();openPaymentModal(task._id,task.assignedWorkerId,customerId);}}>View Payment</Btn>
                 <Btn variant="primary" onClick={e=>{e.stopPropagation();openChat(task);}}>
                   <MessageCircle size={12}/> Chat
+                </Btn>
+              </>
+            )}
+
+            {activeTab==="declined"&&(
+              <>
+                <Btn variant="red" onClick={e=>{e.stopPropagation();onReport(task);}}>
+                  <Flag size={11}/> Report
+                </Btn>
+              </>
+            )}
+
+             {activeTab==="cancelled"&&(
+              <>
+                <Btn variant="red" onClick={e=>{e.stopPropagation();onReport(task);}}>
+                  <Flag size={11}/> Report
                 </Btn>
               </>
             )}
@@ -934,11 +1054,12 @@ const CustomerTaskPage = () => {
   }, [fetchTasks]);
 
   const handleWsMessage = useCallback((data) => {
-    if (data.type !== "task_status") return;
-    fetchTasks({ syncSelected: true });
-    const toast = makeToast(data.status, data.taskName || null);
-    if (toast) addToast(toast);
-  }, [fetchTasks, addToast]);
+  if (data.type !== "task_status") return;
+  console.log("WS MESSAGE:", data); // check what fields exist
+  fetchTasks({ syncSelected: true });
+  const toast = makeToast(data.status, data.taskName || null);
+  if (toast) addToast(toast, `${data.taskId}-${data.status}`);
+}, [fetchTasks]);
 
   const wsUrl = customerId ? `${WS_BASE}/ws/task-updates/${customerId}` : null;
   useReconnectingWebSocket(wsUrl, handleWsMessage);
@@ -947,17 +1068,14 @@ const CustomerTaskPage = () => {
     let unsubscribe = () => {};
     const setup = async () => {
       try {
-        const { initMessaging } = await import("../../api/notification");
+        const { initMessaging } = await import("../../api/firebase");
         const { onMessage }     = await import("firebase/messaging");
+        
         const messaging = await initMessaging();
         if (!messaging) return;
         unsubscribe = onMessage(messaging, (payload) => {
-          fetchTasks({ syncSelected: true });
-          const status   = payload.data?.status || null;
-          const taskName = payload.data?.taskName || payload.notification?.title || null;
-          if (status) { const t = makeToast(status, taskName); if (t) addToast(t); }
-          else addToast({ color: "#f6a623", message: payload.notification?.body || "New notification." });
-        });
+  fetchTasks({ syncSelected: true });
+});
       } catch {}
     };
     setup();
@@ -970,11 +1088,15 @@ const CustomerTaskPage = () => {
   const confirmReleasePayment = async () => {
     if (!releaseTaskData) return;
     setReleasing(true);
+    console.log("Releasing payment for task:", releaseTaskData);
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token"); 
     try {
       const res  = await fetch(`http://localhost:8000/customer/release/${releaseTaskData._id}`, {
         method: "PATCH",
-        headers: { "Content-Type":"application/json", Authorization:`Bearer ${currentUser?.token}` },
+        headers: { "Content-Type":"application/json", 
+          "Authorization":`Bearer ${token}` },
       });
+      console.log("Release response:", res);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to release payment");
       setReleaseTaskData(null);
@@ -998,9 +1120,12 @@ const CustomerTaskPage = () => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Failed to cancel task");
     await fetchTasks({ syncSelected: true });
-    if (data.penaltyAmount>0) addToast({ color:"#991b1b", message:`Cancelled. Refund NPR ${data.refundAmount?.toFixed(2)} (penalty NPR ${data.penaltyAmount?.toFixed(2)}).` });
-    else if (data.refundAmount>0) addToast({ color:"#065f46", message:`Cancelled. Full refund NPR ${data.refundAmount?.toFixed(2)} coming.` });
-    else addToast({ color:"#991b1b", message:"Task cancelled." });
+    if (data.penaltyAmount > 0)
+      addToast({ color:"#991b1b", message:`Cancelled. Refund NPR ${data.refundAmount?.toFixed(2)} (penalty NPR ${data.penaltyAmount?.toFixed(2)}).` }, `cancel-${taskId}`);
+    else if (data.refundAmount > 0)
+      addToast({ color:"#065f46", message:`Cancelled. Full refund NPR ${data.refundAmount?.toFixed(2)} coming.` }, `cancel-${taskId}`);
+    else
+      addToast({ color:"#991b1b", message:"Task cancelled." }, `cancel-${taskId}`);
   };
 
   const handleViewDetails = task => { setSelectedTask(task); setShowDetailsModal(true); };
@@ -1170,18 +1295,25 @@ const CustomerTaskPage = () => {
           worker={workers[rateReviewTask.assignedWorkerId]}
           customerId={customerId}
           onClose={()=>setRateReviewTask(null)}
-          onSubmitted={()=>showSuccess("Review submitted!")}
+          onSubmitted={(result) => {
+  if (result === "already_reviewed") {
+    addToast({ color: "#b45309", message: "You've already reviewed this worker." });
+  } else {
+    showSuccess("Review submitted!");
+  }
+}}
         />
       )}
       {reportTask&&(
-        <ReportModal
-          task={reportTask}
-          worker={workers[reportTask.assignedWorkerId]}
-          customerId={customerId}
-          onClose={()=>setReportTask(null)}
-          onSubmitted={()=>showSuccess("Report submitted. We'll review it.")}
-        />
-      )}
+  <ReportModal
+    taskId={reportTask._id || reportTask.id}
+    task={reportTask}
+    worker={workers[reportTask.assignedWorkerId]}
+    customerId={customerId}
+    onClose={()=>setReportTask(null)}
+    onSubmitted={()=>showSuccess("Report submitted. We'll review it.")}
+  />
+)}
       {cancelTaskData&&(
         <CancelTaskModal
           task={cancelTaskData}

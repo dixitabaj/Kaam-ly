@@ -23,6 +23,7 @@
 .mp-chat-widget-wrapper .launcher-wrap {
   right: unset !important;
   left: 20px !important;
+  bottom: 20px;
 }
 
 .mp-chat-widget-wrapper .chat-panel {

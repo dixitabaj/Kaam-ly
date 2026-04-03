@@ -102,50 +102,72 @@ async def list_refunds(skip: int = 0, limit: int = 50, status: str | None = None
 
 async def update_refund_status(
     refund_id:  str,
-    status:     str,
-    admin_note: str | None,
+    status:     str = "refunding_process", # Defaulting to your required status
+    admin_note: str | None = None,
 ) -> dict | None:
+    # 1. Fetch current record
     result = await refund_collection.find_one({"_id": refund_id})
     if not result:
+        print(f"[REFUND] Record {refund_id} not found.")
         return None
 
+    now = datetime.now(timezone.utc)
+
+    # 2. Define Update Fields
+    # We use 'updated_at' for every change and 'requested_at' specifically for the trigger
     update_data = {
-        "status":      status,
-        "admin_note":  admin_note,
-        "resolved_at": datetime.now(timezone.utc),
+        "status":       status,
+        "admin_note":   admin_note or result.get("admin_note"),
+        "updated_at":   now,
+        "requested_at": now if status == "refunding_process" else result.get("requested_at"),
     }
+
+    # 3. Persist to Database
     await refund_collection.update_one({"_id": refund_id}, {"$set": update_data})
+    
+    # Sync local object
     result.update(update_data)
     result["id"] = result["_id"]
 
-    # Trigger eSewa refund for the customer portion when admin approves
-    if status == "approved" and result.get("amount_customer", 0) > 0:
-        # Convert task_id to ObjectId if needed
+    # 4. Handle eSewa logic for 'refunding_process'
+    if status == "refunding_process" and result.get("amount_customer", 0) > 0:
         try:
-            tid = ObjectId(result["task_id"])
-        except:
-            tid = result["task_id"]
-        
-        task = await collection_task.find_one({"_id": tid})
-        if task and task.get("esewa_ref_id"):
-            success, response = await process_esewa_refund(
-                task["esewa_ref_id"], result["amount_customer"]
-            )
-            if not success:
-                print(f"[eSewa] Refund failed for refund_id={refund_id}: {response}")
-            else:
-                # Update refund record with eSewa response
-                await refund_collection.update_one(
-                    {"_id": refund_id},
-                    {"$set": {
+            # Ensure task_id is an ObjectId for the query
+            raw_tid = result["task_id"]
+            tid = ObjectId(raw_tid) if isinstance(raw_tid, str) and len(raw_tid) == 24 else raw_tid
+            
+            task = await collection_task.find_one({"_id": tid})
+            
+            if task and task.get("esewa_ref_id"):
+                success, response = await process_esewa_refund(
+                    task["esewa_ref_id"], 
+                    result["amount_customer"]
+                )
+                
+                if success:
+                    # Once eSewa confirms, move from 'refunding_process' to 'completed'
+                    final_update = {
+                        "status": "completed",
                         "esewa_refund_status": "success",
                         "esewa_refund_response": response,
-                        "esewa_refund_at": datetime.now(timezone.utc),
-                    }}
-                )
+                        "esewa_refund_at": now,
+                        "resolved_at": now
+                    }
+                    await refund_collection.update_one({"_id": refund_id}, {"$set": final_update})
+                    result.update(final_update)
+                else:
+                    # If eSewa fails, mark it so admin can see
+                    await refund_collection.update_one(
+                        {"_id": refund_id},
+                        {"$set": {"esewa_refund_status": "failed", "last_error": response}}
+                    )
+            else:
+                print(f"[eSewa] Missing ref_id for Task {tid}")
+
+        except Exception as e:
+            print(f"[eSewa] Error: {e}")
 
     return result
-
 
 async def delete_refund(refund_id: str) -> bool:
     res = await refund_collection.delete_one({"_id": refund_id})

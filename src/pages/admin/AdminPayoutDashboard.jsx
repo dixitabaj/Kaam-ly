@@ -44,6 +44,7 @@ const Pill = ({ status }) => {
     success:          { color: C.green,  bg: C.greenLight,  border: C.greenBorder,  label: "Paid"      },
     paid:             { color: C.green,  bg: C.greenLight,  border: C.greenBorder,  label: "Paid"      },
     refunded:         { color: C.green,  bg: C.greenLight,  border: C.greenBorder,  label: "Refunded"  },
+    approved:         { color: C.green,  bg: C.greenLight,  border: C.greenBorder,  label: "Approved"  },
     partial_refund:   { color: C.amber,  bg: C.amberLight,  border: C.amberBorder,  label: "Partial"   },
     pending:          { color: C.yellow, bg: C.yellowLight, border: C.yellowBorder, label: "Pending"   },
     pending_refund:   { color: C.yellow, bg: C.yellowLight, border: C.yellowBorder, label: "Pending"   },
@@ -142,9 +143,9 @@ export default function AdminPayoutDashboard() {
     setError(null);
     try {
       const [p, h, r] = await Promise.all([
-        fetch(`${API_BASE}/payouts/pending`,        { headers: authHeaders() }).then(r => r.json()),
-        fetch(`${API_BASE}/payouts/history`,        { headers: authHeaders() }).then(r => r.json()),
-        fetch(`${API_BASE}/refunds/pending`,        { headers: authHeaders() }).then(r => r.json()),
+        fetch(`${API_BASE}/payouts/pending`,        { headers: authHeaders() }).then(res => res.json()),
+        fetch(`${API_BASE}/payouts/history`,        { headers: authHeaders() }).then(res => res.json()),
+        fetch(`${API_BASE}/refunds/all`,            { headers: authHeaders() }).then(res => res.json()),
       ]);
       setPending(p.payouts  || []);
       setHistory(h.payouts  || []);
@@ -199,8 +200,8 @@ export default function AdminPayoutDashboard() {
   const totalPending        = pending.reduce((s, p) => s + (p.worker_payout || 0), 0);
   const totalPaid           = history.reduce((s, h) => s + (h.worker_payout || 0), 0);
   const missingEsewa        = pending.filter(p => !p.worker_esewa).length;
-  const pendingRefundTotal  = refunds.filter(r => r.refund_status === "pending_refund").reduce((s, r) => s + (r.refund_amount || 0), 0);
-  const pendingRefundCount  = refunds.filter(r => r.refund_status === "pending_refund").length;
+  const pendingRefundTotal  = refunds.filter(r => ["pending_refund", "approved"].includes(r.refund_status)).reduce((s, r) => s + (r.refund_amount || 0), 0);
+  const pendingRefundCount  = refunds.filter(r => ["pending_refund", "approved"].includes(r.refund_status)).length;
 
   const TABS = [
     { id: "pending",  label: "Pending Payouts", count: pending.length         },
@@ -418,11 +419,12 @@ export default function AdminPayoutDashboard() {
                       <EmptyRow cols={8} msg="No refunds to process 🎉" />
                     ) : refunds.map(r => {
                       const isPending = r.refund_status === "pending_refund";
+                      const isApproved = r.refund_status === "approved";
                       const isLoading = refunding === r.task_id;
                       return (
-                        <tr key={r.task_id} style={{ borderBottom: `1px solid ${C.border}`, background: isPending ? "#fffdf9" : C.surface }}
+                        <tr key={r.task_id} style={{ borderBottom: `1px solid ${C.border}`, background: (isPending || isApproved) ? "#fffdf9" : C.surface }}
                           onMouseEnter={e => e.currentTarget.style.background = C.grayLight}
-                          onMouseLeave={e => e.currentTarget.style.background = isPending ? "#fffdf9" : C.surface}
+                          onMouseLeave={e => e.currentTarget.style.background = (isPending || isApproved) ? "#fffdf9" : C.surface}
                         >
                           <td style={td}>
                             <div style={{ fontWeight: 700, color: C.text }}>{r.task_name}</div>
@@ -474,8 +476,10 @@ export default function AdminPayoutDashboard() {
                                 {isLoading ? <><Spinner size={12} color={C.amber} /> Processing…</> : "✓ Mark Refunded"}
                               </button>
                             ) : (
-                              <span style={{ color: C.muted, fontSize: 12, fontWeight: 600 }}>
-                                {r.refunded_at ? `Done ${new Date(r.refunded_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "Processed"}
+                              <span style={{ color: isApproved ? C.green : C.muted, fontSize: 12, fontWeight: 600 }}>
+                                {isApproved 
+                                  ? `✓ Approved — NPR ${Number(r.refund_amount).toFixed(2)}`
+                                  : r.refunded_at ? `Done ${new Date(r.refunded_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "Processed"}
                               </span>
                             )}
                           </td>

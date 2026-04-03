@@ -1,10 +1,27 @@
 from datetime import timedelta
-from fastapi import HTTPException, Depends
+from logging import config
+from fastapi import HTTPException, Depends, Request
 from fastapi.security import OAuth2PasswordBearer
 from ..schemas import schemas
 from ..services import auth
 from ..services.hashing import Hash
-from ..config.database import collection, collection_worker
+from ..config.database import collection, collection_worker, db
+"""
+routes/auth.py  —  Example login/signup routes showing IP capture wiring.
+
+Drop `store_user_ip()` and the background `enrich_ip()` call into your
+existing auth routes — the rest of your logic stays unchanged.
+"""
+
+from fastapi import APIRouter, Request, HTTPException
+from datetime import datetime
+
+from ..services.ipCapture import store_user_ip
+from ..services.ipLookUp import enrich_ip
+import asyncio
+
+router = APIRouter()
+
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
@@ -13,7 +30,7 @@ DEFAULT_EXPIRY     = timedelta(hours=12)   # normal login
 REMEMBER_ME_EXPIRY = timedelta(days=30)    # remember me
 
 
-def loginUser(request: schemas.LoginSchema):
+async def loginUser(request: schemas.LoginSchema, http_request: Request):
     # ── Find user: customers first, then workers ──────────────────────────────
     user      = collection.find_one({"email": request.email})
     user_type = "customer"
@@ -44,6 +61,9 @@ def loginUser(request: schemas.LoginSchema):
     
     first_name = user.get("first_name") or user.get("firstName") or ""
     last_name  = user.get("last_name")  or user.get("lastName")  or ""
+
+    ip = store_user_ip(db, user["_id"], http_request)
+    asyncio.create_task(enrich_ip(ip, db))
 
     return {
         "message": "Login successful",

@@ -43,7 +43,7 @@ const formatDateLong = (str) => {
 };
 
 /* ─── Stat Card ───────────────────────────────────────────────── */
-const StatCard = ({ iconPath, label, value, sub }) => (
+const StatCard = ({ label, value, sub }) => (
   <div style={{
     flex: 1, minWidth: 160,
     background: "#fff",
@@ -52,18 +52,8 @@ const StatCard = ({ iconPath, label, value, sub }) => (
     padding: "1.1rem 1.25rem",
     display: "flex", alignItems: "center", gap: 14,
   }}>
-    <div style={{
-      width: 44, height: 44, borderRadius: 10,
-      background: "#fff4ed",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      flexShrink: 0,
-    }}>
-      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-        {iconPath}
-      </svg>
-    </div>
     <div>
-      <div style={{ fontSize: "0.7rem", color: "#a89f97", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: "0.7rem", color: "#a89f97", fontWeight: 600,  textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 15}}>{label}</div>
       <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#1a1310", lineHeight: 1 }}>{value}</div>
       {sub && <div style={{ fontSize: "0.72rem", color: "#a89f97", marginTop: 3 }}>{sub}</div>}
     </div>
@@ -337,7 +327,6 @@ export default function Reviews() {
   const avg       = total > 0 ? reviews.reduce((s, r) => s + (r.rating || 0), 0) / total : 0;
   const fiveStars = reviews.filter(r => Math.round(r.rating) === 5).length;
   const oneStars  = reviews.filter(r => Math.round(r.rating) === 1).length;
-  const replied   = reviews.filter(r => !!r.workerReply).length;
 
   const displayed = reviews
     .filter(r => filter === 0 || Math.round(r.rating) === filter)
@@ -354,34 +343,30 @@ export default function Reviews() {
     <>
       <FontLink />
       <BookingNavbar />
-      <div style={{ display: "flex", minHeight: "100vh", background: "#faf9f7", fontFamily: "'Inter', sans-serif" }}>
+      <div style={{ display: "flex", minHeight: "100vh", background: "#F7F5EF", fontFamily: "'Inter', sans-serif" }}>
         <Sidebar workerId={workerId} />
 
         <main style={{ flex: 1, padding: "2rem 2.5rem", maxWidth: 1200, margin: "0 auto", width: "100%" }}>
 
           {/* Page Title */}
-          <div style={{ marginBottom: "1.75rem" }}>
-            <h1 style={{ fontSize: "1.4rem", fontWeight: 700, color: "#1a1310", margin: 0 }}>Reviews</h1>
-            <p style={{ fontSize: "0.82rem", color: "#a89f97", margin: "4px 0 0" }}>Monitor and respond to customer feedback</p>
+          <div style={{ marginBottom: "1.75rem", marginLeft: "5px" }}>
+            <h1 style={{ fontSize: "26px", fontWeight: 700, color: "#1a1310", margin: 0, fontFamily: "'Inter', sans-serif" }}>Reviews</h1>
+            <p style={{ fontSize: "0.82rem", color: "#a89f97",  }}>Monitor and respond to customer feedback</p>
           </div>
 
           {/* Stat Cards */}
           <div style={{ display: "flex", gap: "1rem", marginBottom: "1.75rem", flexWrap: "wrap" }}>
             <StatCard
-              iconPath={<path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01L12 2z" stroke="#f97316" strokeWidth="1.5" strokeLinejoin="round"/>}
               label="Average Rating" value={avg.toFixed(1)} sub="out of 5.0"
             />
             <StatCard
-              iconPath={<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="#f97316" strokeWidth="1.5" strokeLinejoin="round"/>}
-              label="Total Reviews" value={total} sub={`${fiveStars} five-star`}
+              label="Five-Star Reviews" value={fiveStars} sub={`out of ${total} five-star`}
+            /> 
+            <StatCard
+              label="Total Reviews" value={total} sub={`out of ${total} total`}
             />
             <StatCard
-              iconPath={<><circle cx="12" cy="12" r="10" stroke="#f97316" strokeWidth="1.5"/><path d="M9 12l2 2 4-4" stroke="#f97316" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></>}
-              label="Replied" value={replied} sub={total > 0 ? `${Math.round(replied / total * 100)}% response rate` : "—"}
-            />
-            <StatCard
-              iconPath={<><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="#ef4444" strokeWidth="1.5" strokeLinejoin="round"/><line x1="12" y1="9" x2="12" y2="13" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round"/><line x1="12" y1="17" x2="12.01" y2="17" stroke="#ef4444" strokeWidth="2" strokeLinecap="round"/></>}
-              label="1-Star Reviews" value={oneStars} sub={oneStars > 0 ? "Needs attention" : "None"}
+              label="1-Star Reviews" value={oneStars} sub={`out of ${total} one-star`}
             />
           </div>
 
@@ -396,11 +381,7 @@ export default function Reviews() {
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontWeight: 600, fontSize: "0.92rem", color: "#1a1310" }}>All Reviews</span>
-                <span style={{
-                  background: "#fff4ed", color: "#f97316",
-                  borderRadius: 99, padding: "1px 9px",
-                  fontSize: "0.7rem", fontWeight: 600,
-                }}>{displayed.length}</span>
+                
               </div>
 
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>

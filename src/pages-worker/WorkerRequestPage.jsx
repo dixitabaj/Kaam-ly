@@ -153,6 +153,7 @@ const WorkerTaskRequestsPage = () => {
   const [showDeclineModal,   setShowDeclineModal]   = useState(false);
   const [declineReason,      setDeclineReason]      = useState("");
   const [decliningRequestId, setDecliningRequestId] = useState(null);
+  
 
   const { toasts, add: addToast, remove: removeToast } = useToast();
 
@@ -207,139 +208,196 @@ const WorkerTaskRequestsPage = () => {
 
   // ── WebSocket ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!workerId) return;
-    let ws = null;
-    const timer = setTimeout(() => {
-      ws = new WebSocket(`ws://127.0.0.1:8000/ws/task-updates/${workerId}`);
-      ws.onopen    = () => console.log("Worker WS connected");
-      ws.onmessage = async (event) => {
+  if (!workerId) return;
+
+  let retryDelay = 1000;
+  let retryTimer = null;
+  let pingTimer  = null;
+  let active     = true;
+
+  const handleMessage = async (event) => {
+    try {
+      const data = JSON.parse(
+        typeof event === "string" ? event : event.data
+      );
+      if (data.type === "pong" || data.type === "ping") return;
+
+      if (data.type === "new_task") {
         try {
-          const data = JSON.parse(event.data);
-          if (data.type === "ping") return;
-
-          if (data.type === "new_task") {
-            const rawTask = {
-              id: data.taskId, _id: data.taskId,
-              taskName: data.taskType, taskDescrip: data.note,
-              address: data.address, serviceDate: data.serviceDate,
-              serviceTime: data.serviceTime, totalCost: data.totalCost,
-              estimatedHours: data.estimatedHours,
-              completionTime: data.estimatedHours,
-              status: "pending", userId: data.userId,
-              assignedWorkerId: workerId,
-            };
-            const enriched = await enrichTask(rawTask);
-            setRequests((prev) => {
-              const exists = prev.some(r => String(r._id || r.id) === String(data.taskId));
-              if (exists) return prev;
-              return [enriched, ...prev];
-            });
-            const taskLabel = data.taskType || data.taskName || "A task";
-            const toast = makeToast("new_task", taskLabel);
-            if (toast) addToast(toast);
-            showNativePush("New Task Request 🔔", `You have a new task: "${taskLabel}". Tap to review.`, () => { window.focus(); navigate("/worker/requests"); });
-          }
-
-          if (data.type === "task_status") {
-            setRequests((prev) => {
-              const updated = prev.map(r =>
-                String(r._id || r.id) === String(data.taskId) ? { ...r, status: data.status } : r
-              );
-              const found = updated.find(r => String(r._id || r.id) === String(data.taskId));
-              const toast = makeToast(data.status, found?.taskName || found?.taskDescrip);
-              if (toast) addToast(toast);
-              return updated;
-            });
-            setSelectedRequest((prev) =>
-              prev && String(prev._id || prev.id) === String(data.taskId)
-                ? { ...prev, status: data.status } : prev
+          const rawTask = {
+            id: data.taskId, _id: data.taskId,
+            taskName: data.taskType, taskDescrip: data.note,
+            address: data.address, serviceDate: data.serviceDate,
+            serviceTime: data.serviceTime, totalCost: data.totalCost,
+            estimatedHours: data.estimatedHours,
+            completionTime: data.estimatedHours,
+            status: "pending", userId: data.userId,
+            assignedWorkerId: workerId,
+          };
+          const enriched = await enrichTask(rawTask);
+          setRequests(prev => {
+            const exists = prev.some(
+              r => String(r._id || r.id) === String(data.taskId)
             );
-          }
-
-          if (data.type === "offer_updated") {
-            setRequests((prev) =>
-              prev.map(r =>
-                String(r._id || r.id) === String(data.taskId)
-                  ? { ...r, estimatedHours: data.estimatedHours, totalCost: data.totalCost, offerStatus: data.offerStatus }
-                  : r
-              )
-            );
-            setSelectedRequest((prev) =>
-              prev && String(prev._id || prev.id) === String(data.taskId)
-                ? { ...prev, estimatedHours: data.estimatedHours, totalCost: data.totalCost, offerStatus: data.offerStatus }
-                : prev
-            );
-          }
+            return exists ? prev : [enriched, ...prev];
+          });
+          const toast = makeToast("new_task", data.taskType || "A task");
+          if (toast) addToast(toast);
+          showNativePush(
+            "New Task Request 🔔",
+            `You have a new task: "${data.taskType || "A task"}"`,
+            () => { window.focus(); navigate("/worker/requests"); }
+          );
         } catch (err) {
-          console.error("WS parse/enrich error:", err);
+          console.error("[WorkerWS] enrichTask failed:", err);
         }
-      };
-      ws.onerror = (e) => console.error("Worker WS error", e);
-      ws.onclose = () => console.log("Worker WS closed");
-      wsRef.current = ws;
-    }, 150);
+      }
 
-    return () => { clearTimeout(timer); ws?.close(); wsRef.current?.close(); };
-  }, [workerId]);
+      if (data.type === "task_status") {
+        setRequests(prev =>
+          prev.map(r =>
+            String(r._id || r.id) === String(data.taskId)
+              ? { ...r, status: data.status } : r
+          )
+        );
+        setSelectedRequest(prev =>
+          prev && String(prev._id || prev.id) === String(data.taskId)
+            ? { ...prev, status: data.status } : prev
+        );
+        const task = requests.find(
+          r => String(r._id || r.id) === String(data.taskId)
+        );
+        const toast = makeToast(data.status, task?.taskName);
+        if (toast) addToast(toast);
+      }
+
+      if (data.type === "offer_updated") {
+        setRequests(prev =>
+          prev.map(r =>
+            String(r._id || r.id) === String(data.taskId)
+              ? { ...r,
+                  estimatedHours: data.estimatedHours,
+                  totalCost: data.totalCost,
+                  offerStatus: data.offerStatus }
+              : r
+          )
+        );
+      }
+    } catch (err) {
+      console.error("[WorkerWS] parse error:", err);
+    }
+  };
+
+  const flushPending = async () => {
+    try {
+      const res = await fetch(
+        `http://127.0.0.1:8000/api/notifications/pending/${workerId}`
+      );
+      if (!res.ok) return;
+      const { messages = [] } = await res.json();
+      for (const msg of messages) {
+        await handleMessage(JSON.stringify(msg));
+      }
+    } catch (err) {
+      console.error("[WorkerWS] flush error:", err);
+    }
+  };
+
+  const connect = () => {
+    if (!active) return;
+    const ws = new WebSocket(
+      `ws://127.0.0.1:8000/ws/task-updates/${workerId}`
+    );
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log("[WorkerWS] ✅ Connected");
+      retryDelay = 1000;
+      pingTimer = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN)
+          ws.send(JSON.stringify({ type: "ping" }));
+      }, 25000);
+      flushPending(); // ← recover missed messages
+    };
+
+    ws.onmessage = handleMessage;
+    ws.onerror   = (e) => console.error("[WorkerWS] error:", e);
+    ws.onclose   = () => {
+      console.warn("[WorkerWS] closed");
+      clearInterval(pingTimer);
+      if (!active) return;
+      retryTimer = setTimeout(() => {
+        retryDelay = Math.min(retryDelay * 2, 30000);
+        connect();
+      }, retryDelay);
+    };
+  };
+
+  connect();
+  // Also flush when tab becomes visible
+  const onVisible = () => {
+    if (document.visibilityState === "visible") flushPending();
+  };
+  document.addEventListener("visibilitychange", onVisible);
+
+  return () => {
+    active = false;
+    clearTimeout(retryTimer);
+    clearInterval(pingTimer);
+    wsRef.current?.close();
+    document.removeEventListener("visibilitychange", onVisible);
+  };
+}, [workerId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Register FCM token ────────────────────────────────────────────────────
   useEffect(() => {
-    if (!workerId) return;
-    const registerToken = async () => {
-      try {
-        const { initMessaging, requestPermissionAndGetToken } = await import("../api/firebase");
-        const messaging = await initMessaging();
-        if (!messaging) return;
-        const token = await requestPermissionAndGetToken(messaging);
-        if (!token) return;
-        await fetch("http://127.0.0.1:8000/api/notifications/save-token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: workerId, token }),
-        });
-      } catch (err) {
-        console.error("[FCM] Token registration failed:", err);
-      }
-    };
-    registerToken();
-  }, [workerId]);
+  if (!workerId) return;
+  const registerToken = async () => {
+    try {
+      const { initMessaging }              = await import("../api/firebase");       //  correct file
+      const { requestNotificationPermission } = await import("../api/notification"); //  correct name
+      const messaging = await initMessaging();
+      if (!messaging) return;
+      const token = await requestNotificationPermission(); // ✅ no argument needed
+      if (!token) return;
+      await fetch("http://127.0.0.1:8000/api/notifications/save-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: workerId, token }),
+      });
+    } catch (err) {
+      console.error("[FCM] Token registration failed:", err);
+    }
+  };
+  registerToken();
+}, [workerId]);
 
   // ── Foreground FCM listener ───────────────────────────────────────────────
   useEffect(() => {
-    if (!workerId) return;
-    let unsubscribe = () => {};
-    const setup = async () => {
-      try {
-        const { initMessaging }   = await import("../api/notification");
-        const { onMessage }       = await import("firebase/messaging");
-        const messaging = await initMessaging();
-        if (!messaging) return;
-        unsubscribe = onMessage(messaging, (payload) => {
-          const eventType = payload.data?.event_type || "new_task";
-          const taskName  = payload.data?.taskName   || payload.notification?.title || null;
-          const toast     = makeToast(eventType, taskName);
-          if (toast) addToast(toast);
-          if (eventType === "new_task") {
-            getTasksByWorker(workerId).then(async (data) => {
-              const enriched = await Promise.all((data.tasks || []).map(enrichTask));
-              setRequests(enriched);
-            }).catch(console.error);
-          }
-          if (payload.data?.task_id) {
-            setRequests(prev => prev.map(r =>
-              String(r._id || r.id) === String(payload.data.task_id)
-                ? { ...r, status: eventType }
-                : r
-            ));
-          }
-        });
-      } catch (err) {
-        console.error("[FCM] Foreground listener setup failed:", err);
-      }
-    };
-    setup();
-    return () => unsubscribe();
-  }, [workerId]);
+  if (!workerId) return;
+  let unsubscribe = () => {};
+  const setup = async () => {
+    try {
+      const { initMessaging } = await import("../api/notification");
+      const { onMessage }     = await import("firebase/messaging");
+      const messaging = await initMessaging();
+      if (!messaging) return;
+      unsubscribe = onMessage(messaging, (payload) => {
+        // WS already handles state updates — FCM just shows the toast
+        const eventType = payload.data?.event_type || "new_task";
+        const taskName  = payload.data?.taskName
+          || payload.notification?.title
+          || null;
+        const toast = makeToast(eventType, taskName);
+        if (toast) addToast(toast);
+      });
+    } catch (err) {
+      console.error("[FCM] Foreground listener failed:", err);
+    }
+  };
+  setup();
+  return () => unsubscribe();
+}, [workerId]);
 
   // ── Initial fetch ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -419,12 +477,28 @@ const WorkerTaskRequestsPage = () => {
   };
 
   const handleStartWork = async (requestId) => {
-    const task = requests.find(r => String(r._id || r.id) === String(requestId));
+  const task = requests.find(r => String(r._id || r.id) === String(requestId));
+  
+  const paymentStatus = (task?.paymentStatus || "").toLowerCase();
+  if (paymentStatus !== "paid") {
+    addToast({ color: "#991b1b", message: "Cannot start work — customer has not paid yet." });
+    return;
+  }
+
+  setProcessingAction(requestId);
+  try {
     await updateTaskStatus(requestId, "in_progress");
-    setRequests((prev) => prev.map(r => String(r._id || r.id) === String(requestId) ? { ...r, status: "in_progress" } : r));
+    setRequests(prev => prev.map(r =>
+      String(r._id || r.id) === String(requestId) ? { ...r, status: "in_progress" } : r
+    ));
     const toast = makeToast("in_progress", task?.taskName || task?.taskDescrip);
     if (toast) addToast(toast);
-  };
+  } catch (err) {
+    addToast({ color: "#dc2626", message: err?.message || "Failed to start work." });
+  } finally {
+    setProcessingAction(null);
+  }
+};
 
   const handleCompleteTask = async (requestId) => {
     if (!window.confirm("Mark this task as completed?")) return;
@@ -736,6 +810,7 @@ const WorkerTaskRequestsPage = () => {
                   </button>
                 </div>
               )}
+              
               {selectedRequest.status === "confirmed" && (
                 <div style={{ display:"flex", gap:"8px" }}>
                   <button
@@ -904,6 +979,7 @@ const RequestCard = ({
             Offer not discussed yet — hours & price required before accepting
           </div>
         )}
+        
 
         {(request.status === "confirmed" || request.status === "completed") && (
           <div style={{ fontSize:"12px", color:"#78716c", marginBottom:"10px" }}>
@@ -936,15 +1012,21 @@ const RequestCard = ({
             </>
           )}
           {request.status === "confirmed" && (
-            <>
-              <Btn onClick={e => { e.stopPropagation(); handleStartWork(rid); }} variant="blue">
-                <CheckCircle size={12}/> Start Work
-              </Btn>
-              <Btn onClick={e => { e.stopPropagation(); handleViewDetails(request); }} variant="default">
-                View more <ChevronRight size={12}/>
-              </Btn>
-            </>
-          )}
+  <>
+    <Btn
+      onClick={e => { e.stopPropagation(); handleStartWork(rid); }}
+      variant={request.paymentStatus === "paid" ? "blue" : "gray"}
+      disabled={request.paymentStatus !== "paid"}
+      title={request.paymentStatus !== "paid" ? "Waiting for customer payment" : ""}
+    >
+      <CheckCircle size={12}/>
+      {request.paymentStatus === "paid" ? "Start Work" : "Awaiting Payment"}
+    </Btn>
+    <Btn onClick={e => { e.stopPropagation(); handleViewDetails(request); }} variant="default">
+      View more <ChevronRight size={12}/>
+    </Btn>
+  </>
+)}
           {request.status === "in_progress" && (
             <>
               <Btn onClick={e => { e.stopPropagation(); handleCompleteTask(rid); }} disabled={processingAction === rid} variant="blue">

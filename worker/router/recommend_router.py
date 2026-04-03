@@ -6,6 +6,17 @@ import numpy as np
 from math import radians, sin, cos, sqrt, atan2
 from ..config.database import collection_worker
 
+# Fix for LinUCB pickle in FastAPI reload context
+from ..model.LinUCB import LinUCB  # <-- adjust to your actual module path
+import sys
+
+# Inject LinUCB into __main__ so pickle can find it
+sys.modules['__main__'].LinUCB = LinUCB
+
+# Also cover multiprocessing edge case
+if '__mp_main__' not in sys.modules:
+    sys.modules['__mp_main__'] = sys.modules['__main__']
+
 router = APIRouter(tags=["Recommendation"])
 
 
@@ -117,7 +128,7 @@ class RecommendRequest(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 MODEL_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "model", "linucb_model.joblib")
+    os.path.join(os.path.dirname(__file__), "..", "model", "linucb_model (5).joblib")
 )
 
 linucb       = None
@@ -287,50 +298,52 @@ def _get_worker_scalars(worker: dict):
 # ═══════════════════════════════════════════════════════════════════════════════
 # FEATURE BUILDER
 # ═══════════════════════════════════════════════════════════════════════════════
-
-def build_feature_vector(
-    worker:   dict,
-    task_type: str,
-    user_lat:  Optional[float] = None,
-    user_lon:  Optional[float] = None,
-) -> tuple:
-    """
-    15-dim vector matching training layout:
-      [cat_one_hot x10] + [rating, popularity, dist_feature, availability, is_open]
-    Returns (array, dist_km_or_None)
-    """
+from ..services.recommender_service import (
+    get_subcategory_vector,
+    subcategory_match_score,
+    is_available_now,
+    haversine_distance,
+    N_SUBCATEGORIES,
+    SUBCATEGORY_MAP,
+    MAX_DIST_KM,
+)
+# In recommend_router.py, replace build_feature_vector with:
+def build_feature_vector(worker, task_type, user_lat=None, user_lon=None, target_subcat=None):
+    # Category one-hot
     cat_vec = np.zeros(len(TASK_CATEGORIES), dtype=np.float32)
     if task_type in TASK_CATEGORIES:
         cat_vec[TASK_CATEGORIES.index(task_type)] = 1.0
+
+    # Subcategory vector — must match training
+    cat_str   = worker.get("categories", "") or worker.get("subcategories", "")
+    if isinstance(cat_str, list):
+        cat_str = " ".join(cat_str)
+    subcat_vec  = get_subcategory_vector(cat_str, task_type)
+    match_score = subcategory_match_score(cat_str, task_type, target_subcat)
 
     stars, review_count = _get_worker_scalars(worker)
     rating     = stars / 5.0
     popularity = float(np.log1p(review_count) / 10.0)
 
     worker_lat = worker.get("latitude") or worker.get("lat")
-    worker_lon = worker.get("longitude") or worker.get("lng") or worker.get("lon")
+    worker_lon = worker.get("longitude") or worker.get("lng")
 
-    if user_lat is not None and user_lon is not None and worker_lat and worker_lon:
+    if user_lat and user_lon and worker_lat and worker_lon:
         dist_km      = haversine_distance(user_lat, user_lon, float(worker_lat), float(worker_lon))
         dist_feature = float(max(0.0, 1.0 - dist_km / MAX_DIST_KM))
     else:
         dist_feature = 0.5
         dist_km      = None
 
-    availability = 1.0 if worker.get("isAvailable", True) else 0.0
-    is_open      = 1.0
+    availability = is_available_now(worker.get("hours", {}))
+    is_open      = float(worker.get("is_open", 1))
 
     feature = np.concatenate([
-        cat_vec,
-        [rating, popularity, dist_feature, availability, is_open]
+        cat_vec, subcat_vec,
+        [match_score, rating, popularity, dist_feature, availability, is_open]
     ]).astype(np.float32)
 
-    target = n_features or 15
-    feature = np.pad(feature, (0, max(0, target - len(feature))))[:target]
-
     return feature, dist_km
-
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # SCORING
 # ═══════════════════════════════════════════════════════════════════════════════

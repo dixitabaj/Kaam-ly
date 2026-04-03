@@ -207,22 +207,23 @@ async def bulk_payout(sandbox: bool = True):
 
         worker = collection_worker.find_one({"email": worker_id})
         if not worker:
-            results.append({"task_id": task_id, "status": "skipped", "reason": "Worker not found in database"})
+            results.append({"task_id": task_id, "status": "skipped", "reason": "Worker not found"})
             failed += 1
             continue
 
-        esewa_id = worker.get("phoneNo")
-        if not esewa_id:
-            results.append({"task_id": task_id, "worker_email": worker_id, "status": "skipped", "reason": "Worker has no eSewa ID registered"})
+        fcm_token = worker.get("fcmToken")
+        if not fcm_token:
+            results.append({"task_id": task_id, "status": "skipped", "reason": "Worker has no FCM token"})
             failed += 1
             continue
 
         transaction_uuid = str(uuid.uuid4())
         try:
+            # Simulate or call eSewa payout
             if sandbox:
                 esewa_response = {"status_code": 200, "body": {"status": "SUCCESS", "transaction_uuid": transaction_uuid}}
             else:
-                esewa_response = await disburse_to_esewa(esewa_id, amount, transaction_uuid)
+                esewa_response = await disburse_to_esewa(worker.get("phoneNo"), amount, transaction_uuid)
 
             if esewa_response["status_code"] == 200 and esewa_response["body"].get("status") == "SUCCESS":
                 collection_task.update_one(
@@ -235,67 +236,79 @@ async def bulk_payout(sandbox: bool = True):
                     }}
                 )
 
-                # ── Notify worker ─────────────────────────────────────────────
+                # Push notification with fallback
+                # ── Push notification with proper structure ──────────────────────────────
                 try:
+                    # Ensure we send both 'notification' and 'data'
+                    notification_payload = {
+                        "title": f"Payment Received 💰",
+                        "body": f"NPR {amount:.2f} for '{task_name}' has been sent to your eSewa account."
+                    }
+                    
+                    data_payload = {
+                        "event_type": "payout_sent",
+                        "task_id": task_id,
+                        "taskName": task_name,
+                        "amount": str(amount),
+                        "transaction_uuid": transaction_uuid,
+                        "is_worker": "true"
+                    }
+
                     await notifications.notify_with_fallback(
                         userId=worker_id,
-                        title="Payment Received 💰",
-                        body=f"NPR {amount:.2f} for '{task_name}' has been sent to your eSewa account.",
-                        token=worker.get("fcmToken"),
+                        title=notification_payload["title"],
+                        body=notification_payload["body"],
+                        token=fcm_token,
                         email=worker.get("email"),
                         is_worker=True,
-                        data={
-                            "event_type":       "payout_sent",
-                            "task_id":          task_id,
-                            "amount":           str(amount),
-                            "transaction_uuid": transaction_uuid,
-                        },
+                        data=data_payload,
                     )
+                    print(f"[BULK PAYOUT] ✅ Notification sent for {worker_id}")
                 except Exception as e:
-                    print(f"[BULK PAYOUT] Worker push notification failed for {worker_id}: {e}")
-
+                    print(f"[BULK PAYOUT] ❌ Notification failed for {worker_id}: {e}")
+                # WebSocket fallback
                 try:
                     await websocket_manager.manager.send_to_user(worker_id, json.dumps({
-                        "type":            "payout_sent",
-                        "taskId":          task_id,
-                        "taskName":        task_name,
-                        "amount":          amount,
+                        "type": "payout_sent",
+                        "taskId": task_id,
+                        "taskName": task_name,
+                        "amount": amount,
                         "transactionUuid": transaction_uuid,
                     }))
+                    print(f"[BULK PAYOUT] ✅ WebSocket sent for {worker_id}")
                 except Exception as e:
-                    print(f"[BULK PAYOUT] Worker WebSocket failed for {worker_id}: {e}")
-                # ─────────────────────────────────────────────────────────────
+                    print(f"[BULK PAYOUT] ❌ WebSocket failed for {worker_id}: {e}")
 
                 succeeded += 1
                 results.append({
-                    "task_id":          task_id,
-                    "worker_email":     worker_id,
-                    "amount":           amount,
+                    "task_id": task_id,
+                    "worker_email": worker_id,
+                    "amount": amount,
                     "transaction_uuid": transaction_uuid,
-                    "status":           "success",
-                    "sandbox_mode":     sandbox,
-                    "esewa_response":   esewa_response["body"],
+                    "status": "success",
+                    "sandbox_mode": sandbox,
+                    "esewa_response": esewa_response["body"],
                 })
             else:
                 failed += 1
                 results.append({
-                    "task_id":        task_id,
-                    "worker_email":   worker_id,
-                    "amount":         amount,
-                    "status":         "failed",
-                    "sandbox_mode":   sandbox,
+                    "task_id": task_id,
+                    "worker_email": worker_id,
+                    "amount": amount,
+                    "status": "failed",
+                    "sandbox_mode": sandbox,
                     "esewa_response": esewa_response["body"],
                 })
+
         except Exception as e:
             failed += 1
             results.append({
-                "task_id":      task_id,
+                "task_id": task_id,
                 "worker_email": worker_id,
-                "status":       "error",
+                "status": "error",
                 "sandbox_mode": sandbox,
-                "reason":       str(e),
+                "reason": str(e),
             })
-
     return {
         "message":   f"Bulk payout complete: {succeeded} succeeded, {failed} failed",
         "succeeded": succeeded,

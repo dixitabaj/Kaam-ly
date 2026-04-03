@@ -1,120 +1,169 @@
 import os
-import shutil
 from uuid import uuid4
-from fastapi import APIRouter, HTTPException, Query, File, UploadFile, Form
-from typing import Optional
-from bson import ObjectId
-from bson.errors import InvalidId
 from datetime import datetime
+from typing import Optional
+
+from fastapi import APIRouter, Form, File, UploadFile, HTTPException, Query
+from bson import ObjectId, errors as bson_errors
 from ..repository.reportRepo import ReportRepo, _serialize
 from ..config.database import collection_reports, collection_task, refund_collection
 
 router = APIRouter(tags=["reports"])
 reportRepo = ReportRepo(collection_reports)
 
-# ─────────────────────────────────────────────────────────────
-# Upload config
-# ─────────────────────────────────────────────────────────────
 UPLOAD_DIR = "uploads/reports"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
 ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
-# ─────────────────────────────────────────────────────────────
-# CREATE REPORT
-# ─────────────────────────────────
-from bson import ObjectId, errors as bson_errors
 
+# ─────────────────────────────────────────────────────────────
+# POST /reports
+# ─────────────────────────────────────────────────────────────
 @router.post("/reports")
 async def create_report(
-    reporterId:   str = Form(...),
-    reporterType: str = Form(...),
-    reportedId:   str = Form(...),
-    reportedType: str = Form(...),
-    reason:       str = Form(...),
-    description:  Optional[str] = Form(None),
-    evidence:     Optional[UploadFile] = File(None),
-    taskId:       Optional[str] = Form(None),
-    requestForRefund: bool = Form(False),
-    esewaId:      Optional[str] = Form(None)  # Only required if refund requested
+    reporterId:       str            = Form(...),
+    reporterType:     str            = Form(...),
+    reportedId:       str            = Form(...),
+    reportedType:     str            = Form(...),
+    reason:           str            = Form(...),
+    description:      Optional[str]  = Form(None),
+    evidence:         Optional[UploadFile] = File(None),
+    taskId:           Optional[str]  = Form(None),
+    requestForRefund: bool           = Form(False),
+    esewaId:          Optional[str]  = Form(None)
 ):
     evidence_url = None
 
-    # ─── Handle evidence upload ───
+    # ── 1. Handle file upload ─────────────────────────────────────────────────
     if evidence:
         if evidence.content_type not in ALLOWED_TYPES:
             raise HTTPException(status_code=400, detail="Invalid image type.")
+
         contents = await evidence.read()
+
         if len(contents) > MAX_FILE_SIZE:
             raise HTTPException(status_code=400, detail="File too large (max 5MB).")
-        file_extension = evidence.filename.split(".")[-1]
+
+        file_extension  = evidence.filename.split(".")[-1]
         unique_filename = f"{uuid4()}.{file_extension}"
-        file_path = os.path.join(UPLOAD_DIR, unique_filename)
+        file_path       = os.path.join(UPLOAD_DIR, unique_filename)
+
         with open(file_path, "wb") as buffer:
             buffer.write(contents)
+
         evidence_url = f"/static/reports/{unique_filename}"
 
-    # ─── Prepare report data ───
+    # ── 2. Prepare report data ────────────────────────────────────────────────
     data = {
-        "reporterId": reporterId,
-        "reporterType": reporterType,
-        "reportedId": reportedId,
-        "reportedType": reportedType,
-        "reason": reason,
-        "description": description
+        "reporterId":       reporterId,
+        "reporterType":     reporterType,
+        "reportedId":       reportedId,
+        "reportedType":     reportedType,
+        "reason":           reason,
+        "description":      description,
+        "requestForRefund": requestForRefund,
+        "createdAt":        datetime.utcnow(),
+        # ID references — populated below when refund is created
+        "refund_id":        None,
     }
+
     if taskId:
         data["taskId"] = taskId
 
-    # ─── Check task for refund eligibility ───
+    # ── 3. Check task (for refund) ────────────────────────────────────────────
     create_refund_doc = False
     task = None
+
     if taskId:
         try:
             obj_id = ObjectId(taskId)
-            task = collection_task.find_one({"_id": obj_id})
+            task   = collection_task.find_one({"_id": obj_id})
+
             if not task:
                 raise HTTPException(status_code=404, detail="Task not found")
+
             if task.get("escrow_status") in ("held", "released") and requestForRefund:
                 create_refund_doc = True
-                # Set task status to dispute
+
+                # Mark task as disputed — IDs will be linked below
                 collection_task.update_one(
                     {"_id": obj_id},
-                    {"$set": {"taskStatus": "dispute", "disputedAt": datetime.utcnow()}}
+                    {"$set": {
+                        "taskStatus": "dispute",
+                        "disputedAt": datetime.utcnow()
+                    }}
                 )
+
         except bson_errors.InvalidId:
             raise HTTPException(status_code=400, detail="Invalid taskId")
 
-    # ─── Create report ───
-    report = reportRepo.createReport(data, evidence_url)
+    # ── 4. Create the report ──────────────────────────────────────────────────
+    report    = reportRepo.createReport(data, evidence_url)
+    report_id = report.get("id") or report.get("_id")
 
-    # ─── Create refund document if eligible ───
+    # Store only the report_id on the task — no embedded details
+    if taskId and report_id:
+        collection_task.update_one(
+            {"_id": ObjectId(taskId)},
+            {"$set": {"report_id": str(report_id)}},
+        )
+
+    # ── 5. Create refund if needed ────────────────────────────────────────────
+    refund_id = None
+
     if create_refund_doc:
         if not esewaId:
-            raise HTTPException(status_code=400, detail="eSewa ID required for refund requests")
-        refund_doc = {
-            "task_id": taskId,
-            "requester_id": str(task.get("userId")),
-            "reported_id": str(task.get("assignedWorkerId")) if task.get("assignedWorkerId") else None,
-            "requester_type": "customer",
-            "reported_type": "worker",
-            "amount_customer": None,  # Admin decides
-            "amount_worker": None,    # Admin decides
-            "reason": reason,
-            "total_amount": task.get("totalCost"),
-            "status": "pending",
-            "created_at": datetime.utcnow(),
-            "evidence_files": [evidence_url] if evidence_url else [],
-            "esewa_id": esewaId,      # Store eSewa ID for payout
-        }
-        refund_collection.insert_one(refund_doc)
-        report["refund_requested"] = True
-        report["refund_doc_id"] = str(refund_doc["_id"])
+            raise HTTPException(
+                status_code=400,
+                detail="eSewa ID required for refund requests"
+            )
 
-    return report
+        refund_doc = {
+            "task_id":         taskId,
+            "report_id":       str(report_id),   # link to report via ID only
+            "requester_id":    str(task.get("userId")),
+            "reported_id":     str(task.get("assignedWorkerId")) if task.get("assignedWorkerId") else None,
+            "requester_type":  "customer",
+            "reported_type":   "worker",
+            "amount_customer": None,
+            "amount_worker":   None,
+            "reason":          reason,
+            "total_amount":    task.get("totalCost"),
+            "status":          "pending",
+            "created_at":      datetime.utcnow(),
+            "evidence_files":  [evidence_url] if evidence_url else [],
+            "esewa_id":        esewaId or None,
+        }
+
+        refund_result = refund_collection.insert_one(refund_doc)
+        refund_id     = str(refund_result.inserted_id)
+
+        # Store only refund_id on the task — no embedded details
+        collection_task.update_one(
+            {"_id": ObjectId(taskId)},
+            {"$set": {"refund_id": refund_id}},
+        )
+
+        # Store only refund_id on the report — no embedded details
+        collection_reports.update_one(
+            {"_id": ObjectId(str(report_id))},
+            {"$set": {"refund_id": refund_id}},
+        )
+
+    # ── 6. Return response ────────────────────────────────────────────────────
+    return {
+        "message":        "Report submitted successfully",
+        "report":         report,
+        "report_id":      str(report_id),     # ← caller gets the ID
+        "refund_id":      refund_id,          # ← caller gets the ID (None if no refund)
+        "refundRequested": create_refund_doc
+    }
+
+
 # ─────────────────────────────────────────────────────────────
-# GET REPORTS (with filters)
+# GET /reports
 # ─────────────────────────────────────────────────────────────
 @router.get("/reports")
 def get_reports(
@@ -136,7 +185,7 @@ def get_reports(
 
 
 # ─────────────────────────────────────────────────────────────
-# STATS
+# GET /reports/stats
 # ─────────────────────────────────────────────────────────────
 @router.get("/reports/stats")
 def get_report_stats():
@@ -144,12 +193,12 @@ def get_report_stats():
 
 
 # ─────────────────────────────────────────────────────────────
-# UPDATE STATUS
+# PATCH /reports/{id}/status
 # ─────────────────────────────────────────────────────────────
 @router.patch("/reports/{id}/status")
 def update_status(
-    id: str,
-    status: str = Form(...),
+    id:        str,
+    status:    str = Form(...),
     adminNote: str = Form("")
 ):
     VALID_STATUS = {"resolved", "declined"}
@@ -165,19 +214,19 @@ def update_status(
 
 
 # ─────────────────────────────────────────────────────────────
-# REPORTS BY REPORTER
+# GET /reports/user/{userId}
 # ─────────────────────────────────────────────────────────────
 @router.get("/reports/user/{userId}")
 def get_reports_by_user(userId: str):
     reports = reportRepo.getReportsByUserId(userId)
     return {
         "reports": reports,
-        "total": len(reports),
+        "total":   len(reports),
     }
 
 
 # ─────────────────────────────────────────────────────────────
-# GET SINGLE REPORT
+# GET /reports/{id}
 # ─────────────────────────────────────────────────────────────
 @router.get("/reports/{id}")
 def get_report_by_id(id: str):
@@ -188,13 +237,13 @@ def get_report_by_id(id: str):
 
 
 # ─────────────────────────────────────────────────────────────
-# DELETE REPORT
+# DELETE /reports/{id}
 # ─────────────────────────────────────────────────────────────
 @router.delete("/reports/{id}")
 def delete_report(id: str):
     try:
         obj_id = ObjectId(id)
-    except InvalidId:
+    except bson_errors.InvalidId:
         raise HTTPException(status_code=400, detail="Invalid ID")
 
     report = reportRepo.col.find_one({"_id": obj_id})
@@ -206,27 +255,25 @@ def delete_report(id: str):
 
 
 # ─────────────────────────────────────────────────────────────
-# REPORTS AGAINST A USER
+# GET /reports/reported/{userId}
 # ─────────────────────────────────────────────────────────────
 @router.get("/reports/reported/{userId}")
 def get_reports_against_user(userId: str):
-    reports = reportRepo.col.find({"reportedId": userId}).sort("createdAt", -1)
+    reports    = reportRepo.col.find({"reportedId": userId}).sort("createdAt", -1)
     serialized = [_serialize(r) for r in reports]
 
     return {
-        "reports": serialized,
-        "total": len(serialized),
-        "pending": sum(1 for r in serialized if r.get("status") == "pending"),
+        "reports":  serialized,
+        "total":    len(serialized),
+        "pending":  sum(1 for r in serialized if r.get("status") == "pending"),
         "resolved": sum(1 for r in serialized if r.get("status") == "resolved"),
         "declined": sum(1 for r in serialized if r.get("status") == "declined"),
     }
 
 
-
+# ─────────────────────────────────────────────────────────────
 # GET /reports/count/{userId}
-# Lightweight — just counts, no full report data.
-# Used for the "X prior reports" badge in the admin modal
-# without fetching the entire report list.
+# ─────────────────────────────────────────────────────────────
 @router.get("/reports/count/{userId}")
 def get_report_count_for_user(userId: str):
     return {

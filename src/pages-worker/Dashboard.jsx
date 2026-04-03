@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { workerStats } from "../api/api";
 import BookingNavbar from "../components/Navbar/Navbar";
 import Sidebar from "./sidebar";
+import Badge from "../images/badge.png";
 
 const FontLink = () => (
   <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&display=swap');`}</style>
@@ -19,16 +20,19 @@ const normaliseTask = (t) => ({
   amount:      Number(t.totalCost || t.budget || 0),
 });
 
+
+
 /* ─── Components ───────────────────────────────────────────────── */
 const StatusPill = ({ status }) => (
   <span style={{
     padding: "4px 14px", borderRadius: 20, fontSize: "0.78rem", fontWeight: 500,
     border: "1.5px solid #ddd", background: "#ffffff", color: "#555",
-    textTransform: "capitalize", fontFamily: "'DM Sans', sans-serif",
+    textTransform: "capitalize", fontFamily: "'inter', sans-serif",
   }}>
     {status}
   </span>
 );
+
 
 const formatDateTime = (dateString) => {
   if (!dateString) return "—";
@@ -47,17 +51,35 @@ const formatDateTime = (dateString) => {
 
 const StatCard = ({ label, value }) => (
   <div style={{ background: "#ffffff", borderRadius: 16, padding: "1.25rem 1.5rem", border: "1px solid #e8e6df", flex: 1, minWidth: 0 }}>
-    <div style={{ fontSize: "12px", color: "#888",   marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
-    <div style={{ fontSize: "1.9rem", fontWeight: 700, fontFamily: "'inter'", color: "#1a1a1a" }}>{value}</div>
+    <div style={{ fontSize: "11px", color: "#888",   marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
+    <div style={{ fontSize: "22px", fontWeight: 700, fontFamily: "'inter'", color: "#1a1a1a" }}>{value}</div>
   </div>
 );
 
 const MilestoneBadge = ({ label }) => (
   <div style={{ textAlign: "center", flex: 1 }}>
-    <div style={{ width: 52, height: 52, borderRadius: "50%", border: "2.5px solid #1a1a1a", margin: "0 auto 8px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3rem", background: "#fff" }}>
-      🏅
+    <div style={{
+      width: 52,
+      height: 52,
+      borderRadius: "50%",
+      border: "1.5px solid #747474",
+      margin: "0 auto 8px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: "#fff"
+    }}>
+      <img src={Badge} alt="Milestone" style={{ width: "40px" }} />
     </div>
-    <div style={{ fontSize: "0.72rem", color: "#444", fontFamily: "'DM Sans', sans-serif", fontWeight: 500 }}>{label}</div>
+
+    <div style={{
+      fontSize: "0.72rem",
+      color: "#444",
+      fontFamily: "'inter', sans-serif",
+      fontWeight: 500
+    }}>
+      {label}
+    </div>
   </div>
 );
 
@@ -86,8 +108,8 @@ const DonutChart = ({ segments, size = 130 }) => {
             return el;
           })
       }
-      <text x={cx} y={cy - 5} textAnchor="middle" fontSize="18" fontWeight="700" fill="#1a1a1a" fontFamily="DM Serif Display, serif">{total}</text>
-      <text x={cx} y={cy + 13} textAnchor="middle" fontSize="9" fill="#aaa" fontFamily="DM Sans, sans-serif">Total</text>
+      <text x={cx} y={cy - 5} textAnchor="middle" fontSize="18" fontWeight="700" fill="#1a1a1a" >{total}</text>
+      <text x={cx} y={cy + 13} textAnchor="middle" fontSize="9" fill="#aaa" fontFamily="inter, sans-serif">Total</text>
     </svg>
   );
 };
@@ -112,8 +134,8 @@ export default function WorkerDashboard() {
       .finally(() => setLoading(false));
   }, [workerId]);
 
-  if (loading) return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif", color: "#888" }}>Loading your dashboard…</div>;
-  if (error)   return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif", color: "#e53e3e" }}>{error}</div>;
+  if (loading) return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'inter', sans-serif", color: "#888" }}>Loading your dashboard…</div>;
+  if (error)   return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'inter', sans-serif", color: "#e53e3e" }}>{error}</div>;
 
   /* ── Derived ── */
   const allTasks       = (stats?.tasksToday || []).map(normaliseTask);
@@ -128,13 +150,26 @@ export default function WorkerDashboard() {
   const inProgress = stats?.tasksInProgress ?? 0;
   const cancelled  = stats?.tasksCancelled  ?? 0;
   const accepted   = stats?.tasksAccepted   ?? 0;
-
+  const milestones = [
+  {
+    label: "10 Jobs Completed",
+    achieved: completed >= 10,
+  },
+  {
+    label: "Top Rated",
+    achieved: (stats?.averageRating || 0) >= 4 && completed > 20,
+  },
+  {
+    label: "Skill Expert",
+    achieved: worker?.is_verified === true || worker?.skill_verified === true,
+  },
+];
   const donutSegments = [
-    { label: "Completed",   value: completed,  color: "#5a8a6a" },
-    { label: "In Progress", value: inProgress, color: "#7b7fc4" },
-    { label: "Pending",     value: pending,    color: "#c4a55a" },
-    { label: "Accepted",    value: accepted,   color: "#5aabc4" },
-    { label: "Cancelled",   value: cancelled,  color: "#c47070" },
+    { label: "Completed",   value: completed,  color: "#215c35" },
+    { label: "In Progress", value: inProgress, color: "#E8843A" },
+    { label: "Pending",     value: pending,    color: "#ffca4f" },
+    { label: "Accepted",    value: accepted,   color: "#5a88c4" },
+    { label: "Cancelled",   value: cancelled,  color: "#D94F3D" },
   ].filter(s => s.value > 0);
 
   const allReviews    = stats?.recentReviews || stats?.recent_review || [];
@@ -150,7 +185,7 @@ export default function WorkerDashboard() {
           <div style={{ flex: 2 }}>
             <main style={{ maxWidth: 1200, margin: "0 auto", padding: "2rem" }}>
 
-              <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: "2rem", fontWeight: 400, marginBottom: "0.25rem", letterSpacing: "-0.02em" }}>
+              <h1 style={{ fontFamily: "'inter', serif", fontSize: "2rem", fontWeight: 700, marginBottom: "0.25rem", letterSpacing: "-0.02em" }}>
                 Dashboard
               </h1>
               <p style={{ color: "#888", fontSize: "0.88rem", marginBottom: "1.5rem" }}>
@@ -184,25 +219,26 @@ export default function WorkerDashboard() {
                       background: "#ffffff", borderRadius: 16, padding: "1.5rem",
                       border: "1px solid #e8e6df", gridRow: "1 / 3",
                       display: "flex", flexDirection: "column",
-                      height: "400px"
+                      height: "380px"
                     }}>
-                      <div style={{ fontWeight: 600, fontSize: "0.95rem", marginBottom: "1.25rem", paddingBottom: "0.75rem", borderBottom: "1px solid #e8e6df" }}>
+                      <div style={{ 
+fontSize: "13px", color: "#888",   marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px",  marginBottom: "1.25rem", paddingBottom: "0.75rem", borderBottom: "1px solid #e8e6df" }}>
                         Status Breakdown
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1.25rem", flex: 1, justifyContent: "center" }}>
                         <DonutChart segments={donutSegments} size={140} />
                         <div style={{ width: "100%" }}>
                           {[
-                            { label: "Completed",   value: completed,  color: "#5a8a6a" },
-                            { label: "In Progress", value: inProgress, color: "#7b7fc4" },
-                            { label: "Pending",     value: pending,    color: "#c4a55a" },
-                            { label: "Accepted",    value: accepted,   color: "#5aabc4" },
-                            { label: "Cancelled",   value: cancelled,  color: "#c47070" },
+                            { label: "Completed",   value: completed,  color: "#215c35" },
+                            { label: "In Progress", value: inProgress, color: "#E8843A" },
+                            { label: "Pending",     value: pending,    color: "#f0cc7a" },
+                            { label: "Accepted",    value: accepted,   color: "#5a88c4" },
+                            { label: "Cancelled",   value: cancelled,  color: "#D94F3D" },
                           ].map(s => (
                             <div key={s.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 9 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
                                 <span style={{ width: 8, height: 8, borderRadius: "50%", background: s.color, display: "inline-block", flexShrink: 0 }} />
-                                <span style={{ fontSize: "0.78rem", color: "#666", fontFamily: "'DM Sans', sans-serif" }}>{s.label}</span>
+                                <span style={{ fontSize: "0.78rem", color: "#666", fontFamily: "'inter', sans-serif" }}>{s.label}</span>
                               </div>
                               <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "#1a1a1a", fontFamily: "'DM Serif Display', serif" }}>{s.value}</span>
                             </div>
@@ -214,9 +250,7 @@ export default function WorkerDashboard() {
                     {/* Today's Earning — top right */}
                     <div style={{ 
   display: "flex", 
-  flexDirection: "column", 
-
-}}>
+  flexDirection: "column"}}>
 
   {/* Today's Earning */}
   <div style={{ 
@@ -227,20 +261,19 @@ export default function WorkerDashboard() {
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
-    height: "120px"
+    height: "110px"
   }}>
     <div style={{ 
-      fontSize: "0.78rem", 
-      color: "#888", 
-      fontFamily: "'DM Sans', sans-serif",
+      
+fontSize: "11px", color: "#888",   marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" 
+
      
     }}>
       Today's Earning
     </div>
     <div style={{ 
-      fontSize: "1.75rem",
+      fontSize: "22px",
       fontWeight: 700,
-      fontFamily: "'DM Serif Display', serif",
       color: "#1a1a1a"
     }}>
       Rs. {todayEarning?.toLocaleString() || 0}
@@ -256,21 +289,17 @@ export default function WorkerDashboard() {
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
-    height: "120px",
+    height: "110px",
       marginTop:"20px"
   }}>
     <div style={{ 
-      fontSize: "0.78rem", 
-      color: "#888", 
-      fontFamily: "'DM Sans', sans-serif",
-      marginBottom: 10 
+       fontSize: "11px", color: "#888",   marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" 
     }}>
       Weekly Earning
     </div>
     <div style={{ 
-      fontSize: "1.75rem",
+      fontSize: "22px",
       fontWeight: 700,
-      fontFamily: "'DM Serif Display', serif",
       color: "#1a1a1a"
     }}>
       Rs. {monthlyEarning?.toLocaleString() || 0}
@@ -290,17 +319,15 @@ export default function WorkerDashboard() {
       marginTop:"20px"
   }}>
     <div style={{ 
-      fontSize: "0.78rem", 
-      color: "#888", 
-      fontFamily: "'DM Sans', sans-serif",
-      marginBottom: 10 
+      
+fontSize: "11px", color: "#888",   marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" 
+
     }}>
       Monthly Earning
     </div>
     <div style={{ 
-      fontSize: "1.75rem",
+      fontSize: "22px",
       fontWeight: 700,
-      fontFamily: "'DM Serif Display', serif",
       color: "#1a1a1a"
     }}>
       Rs. {monthlyEarning?.toLocaleString() || 0}
@@ -317,7 +344,7 @@ export default function WorkerDashboard() {
                   <div style={{ background: "#ffffff", borderRadius: 16, padding: "1.5rem", border: "1px solid #e8e6df", height: "328px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
                       <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>Recent Tasks</div>
-                      <span style={{ fontSize: "0.75rem", color: "#aaa", fontFamily: "'DM Sans', sans-serif" }}>Showing latest 3</span>
+                      <span style={{ fontSize: "0.75rem", color: "#aaa", fontFamily: "'inter', sans-serif" }}>Showing latest 3</span>
                     </div>
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
                       <thead>
@@ -338,7 +365,7 @@ export default function WorkerDashboard() {
                             <td style={{ padding: "0.75rem" }}><StatusPill status={t.status} /></td>
                             <td style={{ padding: "0.75rem", fontWeight: 600 }}>Rs. {t.amount.toLocaleString()}</td>
                             <td style={{ padding: "0.75rem" }}>
-                              <button style={{ background: "#fff", border: "1px solid #ddd", borderRadius: 8, padding: "4px 12px", cursor: "pointer", fontSize: "0.75rem", fontFamily: "'DM Sans', sans-serif", color: "#555" }}>
+                              <button style={{ background: "#fff", border: "1px solid #ddd", borderRadius: 8, padding: "4px 12px", cursor: "pointer", fontSize: "0.75rem", fontFamily: "'inter', sans-serif", color: "#555" }}>
                                 View more
                               </button>
                             </td>
@@ -354,12 +381,12 @@ export default function WorkerDashboard() {
 
                   {/* Achievement Progress */}
                   <div style={{ background: "#ffffff", borderRadius: 16, padding: "1.5rem", border: "1px solid #e8e6df" }}>
-                    <div style={{ fontWeight: 600, fontSize: "0.95rem", marginBottom: "1.25rem", paddingBottom: "0.75rem", borderBottom: "1px solid #e8e6df" }}>
+                    <div style={{ 
+fontSize: "11px", color: "#888",   marginBottom: "40px", textTransform: "uppercase", letterSpacing: "0.5px",  paddingBottom: "0.75rem", borderBottom: "1px solid #e8e6df" }}>
                       Achievement Progress
                     </div>
                     <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
-                      <div style={{ fontSize: "0.8rem", color: "#888", marginBottom: 8 }}>My Rating</div>
-                      <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: "3rem", fontWeight: 400, lineHeight: 1.1 }}>
+                      <div style={{ fontSize: "3rem", fontWeight: 600, lineHeight: 1.1 }}>
                         {stats?.averageRating?.toFixed(1) || "0.0"}
                       </div>
                       <div style={{ fontSize: "1.3rem", color: "#f0a500", margin: "4px 0" }}>
@@ -369,13 +396,19 @@ export default function WorkerDashboard() {
                         Based on {stats?.totalReviews || 0} reviews
                       </div>
                     </div>
-                    <div style={{ borderTop: "1px solid #e8e6df", paddingTop: "1.25rem" }}>
-                      <div style={{ fontSize: "0.82rem", color: "#888", marginBottom: "1rem" }}>Milestones</div>
+                    <div style={{paddingTop: "1.25rem" }}>
+                      <div style={{ 
+fontSize: "11px", color: "#888",   marginBottom: "20px", textTransform: "uppercase", letterSpacing: "0.5px",  paddingBottom: "0.75rem", borderBottom: "1px solid #e8e6df" }}>
+                     Milestones</div>
                       <div style={{ display: "flex", gap: "0.5rem" }}>
-                        <MilestoneBadge label="10 Jobs Completed" />
-                        <MilestoneBadge label="Top Rated" />
-                        <MilestoneBadge label="Skill Expert" />
-                      </div>
+                        <div style={{ display: "flex", gap: "0.5rem" }}>
+  {milestones
+    .filter(m => m.achieved)   // ✅ Only show achieved milestones
+    .map((m, i) => (
+      <MilestoneBadge key={i} label={m.label} achieved={true} />
+    ))
+  }
+</div></div>
                     </div>
                   </div>
 
@@ -383,7 +416,7 @@ export default function WorkerDashboard() {
                   <div style={{ background: "#ffffff", borderRadius: 16, padding: "1.5rem", border: "1px solid #e8e6df",     minHeight: "327px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
                       <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>Recent Reviews</div>
-                      <span style={{ fontSize: "0.75rem", color: "#aaa", fontFamily: "'DM Sans', sans-serif" }}>Showing latest 3</span>
+                      <span style={{ fontSize: "0.75rem", color: "#aaa", fontFamily: "'inter', sans-serif" }}>Showing latest 3</span>
                     </div>
                     {recentReviews.map((r, i, arr) => {
   const reviewId = r._id || i;
@@ -431,7 +464,7 @@ export default function WorkerDashboard() {
             fontSize: "0.72rem",
             cursor: "pointer",
             padding: 0,
-            fontFamily: "'DM Sans', sans-serif",
+            fontFamily: "'inter', sans-serif",
             fontWeight:600,
             marginTop: "10px"
           }}

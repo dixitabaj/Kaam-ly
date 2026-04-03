@@ -67,24 +67,27 @@ const FontLink = () => (
     .modal-sheet { animation: slideUp 0.22s cubic-bezier(0.34,1.56,0.64,1); }
     .toast-in  { animation: toastIn  0.35s cubic-bezier(0.34,1.56,0.64,1) forwards; }
     .toast-out { animation: toastOut 0.3s ease-in forwards; }
+    .tab-btn { transition: all 0.15s; }
+    .tab-btn:hover { background: ${T.orangeLight} !important; }
     ::-webkit-scrollbar { width: 4px; height: 4px; }
     ::-webkit-scrollbar-thumb { background: ${T.orangeBorder}; border-radius: 2px; }
   `}</style>
 );
 
 const DAYS      = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-const HOURS     = Array.from({ length: 14 }, (_, i) => i + 7);
+const HOURS     = Array.from({ length: 17 }, (_, i) => i + 6); // 6am → 10pm
 const DAY_NAMES = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
 const DAY_CAPS  = {
   sunday:"Sunday", monday:"Monday", tuesday:"Tuesday",
   wednesday:"Wednesday", thursday:"Thursday", friday:"Friday", saturday:"Saturday",
 };
-const HOUR_H = 60;
+const HOUR_H    = 60;
+const START_HOUR = 6;
 
 const BOOKING_STATUS = {
   pending: {
-    label: "Requested", icon: "⏳",
-    bg: T.blueLight, border: T.blue, textColor: T.blueDark, stripe: true,
+    label: "Requested", icon: "",
+    bg: T.blueLight,
   },
   confirmed_unpaid: {
     label: "Unpaid", icon: "🟡",
@@ -107,22 +110,26 @@ function fmt12(h, m = 0) {
   return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2,"0")} ${h >= 12 ? "PM" : "AM"}`;
 }
 function toMins(str) {
+  if (!str || !str.includes(":")) return 0;
   const [h, m] = str.split(":").map(Number);
-  return h * 60 + m;
+  return h * 60 + (m || 0);
 }
-const START_HOUR = HOURS[0]; // dynamic (7)
 
 function toOffset(str) {
+  if (!str || !str.includes(":")) return 0;
   const [h, m] = str.split(":").map(Number);
-  return h + m / 60 - START_HOUR;
+  return (h + (m || 0) / 60) - START_HOUR;
 }
+
 function padTime(t) {
+  if (!t) return "00:00";
   const [h, m] = t.split(":").map(Number);
-  return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
+  return `${String(h).padStart(2,"0")}:${String(m || 0).padStart(2,"0")}`;
 }
 function addHours(timeStr, hrs) {
+  if (!timeStr) return "00:00";
   const [h, m] = timeStr.split(":").map(Number);
-  const totalMins = h * 60 + m + Math.round(hrs * 60);
+  const totalMins = h * 60 + (m || 0) + Math.round(hrs * 60);
   return `${String(Math.floor(totalMins/60)).padStart(2,"0")}:${String(totalMins%60).padStart(2,"0")}`;
 }
 function dateKey(dateObj) {
@@ -132,13 +139,11 @@ function toLocalDateKey(isoString) {
   const d = new Date(isoString);
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
-
 function getBookingEndTime(task) {
   const start = task.serviceTime || "09:00";
   if (task.estimatedHours) return addHours(start, task.estimatedHours);
-  return addHours(start, 2); // default 2h if no estimate
+  return addHours(start, 2);
 }
-
 function overlaps(slots) {
   const active = slots.map((s, i) => ({ ...s, i })).filter(s => s.enabled);
   const bad = new Set();
@@ -159,7 +164,7 @@ function BookingTooltip({ task, style }) {
   if (!bookingStyle) return null;
   return (
     <div style={{
-      position: "absolute", zIndex: 100, background: T.white,
+      position: "absolute", zIndex: 10, background: T.white,
       border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 14px",
       boxShadow: "0 8px 24px rgba(0,0,0,0.12)", minWidth: 200,
       fontFamily: "'DM Sans', sans-serif", pointerEvents: "none", ...style,
@@ -191,11 +196,12 @@ function BookingBlock({ task }) {
   if (!bookingStyle) return null;
 
   const start = task.serviceTime || "09:00";
-  const end = getBookingEndTime(task);
-  const top = toOffset(start) * HOUR_H;
-  const height = Math.max((toOffset(end) - toOffset(start)) * HOUR_H, 50); // min height 50px
+  const end   = getBookingEndTime(task);
+  const top    = toOffset(start) * HOUR_H;
+  const height = Math.max((toOffset(end) - toOffset(start)) * HOUR_H, 50);
 
-  // Tooltip position
+  if (top < 0) return null;
+
   const tooltipStyle = top > 260
     ? { bottom: height + 6, left: 0 }
     : { top: height + 6, left: 0 };
@@ -206,56 +212,32 @@ function BookingBlock({ task }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        position: "absolute",
-        top,
-        left: 3,
-        right: 3,
-        height,
+        position: "absolute", top, left: 3, right: 3, height,
         background: bookingStyle.bg,
         border: `1.5px solid ${bookingStyle.border}`,
-        borderRadius: 8,
-        padding: "5px 7px",
-        zIndex: 10000,
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-        overflow: "visible",
-        fontFamily: "'DM Sans', sans-serif",
+        borderRadius: 8, padding: "5px 7px", zIndex: 100,
+        display: "flex", flexDirection: "column", justifyContent: "center",
+        overflow: "visible", fontFamily: "'DM Sans', sans-serif",
       }}
     >
-      {/* Pending stripe */}
       {bookingStyle.stripe && (
-        <div
-          className="pending-stripe"
-          style={{ position: "absolute", inset: 0, borderRadius: 8 }}
-        />
+        <div className="pending-stripe" style={{ position:"absolute", inset:0, borderRadius:8 }} />
       )}
-
-      {/* Content */}
-      <div style={{ position: "relative", zIndex: 1 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
-          <span style={{ fontSize: "0.65rem" }}>{bookingStyle.icon}</span>
-          <span style={{ fontWeight: 700, fontSize: "0.7rem", color: bookingStyle.textColor }}>
-            {bookingStyle.label}
-          </span>
+      <div style={{ position:"relative", zIndex:1 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:4, marginBottom:2 }}>
+          <span style={{ fontSize:"0.65rem" }}>{bookingStyle.icon}</span>
+          <span style={{ fontWeight:700, fontSize:"0.7rem", color:bookingStyle.textColor }}>{bookingStyle.label}</span>
         </div>
-
-        <div style={{ fontSize: "0.68rem", fontWeight: 600, color: bookingStyle.textColor, whiteSpace: "normal" }}>
-          {task.taskName}
-        </div>
-
-        <div style={{ fontSize: "0.65rem", color: bookingStyle.textColor, opacity: 0.8, marginTop: 1 }}>
+        <div style={{ fontSize:"0.68rem", fontWeight:600, color:bookingStyle.textColor, whiteSpace:"normal" }}>{task.taskName}</div>
+        <div style={{ fontSize:"0.65rem", color:bookingStyle.textColor, opacity:0.8, marginTop:1 }}>
           {fmt12(...start.split(":").map(Number))} → {fmt12(...end.split(":").map(Number))}
         </div>
-
         {task.totalCost > 0 && (
-          <div style={{ fontSize: "0.65rem", color: bookingStyle.textColor, opacity: 0.75, marginTop: 1 }}>
+          <div style={{ fontSize:"0.65rem", color:bookingStyle.textColor, opacity:0.75, marginTop:1 }}>
             Rs. {task.totalCost.toLocaleString()} · {task.payment_method || "—"}
           </div>
         )}
       </div>
-
-      {/* Tooltip on hover */}
       {hovered && <BookingTooltip task={task} style={tooltipStyle} />}
     </div>
   );
@@ -268,17 +250,17 @@ function Toast({ toast }) {
   return (
     <div className={toast.exiting ? "toast-out" : "toast-in"}
       style={{
-        position: "fixed", bottom: 28, right: 24, zIndex: 2000,
-        background: isOff ? "#1a1512" : T.white, color: isOff ? "#fff" : T.text,
-        borderRadius: 14, padding: "14px 18px", minWidth: 280, maxWidth: 340,
-        boxShadow: "0 8px 32px rgba(0,0,0,0.18)", display: "flex",
-        alignItems: "flex-start", gap: 12, fontFamily: "'DM Sans', sans-serif",
-        border: `1px solid ${isOff ? "#333" : T.border}`,
+        position:"fixed", bottom:28, right:24, zIndex:2000,
+        background:isOff?"#1a1512":T.white, color:isOff?"#fff":T.text,
+        borderRadius:14, padding:"14px 18px", minWidth:280, maxWidth:340,
+        boxShadow:"0 8px 32px rgba(0,0,0,0.18)", display:"flex",
+        alignItems:"flex-start", gap:12, fontFamily:"'DM Sans', sans-serif",
+        border:`1px solid ${isOff?"#333":T.border}`,
       }}>
-      <span style={{ fontSize:"1.1rem", marginTop:1 }}>{isOff ? "🔴" : "🟢"}</span>
+      <span style={{ fontSize:"1.1rem", marginTop:1 }}>{isOff?"🔴":"🟢"}</span>
       <div style={{ flex:1 }}>
         <div style={{ fontWeight:700, fontSize:"0.88rem", marginBottom:3 }}>
-          {isOff ? "You're now unavailable" : "You're now available"}
+          {isOff?"You're now unavailable":"You're now available"}
         </div>
         <div style={{ fontSize:"0.78rem", opacity:0.72, lineHeight:1.45 }}>
           {isOff
@@ -292,8 +274,8 @@ function Toast({ toast }) {
 
 function Toggle({ on, onChange }) {
   return (
-    <div className={`toggle-track ${on ? "toggle-on" : ""}`}
-      style={{ background: on ? T.orange : T.border }}
+    <div className={`toggle-track ${on?"toggle-on":""}`}
+      style={{ background:on?T.orange:T.border }}
       onClick={e => { e.stopPropagation(); onChange(!on); }}>
       <div className="toggle-thumb" />
     </div>
@@ -318,66 +300,109 @@ function TimePicker({ value, onChange }) {
       <select value={m} onChange={e => emit(dH, +e.target.value, isPM)} style={sel}>
         {[0,15,30,45].map(v => <option key={v} value={v}>{String(v).padStart(2,"0")}</option>)}
       </select>
-      <select value={isPM ? "PM" : "AM"} onChange={e => emit(dH, m, e.target.value === "PM")} style={sel}>
+      <select value={isPM?"PM":"AM"} onChange={e => emit(dH, m, e.target.value==="PM")} style={sel}>
         <option>AM</option><option>PM</option>
       </select>
     </div>
   );
 }
 
-function Modal({ day, daySlots, onSave, onDelete, onClose }) {
-  const [slots, setSlots] = useState(
+// ── Modal ─────────────────────────────────────────────────────────────────────
+function Modal({ day, dateKey: specificDate, daySlots, onSave, onSaveDate, onDelete, onClose }) {
+  const [tab,    setTab]    = useState(specificDate ? "date" : "weekly");
+  const [slots,  setSlots]  = useState(
     daySlots?.length ? daySlots : [{ start:"09:00", end:"17:00", enabled:true }]
   );
   const [error, setError] = useState("");
   const bad = overlaps(slots);
 
   const update = (i, field, val) => {
-    const next = [...slots]; next[i] = { ...next[i], [field]: val };
+    const next = [...slots]; next[i] = { ...next[i], [field]:val };
     setSlots(next); setError("");
   };
   const addSlot = () => {
-    const last = [...slots].filter(s => s.enabled).sort((a,b) => toMins(b.end) - toMins(a.end))[0];
-    let start = "09:00", end = "10:00";
+    const last = [...slots].filter(s => s.enabled).sort((a,b) => toMins(b.end)-toMins(a.end))[0];
+    let start="09:00", end="10:00";
     if (last) {
-      const s = toMins(last.end) + 30, e = s + 60;
-      if (s < 1200 && e <= 1200) {
-        start = `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
-        end   = `${String(Math.floor(e/60)).padStart(2,"0")}:${String(e%60).padStart(2,"0")}`;
+      const s = toMins(last.end)+30, e = s+60;
+      if (s < 1320 && e <= 1320) {
+        start=`${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
+        end  =`${String(Math.floor(e/60)).padStart(2,"0")}:${String(e%60).padStart(2,"0")}`;
       }
     }
-    setSlots([...slots, { start, end, enabled:true }]);
+    setSlots([...slots,{ start, end, enabled:true }]);
   };
   const save = () => {
     if (bad.size > 0) { setError("Fix overlapping slots first."); return; }
-    for (let i = 0; i < slots.length; i++) {
+    for (let i=0; i<slots.length; i++) {
       if (slots[i].enabled && toMins(slots[i].end) <= toMins(slots[i].start)) {
         setError(`Slot ${i+1}: end time must be after start time.`); return;
       }
     }
-    onSave(slots.filter(s => s.enabled).sort((a,b) => toMins(a.start) - toMins(b.start)));
+    const enabled = slots.filter(s => s.enabled).sort((a,b) => toMins(a.start)-toMins(b.start));
+    if (tab === "date" && specificDate) {
+      onSaveDate(specificDate, enabled);
+    } else {
+      onSave(enabled);
+    }
   };
+
+  const displayDate = specificDate
+    ? new Date(specificDate + "T00:00:00").toLocaleDateString("en-US",{ weekday:"long", month:"long", day:"numeric" })
+    : null;
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(26,21,18,0.45)", backdropFilter:"blur(3px)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000, padding:"1rem" }}
       onClick={onClose}>
       <div className="modal-sheet" onClick={e => e.stopPropagation()}
-        style={{ background:T.white, borderRadius:20, padding:"1.5rem", width:"100%", maxWidth:420, maxHeight:"80vh", overflowY:"auto", boxShadow:"0 20px 60px rgba(0,0,0,0.18)" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"1.25rem" }}>
+        style={{ background:T.white, borderRadius:20, padding:"1.5rem", width:"100%", maxWidth:440, maxHeight:"85vh", overflowY:"auto", boxShadow:"0 20px 60px rgba(0,0,0,0.18)" }}>
+
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"1rem" }}>
           <div>
-            <div style={{ fontWeight:700, fontSize:"1.05rem", color:T.text, fontFamily:"'DM Serif Display', serif" }}>Edit Availability</div>
+            <div style={{ fontWeight:700, fontSize:"1.05rem", color:T.text, fontFamily:"'DM Serif Display', serif" }}>
+              Edit Availability
+            </div>
             <div style={{ fontSize:"0.78rem", color:T.textLight, textTransform:"capitalize", marginTop:2 }}>{day}</div>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            {daySlots?.length > 0 && (
+            {daySlots?.length > 0 && tab==="weekly" && (
               <button onClick={onDelete} style={{ background:"none", border:"none", color:T.red, fontSize:"0.78rem", cursor:"pointer", fontWeight:600 }}>Clear day</button>
             )}
             <button onClick={onClose} style={{ background:T.bg, border:`1px solid ${T.border}`, borderRadius:8, width:28, height:28, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:T.textMid, fontSize:"1rem" }}>×</button>
           </div>
         </div>
+
+        {specificDate && (
+          <div style={{ display:"flex", gap:4, background:T.bg, borderRadius:10, padding:4, marginBottom:"1.1rem" }}>
+            {[
+              { key:"weekly", label:"Weekly schedule" },
+              { key:"date",   label:`Override ${displayDate}` },
+            ].map(t => (
+              <button key={t.key} className="tab-btn"
+                onClick={() => { setTab(t.key); setSlots(daySlots?.length?daySlots:[{start:"09:00",end:"17:00",enabled:true}]); setError(""); }}
+                style={{
+                  flex:1, padding:"7px 10px", border:"none", borderRadius:8, cursor:"pointer",
+                  fontFamily:"'DM Sans', sans-serif", fontWeight:600, fontSize:"0.78rem",
+                  background: tab===t.key ? T.white : "transparent",
+                  color:      tab===t.key ? T.orangeDark : T.textMid,
+                  boxShadow:  tab===t.key ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
+                }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {tab==="date" && specificDate && (
+          <div style={{ background:T.blueLight, border:`1px solid ${T.blue}`, borderRadius:10, padding:"10px 14px", marginBottom:"1rem", fontSize:"0.78rem", color:T.blueDark, lineHeight:1.5 }}>
+            📅 These slots apply <strong>only on {displayDate}</strong> and override the weekly schedule for that day.
+          </div>
+        )}
+
         {error && (
           <div style={{ fontSize:"0.78rem", color:T.red, marginBottom:"0.75rem", fontWeight:500, background:T.redLight, padding:"8px 12px", borderRadius:8 }}>⚠ {error}</div>
         )}
+
         {slots.map((slot, i) => (
           <div key={i} style={{ marginBottom:"0.75rem", padding:"0.85rem", background:bad.has(i)?T.redLight:T.bg, borderRadius:12, border:`1px solid ${bad.has(i)?"#fca5a5":T.border}` }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"0.65rem" }}>
@@ -399,15 +424,17 @@ function Modal({ day, daySlots, onSave, onDelete, onClose }) {
             </div>
           </div>
         ))}
+
         <button onClick={addSlot}
           style={{ width:"100%", padding:"0.65rem", background:"none", border:`1.5px dashed ${T.orange}`, borderRadius:10, color:T.orange, fontWeight:700, fontSize:"0.85rem", cursor:"pointer", marginBottom:"1rem", fontFamily:"'DM Sans', sans-serif" }}
           onMouseEnter={e => e.currentTarget.style.background=T.orangeLight}
           onMouseLeave={e => e.currentTarget.style.background="none"}>
           + Add time slot
         </button>
+
         <button onClick={save}
           style={{ width:"100%", padding:"0.85rem", background:bad.size>0?T.border:`linear-gradient(135deg,${T.orange},${T.orangeDark})`, color:bad.size>0?T.textLight:"#fff", border:"none", borderRadius:12, fontWeight:700, fontSize:"0.95rem", cursor:bad.size>0?"not-allowed":"pointer", marginBottom:"0.5rem", fontFamily:"'DM Sans', sans-serif" }}>
-          Save availability
+          {tab==="date" ? `Save for ${displayDate}` : "Save weekly schedule"}
         </button>
         <button onClick={onClose}
           style={{ width:"100%", padding:"0.6rem", background:"none", border:"none", color:T.textLight, fontSize:"0.85rem", cursor:"pointer", fontFamily:"'DM Sans', sans-serif" }}>
@@ -424,7 +451,7 @@ function StatusPill({ active, onToggle }) {
       style={{ display:"flex", alignItems:"center", gap:7, padding:"7px 14px", borderRadius:30, border:`1.5px solid ${active?T.orange:T.border}`, background:active?T.orangeLight:T.bg, cursor:"pointer", marginLeft:12, fontFamily:"'DM Sans', sans-serif" }}>
       <div style={{ width:9, height:9, borderRadius:"50%", background:active?T.orange:T.textLight, transition:"background 0.2s" }} />
       <span style={{ fontWeight:600, fontSize:"0.82rem", color:active?T.orangeDark:T.textMid }}>
-        {active ? "Available" : "Unavailable"}
+        {active?"You're Available":"You're Unavailable"}
       </span>
     </button>
   );
@@ -432,10 +459,10 @@ function StatusPill({ active, onToggle }) {
 
 function Legend() {
   const items = [
-    { color: T.orange, label: "Free slot" },
-    { color: T.blue,   label: "Requested (pending)", stripe: true },
-    { color: T.orange, label: "Confirmed (unpaid)",  faded: true },
-    { color: T.green,  label: "Confirmed & paid" },
+    { color:T.orange, label:"Free slot" },
+    { color:T.blue,   label:"Requested (pending)", stripe:true },
+    { color:T.orange, label:"Confirmed (unpaid)",  faded:true },
+    { color:T.green,  label:"Confirmed & paid" },
   ];
   return (
     <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginTop:"0.75rem" }}>
@@ -446,8 +473,8 @@ function Legend() {
             background: stripe
               ? `repeating-linear-gradient(45deg,rgba(59,130,246,0.2) 0px,rgba(59,130,246,0.2) 4px,rgba(59,130,246,0.05) 4px,rgba(59,130,246,0.05) 8px)`
               : faded ? T.orangeLight
-              : color === T.orange ? `linear-gradient(135deg,${T.orange},${T.orangeDark})`
-              : color === T.green  ? T.greenLight : T.blueLight,
+              : color===T.orange ? `linear-gradient(135deg,${T.orange},${T.orangeDark})`
+              : color===T.green  ? T.greenLight : T.blueLight,
           }} />
           {label}
         </div>
@@ -460,18 +487,12 @@ function Legend() {
 export default function CalendarAvailability() {
   const userString = localStorage.getItem("user") || sessionStorage.getItem("user");
   const workerId = userString
-    ? (() => {
-        try {
-          const p = JSON.parse(userString);
-          return p?.email || p?.id || p?._id || null;
-        } catch { return null; }
-      })()
+    ? (() => { try { const p=JSON.parse(userString); return p?.email||p?.id||p?._id||null; } catch { return null; } })()
     : null;
 
   const today = new Date();
   const [weekOffset,         setWeekOffset]         = useState(0);
   const [availability,       setAvailability]       = useState({});
-  // ✅ freeSlots: { "2026-03-29": [{start, end}] }  — already has bookings subtracted
   const [freeSlots,          setFreeSlots]          = useState({});
   const [bookings,           setBookings]           = useState([]);
   const [globalAvailability, setGlobalAvailability] = useState(true);
@@ -481,106 +502,92 @@ export default function CalendarAvailability() {
   const [toast,              setToast]              = useState(null);
   const toastTimerRef = useRef(null);
 
-  const weekDays = Array.from({ length: 7 }, (_, i) => {
+  const weekDays = Array.from({ length:7 }, (_,i) => {
     const d = new Date(today);
-    d.setDate(today.getDate() - today.getDay() + i + weekOffset * 7);
+    d.setDate(today.getDate() - today.getDay() + i + weekOffset*7);
     return d;
   });
 
   const bookingsByDate = bookings.reduce((acc, task) => {
-    if (task.status === "cancelled") return acc;
+    if (task.status==="cancelled") return acc;
     if (!task.serviceDate) return acc;
     const key = toLocalDateKey(task.serviceDate);
-    if (!acc[key]) acc[key] = [];
+    if (!acc[key]) acc[key]=[];
     acc[key].push(task);
     return acc;
   }, {});
 
-  function parseDay(value) {
-    if (Array.isArray(value)) {
-      return value
-        .filter(s => s && s.start && s.end)
-        .map(s => ({ enabled: true, start: padTime(s.start), end: padTime(s.end) }));
-    }
-    if (typeof value === "string" && value.includes("-")) {
-      const [startRaw = "0:0", endRaw = "0:0"] = value.split("-");
-      const [sh=0, sm=0] = startRaw.split(":").map(Number);
-      const [eh=0, em=0] = endRaw.split(":").map(Number);
-      if (sh===0 && sm===0 && eh===0 && em===0) return [];
-      return [{ enabled: true, start: padTime(startRaw), end: padTime(endRaw) }];
-    }
-    return [];
-  }
-
-  // ✅ NEW: fetch free slots from /worker/free-slots/{workerId}/{date}
-  // Backend does: general slots (worker.hours) MINUS booked slots (tasks collection)
-  // Result has zero overlap with booking blocks — guaranteed
   const fetchFreeSlotsForWeek = async (days, wId) => {
-  const sorted = [...days].sort((a, b) => a - b);
-  const startDate = dateKey(sorted[0]);
-  const endDate   = dateKey(sorted[sorted.length - 1]);
+    const sorted    = [...days].sort((a,b) => a-b);
+    const startDate = dateKey(sorted[0]);
+    const endDate   = dateKey(sorted[sorted.length-1]);
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/worker/free-slots-range/${encodeURIComponent(wId)}?start_date=${startDate}&end_date=${endDate}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch free slots");
+      const data = await res.json();
+      setFreeSlots(data.freeSlots || {});
+    } catch(e) {
+      console.error("fetchFreeSlotsForWeek error:", e);
+      setFreeSlots({});
+    }
+  };
 
-  try {
-    const res = await fetch(
-  `${API_BASE}/api/worker/free-slots-range/${encodeURIComponent(wId)}?start_date=${startDate}&end_date=${endDate}`
-);
-    if (!res.ok) throw new Error("Failed to fetch free slots");
-    const data = await res.json();
-    // data.freeSlots is already { "2026-03-25": [{start, end}, ...], ... }
-    setFreeSlots(data.freeSlots || {});
-  } catch (e) {
-    console.error("fetchFreeSlotsForWeek error:", e);
-    setFreeSlots({});
-  }
-};
-
-  // ── Initial load ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!workerId) { setLoading(false); return; }
-
     Promise.all([
       fetch(`${API_BASE}/worker/availability/${encodeURIComponent(workerId)}`)
         .then(r => r.json()).catch(() => ({})),
       getTasksByWorker(workerId),
     ])
       .then(async ([availData, tasksData]) => {
-        // Parse weekly availability for modal + summary cards
-        if (availData?.hours && typeof availData.hours === "object") {
+        if (availData?.hours && typeof availData.hours==="object") {
           const parsed = {};
           for (const [key, value] of Object.entries(availData.hours)) {
             const slots = parseDay(value);
-            if (slots.length > 0) parsed[key.toLowerCase()] = slots;
+            if (slots.length>0) parsed[key.toLowerCase()]=slots;
           }
           setAvailability(parsed);
         }
-        if (typeof availData?.isAvailable === "boolean") {
-          setGlobalAvailability(availData.isAvailable);
-        }
+        if (typeof availData?.isAvailable==="boolean") setGlobalAvailability(availData.isAvailable);
 
-        if (Array.isArray(tasksData)) {
-          setBookings(tasksData.filter(t => t.status !== "cancelled"));
-        } else if (Array.isArray(tasksData?.tasks)) {
-          setBookings(tasksData.tasks.filter(t => t.status !== "cancelled"));
-        }
+        const tasks = Array.isArray(tasksData) ? tasksData
+          : Array.isArray(tasksData?.tasks) ? tasksData.tasks : [];
+        setBookings(tasks.filter(t => t.status!=="cancelled"));
 
-        // ✅ Fetch free slots (backend subtracts bookings from general hours)
         await fetchFreeSlotsForWeek(weekDays, workerId);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [workerId]);
 
-  // ── Re-fetch when week changes ──────────────────────────────────────────────
   useEffect(() => {
     if (!workerId || loading) return;
     fetchFreeSlotsForWeek(weekDays, workerId);
   }, [weekOffset]);
 
+  function parseDay(value) {
+    if (Array.isArray(value)) {
+      return value
+        .filter(s => s && s.start && s.end)
+        .map(s => ({ enabled:true, start:padTime(s.start), end:padTime(s.end) }));
+    }
+    if (typeof value==="string" && value.includes("-")) {
+      const [startRaw="0:0", endRaw="0:0"] = value.split("-");
+      const [sh=0,sm=0]=startRaw.split(":").map(Number);
+      const [eh=0,em=0]=endRaw.split(":").map(Number);
+      if (sh===0&&sm===0&&eh===0&&em===0) return [];
+      return [{ enabled:true, start:padTime(startRaw), end:padTime(endRaw) }];
+    }
+    return [];
+  }
+
   const showToast = (type) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setToast({ type, exiting: false });
+    setToast({ type, exiting:false });
     toastTimerRef.current = setTimeout(() => {
-      setToast(prev => prev ? { ...prev, exiting: true } : null);
+      setToast(prev => prev?{...prev,exiting:true}:null);
       setTimeout(() => setToast(null), 300);
     }, 3500);
   };
@@ -588,31 +595,48 @@ export default function CalendarAvailability() {
   const toggleGlobal = async () => {
     const next = !globalAvailability;
     setGlobalAvailability(next);
-    showToast(next ? "available" : "unavailable");
+    showToast(next?"available":"unavailable");
     setSaving(true);
-    try {
-      await toggleAvailability(workerId, next);
-    } catch(e) {
-      console.error("Toggle failed:", e);
-      setGlobalAvailability(!next);
-      setToast(null);
-    } finally {
-      setSaving(false);
-    }
+    try { await toggleAvailability(workerId, next); }
+    catch(e) { console.error(e); setGlobalAvailability(!next); setToast(null); }
+    finally { setSaving(false); }
   };
 
-  const save = async (dayName, slots) => {
+  const saveWeekly = async (dayName, slots) => {
     setSaving(true);
-    setAvailability(prev => ({ ...prev, [dayName]: slots }));
+    setAvailability(prev => ({ ...prev, [dayName]:slots }));
     try {
-      await updateDayHours(
-        workerId,
-        DAY_CAPS[dayName],
-        slots.map(({ start, end }) => ({ start, end })),
-      );
+      await updateDayHours(workerId, DAY_CAPS[dayName], slots.map(({start,end}) => ({start,end})));
       await fetchFreeSlotsForWeek(weekDays, workerId);
-    } catch(e) { console.error("Save failed:", e); }
+      showToast("available");
+    } catch(e) { console.error(e); }
     finally { setSaving(false); setModal(null); }
+  };
+
+  const saveDateOverride = async (dateStr, slots) => {
+    setSaving(true);
+    try {
+      const body = {
+        workerId,
+        date:            dateStr,
+        availableStatus: slots.length > 0 ? "free" : "unavailable",
+        available:       slots.length > 0,
+        slots:           slots.map(({start,end}) => ({start,end})),
+      };
+      const res = await fetch(`${API_BASE}/api/availability/update-day`, {
+        method:  "POST",
+        headers: { "Content-Type":"application/json" },
+        body:    JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error("Failed to save date override");
+      await fetchFreeSlotsForWeek(weekDays, workerId);
+      showToast("available");
+    } catch(e) {
+      console.error("saveDateOverride error:", e);
+    } finally {
+      setSaving(false);
+      setModal(null);
+    }
   };
 
   const clearDay = async (dayName) => {
@@ -621,7 +645,7 @@ export default function CalendarAvailability() {
     try {
       await updateDayHours(workerId, DAY_CAPS[dayName], []);
       await fetchFreeSlotsForWeek(weekDays, workerId);
-    } catch(e) { console.error("Clear failed:", e); }
+    } catch(e) { console.error(e); }
     finally { setSaving(false); setModal(null); }
   };
 
@@ -636,7 +660,7 @@ export default function CalendarAvailability() {
       <Toast toast={toast} />
 
       <div style={{ background:T.bg, fontFamily:"'DM Sans', sans-serif" }}>
-        <main style={{ padding:"2rem 2rem 3rem", maxWidth:1120, margin:"0 auto", height:"550px" }}>
+        <main style={{ padding:"2rem 2rem 3rem", maxWidth:1120, margin:"0 auto" }}>
 
           {/* Header */}
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px" }}>
@@ -655,7 +679,6 @@ export default function CalendarAvailability() {
             </div>
           </div>
 
-          {/* Unavailable banner */}
           {!globalAvailability && (
             <div style={{ display:"flex", alignItems:"center", gap:10, background:"#1a1512", color:"#fff", borderRadius:12, padding:"12px 18px", marginBottom:"1.25rem", fontSize:"0.85rem", fontWeight:500 }}>
               <span>🔴</span>
@@ -665,28 +688,29 @@ export default function CalendarAvailability() {
 
           {/* Calendar grid */}
           <div style={{
-            background: T.white, border: `1px solid ${T.border}`, borderRadius: 16,
-            overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.05)",
-            opacity: globalAvailability ? 1 : 0.45,
-            pointerEvents: globalAvailability ? "auto" : "none",
-            transition: "opacity 0.25s",
+            background:T.white, border:`1px solid ${T.border}`, borderRadius:16,
+            overflow:"hidden", boxShadow:"0 2px 12px rgba(0,0,0,0.05)",
+            opacity:globalAvailability?1:0.45,
+            pointerEvents:globalAvailability?"auto":"none",
+            transition:"opacity 0.25s",
           }}>
             {/* Day headers */}
             <div style={{ display:"flex", borderBottom:`1px solid ${T.border}` }}>
               <div style={{ width:52, flexShrink:0 }} />
               {weekDays.map((date, i) => {
-                const dayName     = DAY_NAMES[date.getDay()];
-                const isToday     = date.toDateString() === today.toDateString();
-                const key         = dateKey(date);
-                const dayBooks    = bookingsByDate[key] || [];
-                const hasFree     = (freeSlots[key] || []).length > 0;
-                const hasPending  = dayBooks.some(t => t.status === "pending");
-                const hasConfirmed = dayBooks.some(t => t.status === "confirmed");
+                const dayName      = DAY_NAMES[date.getDay()];
+                const isToday      = date.toDateString()===today.toDateString();
+                const key          = dateKey(date);
+                const dayBooks     = bookingsByDate[key]||[];
+                const hasFree      = (freeSlots[key]||[]).length>0;
+                const hasPending   = dayBooks.some(t => t.status==="pending");
+                const hasConfirmed = dayBooks.some(t => t.status==="confirmed");
                 return (
-                  <div key={i} className="day-col" style={{ flex:1, textAlign:"center", padding:"0.8rem 0.25rem", borderLeft:`1px solid ${T.border}` }}>
+                  <div key={i} className="day-col"
+                    style={{ flex:1, textAlign:"center", padding:"0.8rem 0.25rem", borderLeft:`1px solid ${T.border}` }}>
                     <div style={{ fontSize:"0.65rem", color:T.textLight, textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:600 }}>{DAYS[date.getDay()]}</div>
                     <div className="day-num"
-                      onClick={() => setModal({ dayName, daySlots: availability[dayName] || [] })}
+                      onClick={() => setModal({ dayName, dateKey: key, daySlots:availability[dayName]||[] })}
                       style={{ width:32, height:32, borderRadius:"50%", background:isToday?T.orange:"transparent", color:isToday?"#fff":T.text, display:"flex", alignItems:"center", justifyContent:"center", margin:"4px auto 0", fontWeight:isToday?700:500, fontSize:"0.87rem", cursor:"pointer", position:"relative" }}>
                       {date.getDate()}
                       <div style={{ position:"absolute", bottom:1, display:"flex", gap:2, justifyContent:"center" }}>
@@ -702,6 +726,7 @@ export default function CalendarAvailability() {
 
             {/* Hour grid */}
             <div style={{ display:"flex", overflowY:"auto", maxHeight:420 }}>
+              {/* Time labels */}
               <div style={{ width:52, flexShrink:0 }}>
                 {HOURS.map(h => (
                   <div key={h} style={{ height:HOUR_H, display:"flex", alignItems:"flex-start", paddingTop:6, paddingRight:8, justifyContent:"flex-end", fontSize:"0.63rem", color:T.textLight, userSelect:"none" }}>
@@ -711,35 +736,32 @@ export default function CalendarAvailability() {
               </div>
 
               {weekDays.map((date, i) => {
-                const dayName  = DAY_NAMES[date.getDay()];
-                const key      = dateKey(date);
-                const dayBooks = bookingsByDate[key] || [];
-
-                // ✅ freeSlots[key] = general hours MINUS booked time (computed by backend)
-                // These will NEVER overlap with booking blocks below
-                const dayFreeSlots = freeSlots[key] || [];
+                const dayName      = DAY_NAMES[date.getDay()];
+                const key          = dateKey(date);
+                const dayBooks     = bookingsByDate[key]||[];
+                const dayFreeSlots = freeSlots[key]||[];
 
                 return (
                   <div key={i} style={{ flex:1, position:"relative", borderLeft:`1px solid ${T.border}` }}>
-
-                    {/* Hour row backgrounds */}
                     {HOURS.map(h => (
                       <div key={h} className="hour-row"
                         style={{ height:HOUR_H, borderTop:`1px solid ${T.border}` }}
-                        onClick={() => setModal({ dayName, daySlots: availability[dayName] || [] })} />
+                        onClick={() => setModal({ dayName, dateKey:key, daySlots:availability[dayName]||[] })} />
                     ))}
 
-                    {/* ✅ FREE slots — orange blocks, gaps already cut out for bookings */}
                     {dayFreeSlots.map((slot, si) => {
-                      const topPx    = toOffset(slot.start) * HOUR_H;
-                      const heightPx = Math.max(
-                        (toOffset(slot.end) - toOffset(slot.start)) * HOUR_H,
-                        4
-                      );
-                      if (heightPx < 8) return null;
+                      const offsetStart = toOffset(slot.start);
+                      const offsetEnd   = toOffset(slot.end);
+                      const gridHours = HOURS.length;
+                      if (offsetEnd <= 0 || offsetStart >= gridHours) return null;
+                      const clampedStart = Math.max(offsetStart, 0);
+                      const clampedEnd   = Math.min(offsetEnd,   gridHours);
+                      const topPx    = clampedStart * HOUR_H;
+                      const heightPx = Math.max((clampedEnd - clampedStart) * HOUR_H, 6);
+                      if (heightPx < 6) return null;
                       return (
                         <div key={si} className="slot-block"
-                          onClick={() => setModal({ dayName, daySlots: availability[dayName] || [] })}
+                          onClick={() => setModal({ dayName, dateKey:key, daySlots:availability[dayName]||[] })}
                           style={{
                             position:   "absolute",
                             top:        topPx,
@@ -747,14 +769,14 @@ export default function CalendarAvailability() {
                             right:      3,
                             height:     heightPx,
                             background: `linear-gradient(160deg,${T.orange}dd,${T.orangeDark}dd)`,
-                            borderRadius: 8,
-                            padding:    heightPx > 28 ? "5px 7px" : "2px 5px",
+                            borderRadius:8,
+                            padding:    heightPx>28?"5px 7px":"2px 5px",
                             zIndex:     2,
                             border:     `1px solid ${T.orange}`,
                             boxShadow:  "0 2px 8px rgba(246,173,86,0.2)",
                             overflow:   "hidden",
                           }}>
-                          {heightPx > 28 && (
+                          {heightPx>28 && (
                             <>
                               <div style={{ fontSize:"0.6rem", color:"#fff", fontWeight:700 }}>
                                 {fmt12(...slot.start.split(":").map(Number))}
@@ -768,14 +790,9 @@ export default function CalendarAvailability() {
                       );
                     })}
 
-                    {/* ✅ BOOKING blocks — sit in the gaps left by free slots, zIndex 4 */}
                     {dayBooks.map((task, bi) => (
-                      <BookingBlock
-                        key={task._id || task.id || bi}
-                        task={task}
-                      />
+                      <BookingBlock key={task._id||task.id||bi} task={task} />
                     ))}
-
                   </div>
                 );
               })}
@@ -787,19 +804,20 @@ export default function CalendarAvailability() {
           {/* Summary cards */}
           <div style={{ display:"flex", gap:"0.5rem", marginTop:"1rem", flexWrap:"wrap" }}>
             {DAY_NAMES.map(day => {
-              const slots    = (availability[day]||[]).filter(s => s.enabled);
-              const hasData  = (availability[day]||[]).length > 0;
-              const dayBookCount = bookings.filter(t => {
-                if (!t.serviceDate) return false;
-                const d = new Date(t.serviceDate);
-                return DAY_NAMES[d.getDay()] === day && t.status !== "cancelled";
-              }).length;
+              const slots   = (availability[day]||[]).filter(s => s.enabled);
+              const hasData = (availability[day]||[]).length > 0;
+
+              // ✅ FIX: Only count bookings for this day within the current visible week
+              const weekDay     = weekDays.find(d => DAY_NAMES[d.getDay()] === day);
+              const weekDayKey  = weekDay ? dateKey(weekDay) : null;
+              const dayBookCount = weekDayKey ? (bookingsByDate[weekDayKey]||[]).length : 0;
+
               return (
                 <div key={day} className="summary-card"
-                  onClick={() => globalAvailability && setModal({ dayName:day, daySlots:availability[day]||[] })}
+                  onClick={() => globalAvailability && setModal({ dayName:day, dateKey:null, daySlots:availability[day]||[] })}
                   style={{ flex:1, minWidth:100, background:slots.length?T.orangeLight:T.white, border:`1px solid ${slots.length?T.orangeBorder:T.border}`, borderRadius:12, padding:"0.75rem", opacity:globalAvailability?1:0.5, cursor:globalAvailability?"pointer":"default" }}>
                   <div style={{ fontSize:"0.65rem", color:T.textLight, textTransform:"capitalize", marginBottom:5, fontWeight:600, letterSpacing:"0.04em" }}>{day.slice(0,3).toUpperCase()}</div>
-                  {slots.length > 0 ? (
+                  {slots.length>0 ? (
                     <>
                       <div style={{ fontSize:"0.75rem", color:T.orangeDark, fontWeight:700, marginBottom:3 }}>{slots.length} slot{slots.length>1?"s":""}</div>
                       {slots.slice(0,2).map((s,i) => (
@@ -827,8 +845,10 @@ export default function CalendarAvailability() {
       {modal && globalAvailability && (
         <Modal
           day={modal.dayName}
+          dateKey={modal.dateKey}
           daySlots={modal.daySlots}
-          onSave={slots => save(modal.dayName, slots)}
+          onSave={slots => saveWeekly(modal.dayName, slots)}
+          onSaveDate={(dateStr, slots) => saveDateOverride(dateStr, slots)}
           onDelete={() => clearDay(modal.dayName)}
           onClose={() => setModal(null)}
         />

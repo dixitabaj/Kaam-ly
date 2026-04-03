@@ -2,7 +2,6 @@
 import { getToken, onMessage } from "firebase/messaging";
 import { initMessaging }       from "./firebase";
 
-const VAPID_KEY    = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 const API_BASE_URL = "http://localhost:8000";
 
 // ─── 1. Request Permission & Get FCM Token ────────────────────────────────────

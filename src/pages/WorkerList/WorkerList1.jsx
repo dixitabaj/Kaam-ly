@@ -55,7 +55,40 @@ const BrowseTaskers = () => {
   const [hoveredButton, setHoveredButton] = useState(null);
   const [taskers, setTaskers]             = useState([]);
   const [loading, setLoading]             = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
   const [pricesLoaded, setPricesLoaded]   = useState(false);
+  const [searchResults, setSearchResults] = useState(null); // null = use recommendations
+  const [searchLoading, setSearchLoading] = useState(false);
+
+  const BASE = "http://localhost:8000/api";
+
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults(null); // back to recommendations
+      return;
+    }
+    const t = setTimeout(async () => {
+      try {
+        setSearchLoading(true);
+        const params = new URLSearchParams({ search: searchQuery.trim(), limit: 50 });
+        const res = await fetch(`${BASE}/workers/all?${params}`);
+        const data = await res.json();
+        const batch = data.workers ?? (Array.isArray(data) ? data : []);
+        // process prices same way as recommendations
+        const processed = batch.map(worker => ({
+          ...worker,
+          displayPrice: worker.basePrice || 0,
+          activeSkillName: worker.skills?.[0]?.name || worker.taskType,
+        }));
+        setSearchResults(processed);
+      } catch (err) {
+        console.error("Search error:", err);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   /* ── 1. Load workers ─────────────────────────────────────── */
   useEffect(() => {
@@ -122,6 +155,8 @@ const BrowseTaskers = () => {
     loadWorkers();
   }, []);
 
+  
+
   /* ── 2. Fetch per-worker prices ONCE after initial load ──── */
   const pricesFetchedRef = useRef(false);
 
@@ -170,7 +205,18 @@ const BrowseTaskers = () => {
 
   /* ── Filter + sort ───────────────────────────────────────── */
   const getFilteredAndSortedTaskers = () => {
-    let filtered = [...taskers];
+    let filtered = [...(searchResults ?? taskers)];
+
+    // 0. Search
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(t =>
+        `${t.firstName} ${t.lastName}`.toLowerCase().includes(q) ||
+        (t.taskType || '').toLowerCase().includes(q) ||
+        (t.address || '').toLowerCase().includes(q) ||
+        (t.skills || []).some(s => s.name?.toLowerCase().includes(q))
+      );
+    }
 
     // 1. Price
     filtered = filtered.filter(t => {
@@ -358,6 +404,33 @@ const BrowseTaskers = () => {
   return (
     <div style={styles.container}>
       <BookingNavbar />
+
+{/* Search bar — OUTSIDE content flex container */}
+<div style={{ maxWidth: '1200px', margin: '0 auto', padding: '16px 24px 0' }}>
+  <div style={{ position: 'relative' }}>
+    <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '16px', color: '#94a3b8' }}>🔍</span>
+    <input
+      type="text"
+      placeholder="Search by name..."
+      value={searchQuery}
+      onChange={e => setSearchQuery(e.target.value)}
+      style={{
+        width: '100%', padding: '12px 16px 12px 40px',
+        border: '1px solid #d1d5db', borderRadius: '8px',
+        fontSize: '15px', background: 'white', color: '#333',
+        boxSizing: 'border-box', outline: 'none',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
+      }}
+    />
+    {searchQuery && (
+      <button
+        onClick={() => setSearchQuery('')}
+        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', fontSize: '18px', color: '#94a3b8', cursor: 'pointer' }}
+      >×</button>
+    )}
+  </div>
+</div>
+
       <div style={styles.content}>
 
         {/* Sidebar */}
@@ -442,6 +515,7 @@ const BrowseTaskers = () => {
           </div>
 
         </div>
+        
 
         {/* Main list */}
         <div style={styles.mainContent}>

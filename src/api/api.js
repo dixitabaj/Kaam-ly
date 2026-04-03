@@ -1139,3 +1139,8 @@ export const autoCancelConfirmedUnpaidTasks = async () => {
     console.error("Auto-cancel confirmed unpaid tasks failed:", err);
   }
 };
+
+export const getRecentPayouts = async (workerId) => {
+  const res = await fetch(`http://localhost:8000/api/worker/${workerId}/recent-payouts`);
+  return res.json();
+};

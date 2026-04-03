@@ -240,16 +240,6 @@ export default function TaskBookingUI() {
     { id: 'Painting',         label: 'Painting',         image: paintingImg  },
     { id: 'Trending',         label: 'Trending',         image: trendingImg  },
   ];
-  useEffect(() => {
-  Notification.requestPermission().then(permission => {
-    if (permission === "granted") {
-      new Notification("Kaam-ly Test 🔔", {
-        body: "Notifications are working!",
-        icon: "/icon-192.png",
-      });
-    }
-  });
-}, []);
   /* ── Load trending data ── */
   useEffect(() => {
     if (selectedCategory !== 'Trending') return;

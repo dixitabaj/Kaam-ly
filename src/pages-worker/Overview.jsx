@@ -18,7 +18,7 @@ const StatusPill = ({ status }) => {
       padding: "4px 14px", borderRadius: 20, fontSize: "0.78rem",
       fontWeight: 500, border: `1.5px solid ${st.border}`,
       background: st.bg, color: st.color, textTransform: "capitalize",
-      fontFamily: "'DM Sans', sans-serif",
+      fontFamily: "'inter', sans-serif",
     }}>{status}</span>
   );
 };
@@ -28,8 +28,8 @@ const StatCard = ({ label, value }) => (
     background: "#f7f6f2", borderRadius: 16, padding: "1.25rem 1.5rem",
     border: "1px solid #e8e6df", flex: 1, minWidth: 0,
   }}>
-    <div style={{ fontSize: "0.82rem", color: "#888", fontFamily: "'DM Sans', sans-serif", marginBottom: 6 }}>{label}</div>
-    <div style={{ fontSize: "1.9rem", fontWeight: 700, fontFamily: "'DM Serif Display', serif", color: "#1a1a1a" }}>{value}</div>
+    <div style={{ fontSize: "11px", fontWeight: 500, color: "#888", fontFamily: "'inter', sans-serif", marginBottom: 6, letterSpacing: "0.5px" }}>{label}</div>
+    <div style={{ fontSize: "22px", fontWeight: 700, fontFamily: "'DM Serif Display', serif", color: "#1a1a1a" }}>{value}</div>
   </div>
 );
 
@@ -38,10 +38,10 @@ const EarningCard = ({ label, value, change, positive = true }) => (
     background: "#f7f6f2", borderRadius: 16, padding: "1.1rem 1.4rem",
     border: "1px solid #e8e6df", flex: 1,
   }}>
-    <div style={{ fontSize: "0.78rem", color: "#888", fontFamily: "'DM Sans', sans-serif", marginBottom: 8 }}>{label}</div>
+    <div style={{ fontSize: "0.78rem", color: "#888", fontFamily: "'inter', sans-serif", marginBottom: 8 }}>{label}</div>
     <div style={{ fontSize: "1.45rem", fontWeight: 700, fontFamily: "'DM Serif Display', serif", color: "#1a1a1a" }}>{value}</div>
     {change && (
-      <div style={{ fontSize: "0.75rem", color: positive ? "#22a06b" : "#e53e3e", marginTop: 4, fontFamily: "'DM Sans', sans-serif" }}>
+      <div style={{ fontSize: "0.75rem", color: positive ? "#22a06b" : "#e53e3e", marginTop: 4, fontFamily: "'inter', sans-serif" }}>
         {positive ? "▲" : "▼"} {change}
       </div>
     )}
@@ -53,7 +53,7 @@ const CustomTooltip = ({ active, payload, label }) => {
     return (
       <div style={{
         background: "#fff", border: "1px solid #e8e6df", borderRadius: 10,
-        padding: "8px 14px", fontFamily: "'DM Sans', sans-serif", fontSize: "0.82rem",
+        padding: "8px 14px", fontFamily: "'inter', sans-serif", fontSize: "0.82rem",
       }}>
         <div style={{ color: "#888", marginBottom: 2 }}>{label}</div>
         <div style={{ fontWeight: 700, color: "#1a1a1a" }}>Rs. {payload[0].value?.toLocaleString()}</div>
@@ -96,7 +96,7 @@ export default function Overview({ stats, tasks, chartData, chartFilter, setChar
                     onClick={() => setChartFilter(opt.key)}
                     style={{
                       padding: "4px 14px", borderRadius: 20, fontSize: "0.78rem",
-                      fontFamily: "'DM Sans', sans-serif", cursor: "pointer",
+                      fontFamily: "'inter', sans-serif", cursor: "pointer",
                       fontWeight: chartFilter === opt.key ? 600 : 400,
                       background: chartFilter === opt.key ? "#1a1a1a" : "#fff",
                       color: chartFilter === opt.key ? "#fff" : "#888",
@@ -168,7 +168,7 @@ export default function Overview({ stats, tasks, chartData, chartFilter, setChar
                       <button style={{
                         background: "#fff", border: "1px solid #ddd",
                         borderRadius: 8, padding: "4px 12px", cursor: "pointer",
-                        fontSize: "0.75rem", fontFamily: "'DM Sans', sans-serif", color: "#555",
+                        fontSize: "0.75rem", fontFamily: "'inter', sans-serif", color: "#555",
                       }}>View more</button>
                     </td>
                   </tr>

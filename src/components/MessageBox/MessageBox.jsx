@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   Info, MoreVertical, Send, Paperclip, Smile, Image, Mic,
   ArrowLeft, CheckCheck, Search, Menu, X, ClipboardList, MessageSquare,
-  Play, File,
+  Play, File, Copy, Trash2, BellOff, UserX, Flag, ChevronRight,
+  Phone, Video, Star, Download, StopCircle,
 } from 'lucide-react';
 import {
   connectWebSocket, closeWebSocket, sendMessageWS,
@@ -14,6 +15,7 @@ import { TaskDetails } from '../../pages-worker/taskDetails';
 import BookingNavbar from '../NavBar/NavBar';
 import './MessagesPage.css';
 import ChatWidget from '../HelpSection/HelpSection';
+import { useToast } from "../Toast/ToastContext";
 
 // ── Status Badge ──────────────────────────────────────────────────────────────
 const STATUS_MAP = {
@@ -41,10 +43,218 @@ const StatusBadge = ({ status }) => {
   );
 };
 
+// ── More Menu ─────────────────────────────────────────────────────────────────
+const MoreMenu = ({ onClose, onReportUser }) => {
+  const ref = useRef(null);
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  const items = [
+    { icon: <Flag size={15} />, label: 'Report', onClick: onReportUser, danger: true },
+  ];
+
+  return (
+    <div ref={ref} style={{
+      position: 'absolute', top: '48px', right: 8,
+      background: '#fff', border: '1px solid #e8e3df', borderRadius: 12,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.13)', zIndex: 300, minWidth: 190,
+      overflow: 'hidden',
+    }}>
+      {items.map((item, i) => (
+        <button
+          key={i}
+          onClick={() => { item.onClick?.(); onClose(); }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            width: '100%', padding: '11px 16px', border: 'none',
+            background: 'none', cursor: 'pointer', fontSize: 13.5,
+            fontWeight: 500, color: item.danger ? '#dc2626' : '#1a1512',
+            transition: 'background 0.12s', textAlign: 'left',
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = item.danger ? '#fef2f2' : '#f8f5f2'}
+          onMouseLeave={e => e.currentTarget.style.background = 'none'}
+        >
+          <span style={{ color: item.danger ? '#dc2626' : '#8a8179' }}>{item.icon}</span>
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+};
+
+// ── Info Panel ────────────────────────────────────────────────────────────────
+const InfoPanel = ({ otherUser, sharedTasks, onClose }) => {
+  const getInitials = (name) => {
+    if (!name) return '?';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, right: 0, height: '100%', width: 320,
+      background: '#fff', borderLeft: '1px solid #e8e3df',
+      boxShadow: '-8px 0 32px rgba(0,0,0,0.08)', zIndex: 400,
+      display: 'flex', flexDirection: 'column', overflowY: 'auto',
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '16px 20px', borderBottom: '1px solid #e8e3df',
+        position: 'sticky', top: 0, background: '#fff', zIndex: 1,
+      }}>
+        <span style={{ fontWeight: 700, fontSize: 15, color: '#1a1512' }}>Contact Info</span>
+        <button
+          onClick={onClose}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, borderRadius: 6, display: 'flex' }}
+        >
+          <X size={18} style={{ color: '#8a8179' }} />
+        </button>
+      </div>
+
+      <div style={{ padding: '28px 20px 20px', textAlign: 'center', borderBottom: '1px solid #e8e3df' }}>
+        <div style={{
+          width: 72, height: 72, borderRadius: '50%', background: '#f6ad56',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 26, fontWeight: 700, color: '#fff', margin: '0 auto 12px',
+          overflow: 'hidden',
+        }}>
+          {otherUser?.profileImage
+            ? <img src={otherUser.profileImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : getInitials(otherUser?.name)}
+        </div>
+        <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1512', marginBottom: 4 }}>
+          {otherUser?.name || 'Unknown'}
+        </div>
+        <div style={{
+          fontSize: 12, color: '#8a8179', background: '#f8f5f2',
+          display: 'inline-block', padding: '3px 10px', borderRadius: 20,
+        }}>
+          {otherUser?.taskType || 'User'}
+        </div>
+      </div>
+
+      <div style={{ padding: '16px 20px', borderBottom: '1px solid #e8e3df' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#b0a99f', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+          Contact
+        </div>
+        {otherUser?.email && (
+          <div style={{ fontSize: 13.5, color: '#1a1512', marginBottom: 8 }}>
+            <span style={{ color: '#8a8179', fontSize: 12 }}>Email · </span>
+            {otherUser.email}
+          </div>
+        )}
+        {otherUser?.phone && (
+          <div style={{ fontSize: 13.5, color: '#1a1512', marginBottom: 8 }}>
+            <span style={{ color: '#8a8179', fontSize: 12 }}>Phone · </span>
+            {otherUser.phone}
+          </div>
+        )}
+        {otherUser?.address && (
+          <div style={{ fontSize: 13.5, color: '#1a1512' }}>
+            <span style={{ color: '#8a8179', fontSize: 12 }}>Location · </span>
+            {otherUser.address}
+          </div>
+        )}
+        {!otherUser?.email && !otherUser?.phone && !otherUser?.address && (
+          <div style={{ fontSize: 13, color: '#b0a99f' }}>No contact details available</div>
+        )}
+      </div>
+
+      <div style={{ padding: '16px 20px' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#b0a99f', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+          Shared Bookings ({sharedTasks?.length || 0})
+        </div>
+        {(sharedTasks || []).length === 0 ? (
+          <div style={{ fontSize: 13, color: '#b0a99f' }}>No shared bookings</div>
+        ) : (
+          sharedTasks.map((task, i) => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '10px 0', borderBottom: i < sharedTasks.length - 1 ? '1px solid #f1f0ee' : 'none',
+            }}>
+              <div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: '#1a1512' }}>
+                  {task.taskName || task.title || 'Task'}
+                </div>
+                <div style={{ fontSize: 11, color: '#b0a99f', marginTop: 2 }}>
+                  #{(task._id || task.id || '').slice(-6).toUpperCase()}
+                </div>
+              </div>
+              <StatusBadge status={task.status} />
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ── Voice Recorder ────────────────────────────────────────────────────────────
+const useVoiceRecorder = ({ onSend, actualUserId, otherUser, setMessages, setConversations, otherId }) => {
+  const [recording, setRecording]   = useState(false);
+  const [duration,  setDuration]    = useState(0);
+  const mediaRecorderRef            = useRef(null);
+  const chunksRef                   = useRef([]);
+  const timerRef                    = useRef(null);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      mediaRecorderRef.current = mr;
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => chunksRef.current.push(e.data);
+      mr.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64 = reader.result;
+          const payload = JSON.stringify({
+            type: 'media', mediaUrl: base64,
+            mediaType: 'audio/webm', fileName: `voice_${Date.now()}.webm`,
+          });
+          const newMsg = {
+            sender_id: actualUserId, message: payload,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            date: new Date().toDateString(),
+          };
+          setMessages(prev => [...prev, newMsg]);
+          setConversations(prev => prev.map(c =>
+            (c.otherUser === (otherUser?.id) || c.otherUser === otherId)
+              ? { ...c, lastMessage: payload, lastMessageTime: Date.now() / 1000 }
+              : c
+          ));
+          sendMessageWS(actualUserId, otherUser?.id, payload);
+        };
+        reader.readAsDataURL(blob);
+        stream.getTracks().forEach(t => t.stop());
+        clearInterval(timerRef.current);
+        setDuration(0);
+      };
+      mr.start();
+      setRecording(true);
+      setDuration(0);
+      timerRef.current = setInterval(() => setDuration(d => d + 1), 1000);
+    } catch {
+      alert('Microphone access denied. Please allow microphone access to send voice messages.');
+    }
+  };
+
+  const stopRecording = () => {
+    mediaRecorderRef.current?.stop();
+    setRecording(false);
+  };
+
+  return { recording, duration, startRecording, stopRecording };
+};
+
 // ── Media Message ─────────────────────────────────────────────────────────────
 const MediaMessage = ({ mediaUrl, mediaType, fileName }) => {
   const isImage = mediaType?.startsWith('image/');
   const isVideo = mediaType?.startsWith('video/');
+  const isAudio = mediaType?.startsWith('audio/');
 
   if (isImage) {
     return (
@@ -67,6 +277,20 @@ const MediaMessage = ({ mediaUrl, mediaType, fileName }) => {
         <video controls style={{ width: '100%', maxHeight: 280, display: 'block' }}>
           <source src={mediaUrl} type={mediaType} />
         </video>
+      </div>
+    );
+  }
+
+  if (isAudio) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
+        background: '#f1f5f9', borderRadius: 12, maxWidth: 260,
+      }}>
+        <Mic size={16} style={{ color: '#f6ad56', flexShrink: 0 }} />
+        <audio controls style={{ height: 32, flex: 1, minWidth: 0 }}>
+          <source src={mediaUrl} type={mediaType} />
+        </audio>
       </div>
     );
   }
@@ -105,7 +329,6 @@ const OfferCard = ({ offer, isMyMessage, isWorker, onAccept, onReject }) => {
 
   return (
     <div className={cardClass}>
-      {/* Booking info */}
       <div style={{ marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid rgba(0,0,0,0.07)' }}>
         <div style={{ fontSize: 13.5, fontWeight: 700, color: '#1a1512' }}>
           {offer.taskName || 'Task'}
@@ -115,7 +338,6 @@ const OfferCard = ({ offer, isMyMessage, isWorker, onAccept, onReject }) => {
         </div>
       </div>
 
-      {/* Type label */}
       <div style={{
         fontSize: 11, fontWeight: 700, marginBottom: 12, textTransform: 'uppercase',
         letterSpacing: '0.05em',
@@ -128,7 +350,6 @@ const OfferCard = ({ offer, isMyMessage, isWorker, onAccept, onReject }) => {
           : 'Service Offer'}
       </div>
 
-      {/* Rows */}
       <div className="mp-offer-row">
         <span className="mp-offer-label">Estimated Hours</span>
         <span className="mp-offer-value">{offer.hours} hrs</span>
@@ -146,7 +367,6 @@ const OfferCard = ({ offer, isMyMessage, isWorker, onAccept, onReject }) => {
         </div>
       )}
 
-      {/* Status indicators */}
       {isAccepted && !isStatusMsg && (
         <div style={{ background: '#d1fae5', color: '#059669', padding: '7px', borderRadius: 8, textAlign: 'center', fontWeight: 600, fontSize: 13, marginTop: 10 }}>
           Offer Accepted
@@ -158,7 +378,6 @@ const OfferCard = ({ offer, isMyMessage, isWorker, onAccept, onReject }) => {
         </div>
       )}
 
-      {/* Note for accepted/rejected type msgs */}
       {isStatusMsg && (
         <div style={{ marginTop: 10, fontSize: 12.5, fontWeight: 600, textAlign: 'center',
           color: offer.type === 'offer_accepted' ? '#059669' : '#dc2626' }}>
@@ -168,16 +387,96 @@ const OfferCard = ({ offer, isMyMessage, isWorker, onAccept, onReject }) => {
         </div>
       )}
 
-      {/* Accept/Reject buttons */}
       {isPending && !isMyMessage && !isStatusMsg && !isWorker && (
-  <div className="mp-offer-actions">
-    <button className="mp-offer-reject" onClick={onReject}>Reject</button>
-    <button className="mp-offer-accept" onClick={onAccept}>Accept</button>
-  </div>
-)}
+        <div className="mp-offer-actions">
+          <button className="mp-offer-reject" onClick={onReject}>Reject</button>
+          <button className="mp-offer-accept" onClick={onAccept}>Accept</button>
+        </div>
+      )}
     </div>
   );
 };
+
+// ── Message Context Menu ──────────────────────────────────────────────────────
+const MessageContextMenu = ({ x, y, message, isMyMessage, onCopy, onDelete, onClose }) => {
+  const ref = useRef(null);
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  return (
+    <div ref={ref} style={{
+      position: 'fixed', top: y, left: x,
+      background: '#fff', border: '1px solid #e8e3df', borderRadius: 10,
+      boxShadow: '0 6px 24px rgba(0,0,0,0.12)', zIndex: 500, minWidth: 150,
+      overflow: 'hidden',
+    }}>
+      <button
+        onClick={() => { onCopy(message); onClose(); }}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 9,
+          width: '100%', padding: '10px 14px', border: 'none',
+          background: 'none', cursor: 'pointer', fontSize: 13.5,
+          fontWeight: 500, color: '#1a1512',
+        }}
+        onMouseEnter={e => e.currentTarget.style.background = '#f8f5f2'}
+        onMouseLeave={e => e.currentTarget.style.background = 'none'}
+      >
+        <Copy size={14} style={{ color: '#8a8179' }} /> Copy
+      </button>
+      {isMyMessage && (
+        <button
+          onClick={() => { onDelete(); onClose(); }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 9,
+            width: '100%', padding: '10px 14px', border: 'none',
+            background: 'none', cursor: 'pointer', fontSize: 13.5,
+            fontWeight: 500, color: '#dc2626',
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = '#fef2f2'}
+          onMouseLeave={e => e.currentTarget.style.background = 'none'}
+        >
+          <Trash2 size={14} style={{ color: '#dc2626' }} /> Delete
+        </button>
+      )}
+    </div>
+  );
+};
+
+// ── Toast Notification ────────────────────────────────────────────────────────
+const Toast = ({ message, onDone, duration = 5000 }) => {
+  useEffect(() => {
+    const t = setTimeout(onDone, duration);
+    return () => clearTimeout(t);
+  }, [onDone, duration]);
+  return (
+    <div style={{
+      position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)',
+      background: '#1a1512', color: '#fff', padding: '10px 20px',
+      borderRadius: 24, fontSize: 13.5, fontWeight: 600,
+      boxShadow: '0 4px 16px rgba(0,0,0,0.18)', zIndex: 600,
+      whiteSpace: 'nowrap', pointerEvents: 'none',
+      animation: 'mp-toast-in 0.2s ease',
+    }}>
+      {message.text}
+    </div>
+  );
+};
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+// Derive the best display name from a raw conversation object returned by the API.
+// Tries every common field name before falling back to the raw other_user ID.
+const resolveConvoName = (c) =>
+  c.name ||
+  c.other_user_name ||
+  c.participant_name ||
+  c.display_name ||
+  c.fullName ||
+  c.full_name ||
+  c.username ||
+  null; // will fall back to ID in the render if still null
 
 // ── Main Component ────────────────────────────────────────────────────────────
 const MessagesPage = () => {
@@ -187,29 +486,34 @@ const MessagesPage = () => {
   const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
   const currentUser = storedUser ? JSON.parse(storedUser) : null;
   const actualUserId =
-  currentUser?.id || currentUser?._id || currentUser?.userId || null;
+    currentUser?.id || currentUser?._id || currentUser?.userId || null;
   const isWorker =
     currentUser?.role === 'worker' || currentUser?.type === 'worker';
   const otherId = recieverId;
 
-  const [otherUser,         setOtherUser]        = useState(null);
-  const [messages,          setMessages]         = useState([]);
-  const [conversations,     setConversations]    = useState([]);
-  const [sharedTasks,       setSharedTasks]      = useState([]);
-  const [messageInput,      setMessageInput]     = useState('');
-  const [searchQuery,       setSearchQuery]      = useState('');
-  const [loading,           setLoading]          = useState(true);
-  const [error,             setError]            = useState(null);
-  const [showSidebar,       setShowSidebar]      = useState(true);
-  const [showOfferModal,    setShowOfferModal]   = useState(false);
-  const [offerData,         setOfferData]        = useState({ hours: '', additionalCost: '' });
-  const [selectedOfferTask, setSelectedOfferTask] = useState(null);
-  const [myBasePrice,       setMyBasePrice]      = useState(null);
-  const [activeTab,         setActiveTab]        = useState('chat');
-  const [sidebarWidth,      setSidebarWidth]     = useState(280);
-  const [convosLoading,     setConvosLoading]    = useState(true);
-  const [mediaPreview,      setMediaPreview]     = useState(null);
-  const [uploading,         setUploading]        = useState(false);
+  const [otherUser,          setOtherUser]         = useState(null);
+  const [messages,           setMessages]          = useState([]);
+  const [conversations,      setConversations]     = useState([]);
+  const [sharedTasks,        setSharedTasks]       = useState([]);
+  const [messageInput,       setMessageInput]      = useState('');
+  const [searchQuery,        setSearchQuery]       = useState('');
+  const [loading,            setLoading]           = useState(true);
+  const [error,              setError]             = useState(null);
+  const [showSidebar,        setShowSidebar]       = useState(true);
+  const [showOfferModal,     setShowOfferModal]    = useState(false);
+  const [offerData,          setOfferData]         = useState({ hours: '', additionalCost: '' });
+  const [selectedOfferTask,  setSelectedOfferTask] = useState(null);
+  const [myBasePrice,        setMyBasePrice]       = useState(null);
+  const [activeTab,          setActiveTab]         = useState('chat');
+  const [sidebarWidth,       setSidebarWidth]      = useState(280);
+  const [convosLoading,      setConvosLoading]     = useState(true);
+  const [mediaPreview,       setMediaPreview]      = useState(null);
+  const [uploading,          setUploading]         = useState(false);
+
+  const [showMoreMenu,       setShowMoreMenu]       = useState(false);
+  const [showInfoPanel,      setShowInfoPanel]      = useState(false);
+  const [toastMsg,           setToastMsg]           = useState(null);
+  const [contextMenu,        setContextMenu]        = useState(null);
 
   const messagesEndRef      = useRef(null);
   const handleNewMessageRef = useRef(null);
@@ -217,6 +521,28 @@ const MessagesPage = () => {
   const isResizing          = useRef(false);
   const imageInputRef       = useRef(null);
   const fileInputRef        = useRef(null);
+  const inputBarRef         = useRef(null);
+  const { addToast } = useToast();
+
+  // ref that always holds the latest otherUser so WS handler never reads stale closure
+  const otherUserRef = useRef(null);
+  useEffect(() => {
+    otherUserRef.current = otherUser;
+  }, [otherUser]);
+
+  // ── Voice recorder ─────────────────────────────────────────────────────────
+  const { recording, duration, startRecording, stopRecording } = useVoiceRecorder({
+    actualUserId, otherUser, setMessages, setConversations, otherId,
+  });
+
+  const showToast = (text) => setToastMsg({ text, id: Date.now() });
+
+  // ── Request browser notification permission on mount ───────────────────────
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
 
   // ── Resize ─────────────────────────────────────────────────────────────────
   const startResizing  = (e) => {
@@ -276,7 +602,8 @@ const MessagesPage = () => {
       if (p.type === 'media') {
         const isImage = p.mediaType?.startsWith('image/');
         const isVideo = p.mediaType?.startsWith('video/');
-        return isImage ? '📷 Photo' : isVideo ? '🎥 Video' : '📎 File';
+        const isAudio = p.mediaType?.startsWith('audio/');
+        return isImage ? '📷 Photo' : isVideo ? '🎥 Video' : isAudio ? '🎤 Voice message' : '📎 File';
       }
     } catch {}
     return rawMessage || 'No messages yet';
@@ -294,9 +621,14 @@ const MessagesPage = () => {
     });
   };
 
+  // ── handleNewMessageRef ────────────────────────────────────────────────────
   handleNewMessageRef.current = (msg) => {
+    console.log('🔔 WS handler called:', msg, typeof msg);
+    console.log('👤 actualUserId:', actualUserId, '| msg.sender_id:', msg.sender_id, '| match:', msg.sender_id === actualUserId);
+    if (actualUserId && msg.sender_id === actualUserId) return;
     if (!msg || typeof msg !== 'object') return;
-    if (msg.sender_id === actualUserId) return;
+    if (actualUserId && msg.sender_id === actualUserId) return;
+
     const { yes, status } = isOfferResponseMsg(msg);
     if (yes) {
       setMessages(prev => prev.map(m => {
@@ -308,12 +640,44 @@ const MessagesPage = () => {
         return m;
       }));
     }
+
     setMessages(prev => [...prev, msg]);
     setConversations(prev => prev.map(c =>
       (c.otherUser === msg.sender_id || c.otherUser === otherId)
         ? { ...c, lastMessage: msg.message || '', lastMessageTime: Date.now() / 1000 }
         : c
     ));
+
+    const senderName =
+      otherUserRef.current?.name?.split(' ')[0] ||
+      msg.senderName ||
+      'New message';
+
+    let preview = msg.message || '';
+    try {
+      const p = JSON.parse(preview);
+      if (p.type === 'media')
+        preview = p.mediaType?.startsWith('image/') ? '📷 Photo'
+                : p.mediaType?.startsWith('audio/') ? '🎤 Voice message'
+                : '📎 File';
+      else if (p.type === 'offer')          preview = '📋 Sent a service offer';
+      else if (p.type === 'offer_accepted') preview = '✅ Accepted your offer';
+      else if (p.type === 'offer_rejected') preview = '❌ Rejected your offer';
+    } catch {}
+
+    const shortPreview = preview.length > 90 ? preview.slice(0, 90) + '…' : preview;
+
+    addToast("New message from " + senderName);
+
+    if (document.hidden && Notification.permission === 'granted') {
+      new Notification(`${senderName} sent you a message`, {
+        body: shortPreview,
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
+        tag: msg.sender_id,
+        renotify: true,
+      });
+    }
   };
 
   useEffect(() => { setActiveTab('chat'); }, [senderId, recieverId]);
@@ -324,16 +688,33 @@ const MessagesPage = () => {
     setConvosLoading(true);
     fetchConversations(actualUserId)
       .then(convos => setConversations((convos || []).map(c => ({
-        id: c.room_id || c.id, otherUser: c.other_user,
-        name: c.name || c.other_user,
-        lastMessage: c.last_message || c.lastMessage || '',
+        id:              c.room_id || c.id,
+        otherUser:       c.other_user,
+        // Try every possible name field the API might return
+        name:            resolveConvoName(c),
+        lastMessage:     c.last_message || c.lastMessage || '',
         lastMessageTime: c.last_time || c.lastMessageTime || '',
-        unreadCount: c.unreadCount || 0,
-        profileImage: c.profileImage || null,
+        unreadCount:     c.unreadCount || 0,
+        profileImage:    c.profileImage || c.profile_image || null,
       }))))
       .catch(() => setConversations([]))
       .finally(() => setConvosLoading(false));
   }, [actualUserId]);
+
+  // ── When otherUser resolves, patch matching conversation name ──────────────
+  // This ensures the currently-open conversation always shows the real name
+  // even if the API didn't return it in the conversations list.
+  useEffect(() => {
+    if (!otherUser?.id || !otherUser?.name) return;
+    setConversations(prev => prev.map(c => {
+      const parts       = (c.id || '').split('__');
+      const otherInRoom = parts.find(p => p !== actualUserId) || '';
+      if (otherInRoom !== otherUser.id && c.otherUser !== otherUser.id) return c;
+      // Only patch if the stored name looks like a raw ID (no spaces / too short)
+      const looksLikeId = !c.name || c.name === c.otherUser || c.name === otherInRoom;
+      return looksLikeId ? { ...c, name: otherUser.name, profileImage: c.profileImage || otherUser.profileImage } : c;
+    }));
+  }, [otherUser, actualUserId]);
 
   // ── Fetch other user ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -411,20 +792,15 @@ const MessagesPage = () => {
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
- 
+  // ── File select ────────────────────────────────────────────────────────────
   const handleFileSelect = (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const url = URL.createObjectURL(file);
-  setMediaPreview({
-    file,
-    url,
-    type: file.type,
-    name: file.name,
-  });
-  // reset input so same file can be re-selected
-  e.target.value = '';
-};
+    const file = e.target.files[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setMediaPreview({ file, url, type: file.type, name: file.name });
+    e.target.value = '';
+  };
+
   const cancelMediaPreview = () => {
     if (mediaPreview?.url) URL.revokeObjectURL(mediaPreview.url);
     setMediaPreview(null);
@@ -565,8 +941,36 @@ const MessagesPage = () => {
     setMessageInput('');
   };
 
+  const handleReportUser = () => {
+    if (window.confirm(`Report ${otherUser?.name} for inappropriate behaviour?`)) {
+      showToast('User reported. Thank you.');
+    }
+  };
+
+  const handleCopyMessage = (msg) => {
+    let text = msg.message || '';
+    try {
+      const p = JSON.parse(text);
+      if (p.type === 'media') text = p.fileName || 'Media file';
+      else if (p.type === 'offer') text = `Service Offer: ${p.hours}hrs, Rs.${p.additionalCost} additional`;
+      else if (p.type === 'offer_accepted') text = 'Offer Accepted';
+      else if (p.type === 'offer_rejected') text = 'Offer Rejected';
+    } catch {}
+    navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard'));
+  };
+
+  const handleDeleteMessage = (index) => {
+    setMessages(prev => prev.filter((_, i) => i !== index));
+    showToast('Message deleted');
+  };
+
+  const handleMessageContextMenu = (e, index) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, msgIndex: index });
+  };
+
   const filteredConversations = conversations.filter(c =>
-    (c.name || '').toLowerCase().includes(searchQuery.toLowerCase())
+    (c.name || c.otherUser || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // ── Sidebar ────────────────────────────────────────────────────────────────
@@ -599,22 +1003,33 @@ const MessagesPage = () => {
           <div className="mp-empty">No conversations yet</div>
         ) : (
           filteredConversations.map((convo, i) => {
-            const parts = (convo.id || '').split('__');
+            const parts       = (convo.id || '').split('__');
             const otherInRoom = parts.find(p => p !== actualUserId) || '';
+            const isActive    = otherInRoom === otherId;
+
+            // For the currently-open chat, always use the freshly-resolved
+            // otherUser object so the name and avatar are never stale IDs.
+            const displayName  = isActive && otherUser?.name
+              ? otherUser.name
+              : convo.name || otherInRoom;
+            const displayImage = isActive && otherUser?.profileImage
+              ? otherUser.profileImage
+              : convo.profileImage;
+
             return (
               <div
                 key={i}
-                className={`mp-convo-item${otherInRoom === otherId ? ' active' : ''}`}
+                className={`mp-convo-item${isActive ? ' active' : ''}`}
                 onClick={() => navigate(`/chat/${actualUserId}/${otherInRoom}`)}
               >
                 <div className="mp-conv-avatar">
-                  {convo.profileImage
-                    ? <img src={convo.profileImage} alt="" className="mp-avatar-img" />
-                    : <span>{getInitials(convo.name || convo.otherUser)}</span>}
+                  {displayImage
+                    ? <img src={displayImage} alt="" className="mp-avatar-img" />
+                    : <span>{getInitials(displayName)}</span>}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                    <span className="mp-conv-name">{convo.name || convo.otherUser}</span>
+                    <span className="mp-conv-name">{displayName}</span>
                     <span className="mp-conv-time">
                       {convo.lastMessageTime
                         ? new Date(convo.lastMessageTime * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -632,105 +1047,67 @@ const MessagesPage = () => {
         )}
       </div>
 
-      <div
-        className="mp-resize-handle"
-        onMouseDown={startResizing}
-      />
+      <div className="mp-resize-handle" onMouseDown={startResizing} />
     </div>
   );
 
-  // ── Empty state ────────────────────────────────────────────────────────────
-  // REPLACE the empty state return with:
-if (!otherId) {
-  return (
-    <>
-      <BookingNavbar />                    {/* ← add here */}
-      <div className="mp-container">
-        {SidebarJSX}
-        <div className="mp-no-convo">
-          <div className="mp-no-convo-icon">
-            <MessageSquare size={32} style={{ color: '#f6ad56' }} />
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1a1512', margin: '0 0 6px', letterSpacing: '-0.3px' }}>
-              No conversation selected
-            </h3>
-            <p style={{ fontSize: 13.5, color: '#8a8179', margin: 0, lineHeight: 1.6 }}>
-              Click a conversation from the list<br />or book a worker to start chatting
-            </p>
+  // ── Empty / Loading / Error states ────────────────────────────────────────
+  if (!otherId) {
+    return (
+      <>
+        <BookingNavbar />
+        <div className="mp-container">
+          {SidebarJSX}
+          <div className="mp-no-convo">
+            <div className="mp-no-convo-icon">
+              <MessageSquare size={32} style={{ color: '#f6ad56' }} />
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <h3 style={{ fontSize: 18, fontWeight: 700, color: '#1a1512', margin: '0 0 6px', letterSpacing: '-0.3px' }}>
+                No conversation selected
+              </h3>
+              <p style={{ fontSize: 13.5, color: '#8a8179', margin: 0, lineHeight: 1.6 }}>
+                Click a conversation from the list<br />or book a worker to start chatting
+              </p>
+            </div>
           </div>
         </div>
-      </div>
-      
-<div className="mp-chat-widget-wrapper">
-  <ChatWidget />
-</div>
-    </>
-  );
-}
-
-// REPLACE the loading return with:
-if (loading) return (
-  <>
-    <BookingNavbar />                      {/* ← add here */}
-    <div className="mp-container">
-      {SidebarJSX}
-      <div className="mp-center">
-        <div className="mp-spinner" />
-        <p style={{ color: '#8a8179', margin: 0, fontSize: 14 }}>Loading…</p>
-      </div>
-    </div>
-    <div className="mp-chat-widget-wrapper">
-  <ChatWidget />
-</div>
-  </>
-);
-
-// REPLACE the error return with:
-if (error || !otherUser) return (
-  <>
-    <BookingNavbar />                      {/* ← add here */}
-    <div className="mp-container">
-      {SidebarJSX}
-      <div className="mp-center">
-        <h3 style={{ color: '#ef4444', marginBottom: 8 }}>{error || 'User not found'}</h3>
-        <button
-          onClick={() => navigate(-1)}
-          style={{ padding: '9px 20px', background: '#f6ad56', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}
-        >
-          Go Back
-        </button>
-      </div>
-    </div>
-   <div className="mp-chat-widget-wrapper">
-  <ChatWidget />
-</div>
-  </>
-);
+        <div className="mp-chat-widget-wrapper"><ChatWidget /></div>
+      </>
+    );
+  }
 
   if (loading) return (
-    <div className="mp-container">
-      {SidebarJSX}
-      <div className="mp-center">
-        <div className="mp-spinner" />
-        <p style={{ color: '#8a8179', margin: 0, fontSize: 14 }}>Loading…</p>
+    <>
+      <BookingNavbar />
+      <div className="mp-container">
+        {SidebarJSX}
+        <div className="mp-center">
+          <div className="mp-spinner" />
+          <p style={{ color: '#8a8179', margin: 0, fontSize: 14 }}>Loading…</p>
+        </div>
       </div>
-    </div>
+      <div className="mp-chat-widget-wrapper"><ChatWidget /></div>
+    </>
   );
 
   if (error || !otherUser) return (
-    <div className="mp-container">
-      {SidebarJSX}
-      <div className="mp-center">
-        <h3 style={{ color: '#ef4444', marginBottom: 8 }}>{error || 'User not found'}</h3>
-        <button
-          onClick={() => navigate(-1)}
-          style={{ padding: '9px 20px', background: '#f6ad56', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}
-        >
-          Go Back
-        </button>
+    <>
+      <BookingNavbar />
+      <div className="mp-container">
+        {SidebarJSX}
+        <div className="mp-center">
+          <h3 style={{ color: '#ef4444', marginBottom: 8 }}>{error || 'User not found'}</h3>
+          <button
+            onClick={() => navigate(-1)}
+            style={{ padding: '9px 20px', background: '#f6ad56', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}
+          >
+            Go Back
+          </button>
+        </div>
       </div>
-    </div>
+      <div className="mp-chat-widget-wrapper"><ChatWidget /></div>
+    </>
   );
 
   const activeTaskObj = activeTab !== 'chat'
@@ -750,7 +1127,7 @@ if (error || !otherUser) return (
         <div className="mp-chat-pane">
 
           {/* ── Header ── */}
-          <div className="mp-header">
+          <div className="mp-header" style={{ position: 'relative' }}>
             <div className="mp-header-left">
               {!showSidebar && (
                 <button className="mp-icon-btn" onClick={() => setShowSidebar(true)}>
@@ -775,8 +1152,29 @@ if (error || !otherUser) return (
               </div>
             </div>
             <div className="mp-header-right">
-              <button className="mp-icon-btn"><Info size={17} /></button>
-              <button className="mp-icon-btn"><MoreVertical size={17} /></button>
+              <button
+                className="mp-icon-btn"
+                title="Contact info"
+                onClick={() => setShowInfoPanel(prev => !prev)}
+                style={{ color: showInfoPanel ? '#f6ad56' : undefined }}
+              >
+                <Info size={17} />
+              </button>
+
+              <button
+                className="mp-icon-btn"
+                title="More options"
+                onClick={() => setShowMoreMenu(prev => !prev)}
+              >
+                <MoreVertical size={17} />
+              </button>
+
+              {showMoreMenu && (
+                <MoreMenu
+                  onClose={() => setShowMoreMenu(false)}
+                  onReportUser={handleReportUser}
+                />
+              )}
             </div>
           </div>
 
@@ -835,7 +1233,10 @@ if (error || !otherUser) return (
                                 <span className="mp-date-chip">{msg.date || 'Today'}</span>
                               </div>
                             )}
-                            <div className={isMyMessage ? 'mp-my-msg' : 'mp-their-msg'}>
+                            <div
+                              className={isMyMessage ? 'mp-my-msg' : 'mp-their-msg'}
+                              onContextMenu={(e) => handleMessageContextMenu(e, index)}
+                            >
                               {!isMyMessage && (
                                 <div className="mp-msg-avatar">
                                   {otherUser.profileImage
@@ -916,8 +1317,26 @@ if (error || !otherUser) return (
                 </div>
               )}
 
+              {/* Voice recording indicator */}
+              {recording && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 16px', background: '#fef3e2',
+                  borderTop: '1px solid #fde68a', fontSize: 13.5, fontWeight: 600, color: '#92400e',
+                }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', display: 'inline-block', animation: 'pulse 1s infinite' }} />
+                  Recording… {Math.floor(duration / 60).toString().padStart(2,'0')}:{(duration % 60).toString().padStart(2,'0')}
+                  <button
+                    onClick={stopRecording}
+                    style={{ marginLeft: 'auto', padding: '5px 14px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}
+                  >
+                    <StopCircle size={13} /> Stop & Send
+                  </button>
+                </div>
+              )}
+
               {/* Input bar */}
-              <div className="mp-input-bar">
+              <div className="mp-input-bar" ref={inputBarRef} style={{ position: 'relative' }}>
                 <button className="mp-icon-btn" onClick={() => fileInputRef.current?.click()} title="Attach file">
                   <Paperclip size={17} />
                 </button>
@@ -937,8 +1356,14 @@ if (error || !otherUser) return (
                   onChange={e => setMessageInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
                 />
-                <button className="mp-icon-btn"><Smile size={17} /></button>
-                <button className="mp-icon-btn"><Mic size={17} /></button>
+                <button
+                  className="mp-icon-btn"
+                  title={recording ? 'Stop recording' : 'Record voice message'}
+                  onClick={recording ? stopRecording : startRecording}
+                  style={{ color: recording ? '#ef4444' : undefined }}
+                >
+                  {recording ? <StopCircle size={17} /> : <Mic size={17} />}
+                </button>
                 <button
                   className="mp-send-btn"
                   onClick={handleSendMessage}
@@ -972,6 +1397,31 @@ if (error || !otherUser) return (
             </div>
           )}
         </div>
+
+        {/* ── Info Panel ── */}
+        {showInfoPanel && (
+          <InfoPanel
+            otherUser={otherUser}
+            sharedTasks={sharedTasks}
+            onClose={() => setShowInfoPanel(false)}
+          />
+        )}
+
+        {/* ── Message Context Menu ── */}
+        {contextMenu && (
+          <MessageContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            message={messages[contextMenu.msgIndex]}
+            isMyMessage={
+              messages[contextMenu.msgIndex]?.sender_id === actualUserId ||
+              messages[contextMenu.msgIndex]?.sender === actualUserId
+            }
+            onCopy={(msg) => handleCopyMessage(msg)}
+            onDelete={() => handleDeleteMessage(contextMenu.msgIndex)}
+            onClose={() => setContextMenu(null)}
+          />
+        )}
 
         {/* ── Offer Modal ── */}
         {showOfferModal && (
@@ -1054,9 +1504,27 @@ if (error || !otherUser) return (
           </div>
         )}
       </div>
-      <div className="mp-chat-widget-wrapper">
-  <ChatWidget />
-</div>
+
+      {toastMsg && (
+        <Toast
+          key={toastMsg.id}
+          message={toastMsg}
+          onDone={() => setToastMsg(null)}
+        />
+      )}
+
+      <div className="mp-chat-widget-wrapper"><ChatWidget /></div>
+
+      <style>{`
+        @keyframes mp-toast-in {
+          from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+          to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.3; }
+        }
+      `}</style>
     </>
   );
 };

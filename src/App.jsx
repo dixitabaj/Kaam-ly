@@ -31,6 +31,7 @@ import CustomerProfile    from './pages/customerProfile';
 import Notification from './components/Notification';
 import CompleteProfile from './components/CompleteProfile/CompleteProfile';
 import RefundManagement from './pages/admin/RefundManagement';
+import WorkerSettings from './pages-worker/workerProfile';
 function App() {
   return (
     <div>
@@ -39,7 +40,8 @@ function App() {
 
       <div className="App">
         <Routes>
-          <Route path="/" element={<Navigate to="/login" />} />
+
+          <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register-worker" element={<ServiceRegistration />} />
           <Route path="/register-customer" element={<CustomerRegistration />} />
@@ -81,8 +83,8 @@ function App() {
          
 
 <Route path="/profile/:id"                    element={<CustomerProfile />} />
-{/* <Route path="/worker/profile/:id"             element={<WorkerSettings />} />
-<Route path="/admin/settings"                 element={<AdminSettings />} /> */}
+<Route path="/worker/profile/:id"             element={<WorkerSettings />} />
+{/*<Route path="/admin/settings"                 element={<AdminSettings />} /> */}
         </Routes>
       </div>
     </Router>
