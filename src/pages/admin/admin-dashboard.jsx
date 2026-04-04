@@ -23,6 +23,7 @@ import ReportManagement from "./ReportDashboard";
 import TaskManagement from "./taskPage";
 import BookingNavbar from "../../components/Navbar/Navbar";
 import CustomerManagement from "./customerManagement";
+import FraudDetectionBoard from "./FraudDetectionBoard";
 
 // ── Stat Card ─────────────────────────────────────────────────────────────────
 const StatCard = ({ title, value, icon: Icon, color }) => (
@@ -461,6 +462,7 @@ export default function AdminDashboard() {
             {activeTab === "tasks"     && <TaskManagement />}
             {activeTab === "reports"   && <ReportManagement />}
             {activeTab === "customers" && <CustomerManagement />}
+            {activeTab === "fraud"     && <FraudDetectionBoard />}
 
 
 

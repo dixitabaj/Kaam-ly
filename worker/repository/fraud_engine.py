@@ -91,12 +91,59 @@ class FraudScorer:
     async def _check_review_spam(self, user_id: str) -> List[FraudSignal]:
         signals = []
         since = datetime.utcnow() - timedelta(hours=24)
+        
+        # Use your schema names
         count = await self.db.reviews.count_documents({
             "user_id": user_id,
-            "created_at": {"$gte": since},
+            "createdAt": {"$gte": since},   # was created_at
         })
         if count >= 8:
             signals.append(FraudSignal("review_spam", 30, f"{count} reviews in 24 hours"))
+        return signals
+
+    async def _check_rating_spike(self, user_id: str) -> List[FraudSignal]:
+        signals = []
+
+        for window_hours, threshold, score, label in [
+            (1, 5, 40, "1h"),
+            (24, 15, 25, "24h"),
+        ]:
+            since = datetime.utcnow() - timedelta(hours=window_hours)
+            burst = await self.db.reviews.count_documents({
+                "target_user_id": user_id,
+                "stars": 5,                     # was rating
+                "createdAt": {"$gte": since},   # was created_at
+            })
+            if burst >= threshold:
+                signals.append(FraudSignal("rating_spike_received", score,
+                    f"{burst} five-star reviews received in {label}"))
+                break
+
+        # Reviews submitted
+        since_24h = datetime.utcnow() - timedelta(hours=24)
+        given = await self.db.reviews.count_documents({
+            "user_id": user_id,
+            "stars": 5,                        # was rating
+            "createdAt": {"$gte": since_24h},  # was created_at
+        })
+        if given >= 10:
+            signals.append(FraudSignal("rating_spike_given", 35,
+                f"{given} five-star reviews submitted in 24h"))
+        elif given >= 5:
+            signals.append(FraudSignal("rating_spike_given", 20,
+                f"{given} five-star reviews submitted in 24h"))
+
+        # Unverified reviews (if field exists in your DB, otherwise skip)
+        if "verified_purchase" in (await self.db.reviews.find_one({})):
+            unverified = await self.db.reviews.count_documents({
+                "user_id": user_id,
+                "verified_purchase": False,
+                "createdAt": {"$gte": since_24h},
+            })
+            if unverified >= 3:
+                signals.append(FraudSignal("unverified_reviews", 25,
+                    f"{unverified} reviews with no purchase history in 24h"))
+
         return signals
 
     async def _check_rapid_signups(self, user_id: str) -> List[FraudSignal]:
@@ -148,47 +195,6 @@ class FraudScorer:
 
         return signals
 
-    async def _check_rating_spike(self, user_id: str) -> List[FraudSignal]:
-        signals = []
-
-        for window_hours, threshold, score, label in [
-            (1, 5, 40, "1h"),
-            (24, 15, 25, "24h"),
-        ]:
-            since = datetime.utcnow() - timedelta(hours=window_hours)
-            burst = await self.db.reviews.count_documents({
-                "target_user_id": user_id,
-                "rating": 5,
-                "created_at": {"$gte": since},
-            })
-            if burst >= threshold:
-                signals.append(FraudSignal("rating_spike_received", score,
-                    f"{burst} five-star reviews received in {label}"))
-                break
-
-        since_24h = datetime.utcnow() - timedelta(hours=24)
-        given = await self.db.reviews.count_documents({
-            "user_id": user_id,
-            "rating": 5,
-            "created_at": {"$gte": since_24h},
-        })
-        if given >= 10:
-            signals.append(FraudSignal("rating_spike_given", 35,
-                f"{given} five-star reviews submitted in 24h"))
-        elif given >= 5:
-            signals.append(FraudSignal("rating_spike_given", 20,
-                f"{given} five-star reviews submitted in 24h"))
-
-        unverified = await self.db.reviews.count_documents({
-            "user_id": user_id,
-            "verified_purchase": False,
-            "created_at": {"$gte": since_24h},
-        })
-        if unverified >= 3:
-            signals.append(FraudSignal("unverified_reviews", 25,
-                f"{unverified} reviews with no purchase history in 24h"))
-
-        return signals
 
     async def _check_fraud_ring(self, user_id: str) -> List[FraudSignal]:
         signals = []
@@ -240,52 +246,65 @@ class FraudScorer:
 
     async def _check_refund_abuse(self, user_id: str) -> List[FraudSignal]:
         signals = []
+
+        # Last 90 days
         since_90d = datetime.utcnow() - timedelta(days=90)
-
-        total_orders = await self.db.orders.count_documents({
-            "user_id": user_id,
-            "status": {"$in": ["completed", "refunded"]},
-            "created_at": {"$gte": since_90d},
-        })
-        refunded = await self.db.orders.count_documents({
-            "user_id": user_id,
-            "status": "refunded",
-            "created_at": {"$gte": since_90d},
-        })
-
-        if total_orders >= 5:
-            refund_rate = refunded / total_orders
-            if refund_rate >= 0.6:
-                signals.append(FraudSignal("high_refund_rate", 40,
-                    f"{refund_rate:.0%} refund rate over 90 days ({refunded}/{total_orders})"))
-            elif refund_rate >= 0.35:
-                signals.append(FraudSignal("high_refund_rate", 20,
-                    f"{refund_rate:.0%} refund rate over 90 days ({refunded}/{total_orders})"))
-
         since_7d = datetime.utcnow() - timedelta(days=7)
-        recent_refunds = await self.db.orders.count_documents({
-            "user_id": user_id,
-            "status": "refunded",
-            "refunded_at": {"$gte": since_7d},
+
+        # 1️⃣ High refund rate based on reports/refunds
+        total_refunds_90d = await self.db.refunds.count_documents({
+            "requester_id": user_id,
+            "created_at": {"$gte": since_90d},
+        })
+        resolved_reports_90d = await self.db.reports.count_documents({
+            "reporterId": user_id,
+            "status": "resolved",
+            "refundStatus": "refunded",
+            "createdAt": {"$gte": since_90d},
+        })
+        total_actions_90d = total_refunds_90d + resolved_reports_90d
+
+        if total_actions_90d >= 5:
+            refund_rate = total_refunds_90d / total_actions_90d
+            if refund_rate >= 0.6:
+                signals.append(FraudSignal(
+                    "high_refund_rate", 40,
+                    f"{refund_rate:.0%} refund rate over 90 days ({total_refunds_90d}/{total_actions_90d})"
+                ))
+            elif refund_rate >= 0.35:
+                signals.append(FraudSignal(
+                    "high_refund_rate", 20,
+                    f"{refund_rate:.0%} refund rate over 90 days ({total_refunds_90d}/{total_actions_90d})"
+                ))
+
+        # 2️⃣ Refund velocity in last 7 days
+        recent_refunds = await self.db.refunds.count_documents({
+            "requester_id": user_id,
+            "created_at": {"$gte": since_7d},
         })
         if recent_refunds >= 5:
-            signals.append(FraudSignal("refund_velocity", 30,
-                f"{recent_refunds} refunds in the last 7 days"))
+            signals.append(FraudSignal(
+                "refund_velocity", 30,
+                f"{recent_refunds} refunds in the last 7 days"
+            ))
 
+        # 3️⃣ Repeat refunds for same task/item
         pipeline = [
             {"$match": {
-                "user_id": user_id,
+                "requester_id": user_id,
                 "status": "refunded",
                 "created_at": {"$gte": since_90d},
             }},
-            {"$group": {"_id": "$item_id", "count": {"$sum": 1}}},
-            {"$match": {"count": {"$gte": 3}}},
+            {"$group": {"_id": "$task_id", "count": {"$sum": 1}}},
+            {"$match": {"count": {"$gte": 3}}}
         ]
-        repeat_items = await self.db.orders.aggregate(pipeline).to_list(None)
-        if repeat_items:
-            worst = max(repeat_items, key=lambda x: x["count"])
-            signals.append(FraudSignal("repeat_item_refund", 35,
-                f"Item {worst['_id']} refunded {worst['count']} times in 90 days"))
+        repeat_tasks = await self.db.refunds.aggregate(pipeline).to_list(None)
+        if repeat_tasks:
+            worst = max(repeat_tasks, key=lambda x: x["count"])
+            signals.append(FraudSignal(
+                "repeat_task_refund", 35,
+                f"Task {worst['_id']} refunded {worst['count']} times in 90 days"
+            ))
 
         return signals
 

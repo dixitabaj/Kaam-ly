@@ -8,7 +8,8 @@ import {
   Ban, Check, AlertOctagon, HelpCircle, Brain,
   ThumbsUp, ThumbsDown, Scale, Gavel, Zap, PenTool, RotateCcw,
   Star, MessageCircle, Layers, History, ShoppingBag, Award,
-  DollarSign, CreditCard, MapPin, Phone, Mail, CalendarIcon, 
+  DollarSign, CreditCard, MapPin, Phone, Mail, CalendarIcon,
+  Bell, Send, Percent,
 } from "lucide-react";
 import BookingNavbar from "../../components/Navbar/Navbar";
 
@@ -76,9 +77,9 @@ const ACTION_COLORS = {
 };
 
 const CRED_COLORS = {
-  High:   { color: C.green, bg: C.greenLight, icon: Shield     },
-  Medium: { color: C.brand, bg: C.brandLight, icon: Info       },
-  Low:    { color: C.red,   bg: C.redLight,   icon: AlertCircle},
+  High:   { color: C.green, bg: C.greenLight, icon: Shield      },
+  Medium: { color: C.brand, bg: C.brandLight, icon: Info        },
+  Low:    { color: C.red,   bg: C.redLight,   icon: AlertCircle },
 };
 
 const fmt = (d) => {
@@ -110,8 +111,8 @@ const apiCall = async (url, options = {}) => {
 
 // ── Avatar ────────────────────────────────────────────────────────────────────
 const Avatar = ({ type, size = 38 }) => {
-  const Icon = type === "worker" ? Briefcase : User;
-  const color = type === "worker" ? C.blue : C.purple;
+  const Icon  = type === "worker" ? Briefcase : User;
+  const color = type === "worker" ? C.blue    : C.purple;
   const bg    = type === "worker" ? C.blueLight : C.purpleLight;
   return (
     <div style={{ width: size, height: size, borderRadius: "50%", background: bg, color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: "2px solid white", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
@@ -127,7 +128,7 @@ const StatusBadge = ({ status }) => {
     resolved: { bg: "white", color: C.green, icon: CheckCircle, label: "Resolved" },
     declined: { bg: "white", color: C.red,   icon: XCircle,     label: "Declined" },
   };
-  const c = map[status] ?? map.pending;
+  const c    = map[status] ?? map.pending;
   const Icon = c.icon;
   return (
     <span style={{ background: c.bg, color: c.color, borderRadius: 100, padding: "4px 10px 4px 8px", fontSize: 12, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", border: `1px solid ${c.color}25` }}>
@@ -148,7 +149,7 @@ const TypeBadge = ({ type }) => {
 
 const ReasonBadge = ({ reason }) => {
   const config = REASON_COLORS[reason] ?? { bg: "#F0ECE7", color: C.textSecond, icon: AlertCircle };
-  const Icon = config.icon;
+  const Icon   = config.icon;
   return (
     <span style={{ background: config.bg, color: config.color, borderRadius: 100, padding: "4px 10px 4px 8px", fontSize: 12, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", border: `1px solid ${config.color}25` }}>
       <Icon size={12} />{reason}
@@ -158,28 +159,32 @@ const ReasonBadge = ({ reason }) => {
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 const Toast = ({ message, type = "success", onClose }) => {
-  useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t); }, [onClose]);
+  useEffect(() => { const t = setTimeout(onClose, 4000); return () => clearTimeout(t); }, [onClose]);
   const bg   = type === "error" ? C.red : type === "warning" ? C.brand : C.green;
   const Icon = type === "error" ? XCircle : type === "warning" ? AlertTriangle : CheckCircle;
   return (
-    <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 99999, background: bg, color: "white", padding: "12px 20px", borderRadius: 12, fontSize: 14, fontWeight: 500, boxShadow: "0 10px 25px rgba(0,0,0,0.15)", display: "flex", alignItems: "center", gap: 8, maxWidth: 320, animation: "slideUp 0.2s ease" }}>
-      <Icon size={18} />{message}
+    <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 99999, background: bg, color: "white", padding: "14px 20px", borderRadius: 12, fontSize: 14, fontWeight: 500, boxShadow: "0 10px 25px rgba(0,0,0,0.2)", display: "flex", alignItems: "center", gap: 10, maxWidth: 380, animation: "slideUp 0.2s ease" }}>
+      <Icon size={18} style={{ flexShrink: 0 }} />{message}
     </div>
   );
 };
 
 // ── Confirm Dialog ────────────────────────────────────────────────────────────
-const ConfirmDialog = ({ message, onConfirm, onCancel, danger = false }) => (
-  <div style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(28,20,16,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", animation: "fadeIn 0.2s ease" }}>
-    <div style={{ background: C.surface, borderRadius: 24, padding: 28, width: 380, boxShadow: "0 25px 50px rgba(0,0,0,0.3)", animation: "scaleIn 0.2s ease" }}>
+const ConfirmDialog = ({ title, message, subMessage, onConfirm, onCancel, danger = false, confirmLabel = "Confirm", cancelLabel = "Cancel" }) => (
+  <div style={{ position: "fixed", inset: 0, zIndex: 100002, background: "rgba(28,20,16,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", animation: "fadeIn 0.2s ease" }}>
+    <div style={{ background: C.surface, borderRadius: 24, padding: 28, width: 420, boxShadow: "0 25px 50px rgba(0,0,0,0.3)", animation: "scaleIn 0.2s ease" }}>
       <div style={{ width: 48, height: 48, borderRadius: "50%", background: danger ? C.redLight : C.brandLight, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
         <AlertTriangle size={24} color={danger ? C.red : C.brand} />
       </div>
-      <h3 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 600, color: C.textPrimary }}>Confirm Action</h3>
-      <p style={{ margin: "0 0 24px", fontSize: 14, color: C.textSecond, lineHeight: 1.5 }}>{message}</p>
+      <h3 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 700, color: C.textPrimary }}>{title || "Confirm Action"}</h3>
+      <p style={{ margin: "0 0 8px", fontSize: 14, color: C.textSecond, lineHeight: 1.5 }}>{message}</p>
+      {subMessage && (
+        <p style={{ margin: "0 0 20px", fontSize: 13, color: C.textMuted, lineHeight: 1.5, padding: "10px 12px", background: C.bg, borderRadius: 10 }}>{subMessage}</p>
+      )}
+      {!subMessage && <div style={{ marginBottom: 16 }} />}
       <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
-        <button onClick={onCancel}  style={{ padding: "10px 20px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.surface, cursor: "pointer", fontSize: 14, color: C.textSecond, fontFamily: "inherit" }}>Cancel</button>
-        <button onClick={onConfirm} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: danger ? C.red : C.green, cursor: "pointer", fontSize: 14, fontWeight: 600, color: "white", fontFamily: "inherit" }}>Confirm</button>
+        <button onClick={onCancel}  style={{ padding: "10px 20px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.surface, cursor: "pointer", fontSize: 14, color: C.textSecond, fontFamily: "inherit" }}>{cancelLabel}</button>
+        <button onClick={onConfirm} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: danger ? C.red : C.green, cursor: "pointer", fontSize: 14, fontWeight: 600, color: "white", fontFamily: "inherit" }}>{confirmLabel}</button>
       </div>
     </div>
   </div>
@@ -233,98 +238,60 @@ const StatCard = ({ label, value, color, icon: Icon, sub }) => (
 );
 
 // ── Customer History Panel ────────────────────────────────────────────────────
-// ── Customer History Panel ────────────────────────────────────────────────────
 const CustomerHistoryPanel = ({ customerId, customerEmail }) => {
   const [customer, setCustomer] = useState(null);
-  const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [tasks,    setTasks]    = useState([]);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState(null);
 
   useEffect(() => {
     if (!customerId && !customerEmail) return;
     const loadData = async () => {
       setLoading(true);
       try {
-        // Fetch customer details
         const customerRes = await fetch(`${BASE}/customer/${customerId}`);
-        if (customerRes.ok) {
-          const customerData = await customerRes.json();
-          setCustomer(customerData);
-        }
-        
-        // Fetch customer's tasks
+        if (customerRes.ok) setCustomer(await customerRes.json());
         const tasksRes = await fetch(`${BASE}/tasks/user/${customerId}`);
-        if (tasksRes.ok) {
-          const tasksData = await tasksRes.json();
-          setTasks(tasksData.tasks || []);
-        }
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
+        if (tasksRes.ok) { const d = await tasksRes.json(); setTasks(d.tasks || []); }
+      } catch (err) { setError(err.message); }
+      finally { setLoading(false); }
     };
     loadData();
   }, [customerId, customerEmail]);
 
   if (loading) return <div style={{ padding: 40, textAlign: "center" }}>Loading customer history...</div>;
-  if (error) return <div style={{ padding: 40, textAlign: "center", color: C.red }}>Error: {error}</div>;
+  if (error)   return <div style={{ padding: 40, textAlign: "center", color: C.red }}>Error: {error}</div>;
   if (!customer) return <div style={{ padding: 40, textAlign: "center", color: C.textMuted }}>No customer history available</div>;
 
   const completedTasks = tasks.filter(t => t.status === "completed").length;
   const cancelledTasks = tasks.filter(t => t.status === "cancelled").length;
-  const totalSpent = tasks.reduce((sum, t) => sum + (t.totalCost || 0), 0);
+  const totalSpent     = tasks.reduce((sum, t) => sum + (t.totalCost || 0), 0);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      {/* Customer Profile Summary */}
       <div style={{ background: C.surface, borderRadius: 16, padding: 20, border: `1px solid ${C.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
           <div style={{ width: 60, height: 60, borderRadius: "50%", background: C.purpleLight, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-            {customer.profile_picture ? (
-              <img src={customer.profile_picture} alt="profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            ) : (
-              <User size={30} color={C.purple} />
-            )}
+            {customer.profile_picture
+              ? <img src={customer.profile_picture} alt="profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              : <User size={30} color={C.purple} />}
           </div>
           <div>
-            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.textPrimary }}>
-              {customer.first_name} {customer.last_name}
-            </h3>
-            <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-              <TypeBadge type="customer" />
-              <StatusBadge status={customer.status || "active"} />
-            </div>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.textPrimary }}>{customer.first_name} {customer.last_name}</h3>
+            <div style={{ display: "flex", gap: 8, marginTop: 6 }}><TypeBadge type="customer" /><StatusBadge status={customer.status || "active"} /></div>
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
-          {[
-            ["Email", customer.email, Mail],
-            ["Phone", customer.phoneNo || "—", Phone],
-            ["Address", customer.address || "—", MapPin],
-            ["Member Since", fmt(customer.createdAt), CalendarIcon],
-            ["Date of Birth", fmt(customer.date_of_birth), CalendarIcon],
-            ["Gender", customer.gender || "—", User],
-          ].map(([label, value, Icon]) => (
+          {[["Email", customer.email, Mail], ["Phone", customer.phoneNo || "—", Phone], ["Address", customer.address || "—", MapPin], ["Member Since", fmt(customer.createdAt), CalendarIcon], ["Date of Birth", fmt(customer.date_of_birth), CalendarIcon], ["Gender", customer.gender || "—", User]].map(([label, value, Icon]) => (
             <div key={label} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: C.bg, borderRadius: 10 }}>
               <Icon size={16} color={C.textMuted} />
-              <div>
-                <div style={{ fontSize: 11, color: C.textMuted }}>{label}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary }}>{value || "—"}</div>
-              </div>
+              <div><div style={{ fontSize: 11, color: C.textMuted }}>{label}</div><div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary }}>{value || "—"}</div></div>
             </div>
           ))}
         </div>
       </div>
-
-      {/* Statistics Cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-        {[
-          ["Total Tasks", tasks.length, C.brand, ShoppingBag],
-          ["Completed", completedTasks, C.green, CheckCircle],
-          ["Cancelled", cancelledTasks, C.red, XCircle],
-          ["Total Spent", `NPR ${totalSpent.toLocaleString()}`, C.purple, DollarSign],
-        ].map(([label, value, color, Icon]) => (
+        {[["Total Tasks", tasks.length, C.brand, ShoppingBag], ["Completed", completedTasks, C.green, CheckCircle], ["Cancelled", cancelledTasks, C.red, XCircle], ["Total Spent", `NPR ${totalSpent.toLocaleString()}`, C.purple, DollarSign]].map(([label, value, color, Icon]) => (
           <div key={label} style={{ background: C.surface, borderRadius: 12, padding: 14, textAlign: "center", border: `1px solid ${C.border}` }}>
             <Icon size={18} color={color} style={{ marginBottom: 6 }} />
             <div style={{ fontSize: 20, fontWeight: 700, color }}>{value}</div>
@@ -332,44 +299,22 @@ const CustomerHistoryPanel = ({ customerId, customerEmail }) => {
           </div>
         ))}
       </div>
-
-      {/* Task History List */}
       <div style={{ background: C.surface, borderRadius: 16, padding: 20, border: `1px solid ${C.border}` }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-          <History size={18} color={C.brand} />
-          <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.textPrimary }}>Task History ({tasks.length})</h4>
-        </div>
-        {tasks.length === 0 ? (
-          <p style={{ textAlign: "center", color: C.textMuted, padding: 20 }}>No tasks found</p>
-        ) : (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}><History size={18} color={C.brand} /><h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.textPrimary }}>Task History ({tasks.length})</h4></div>
+        {tasks.length === 0 ? <p style={{ textAlign: "center", color: C.textMuted, padding: 20 }}>No tasks found</p> : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12, maxHeight: 400, overflowY: "auto" }}>
             {tasks.map((task, idx) => (
               <div key={idx} style={{ padding: 14, background: C.bg, borderRadius: 12, border: `1px solid ${C.border}` }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                  <div>
-                    <div style={{ fontWeight: 700, color: C.textPrimary }}>{task.taskName || "Untitled Task"}</div>
-                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>ID: {shortId(task._id)}</div>
-                  </div>
+                  <div><div style={{ fontWeight: 700, color: C.textPrimary }}>{task.taskName || "Untitled Task"}</div><div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>ID: {shortId(task._id)}</div></div>
                   <StatusBadge status={task.status} />
                 </div>
                 <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 8 }}>
-                  {[
-                    ["Date", task.serviceDate ? fmt(task.serviceDate) : "—"],
-                    ["Time", task.serviceTime || "—"],
-                    ["Amount", `NPR ${task.totalCost?.toLocaleString() || 0}`],
-                    ["Worker", task.assignedWorkerId ? shortId(task.assignedWorkerId) : "—"],
-                  ].map(([label, val]) => (
-                    <div key={label}>
-                      <div style={{ fontSize: 10, color: C.textMuted }}>{label}</div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: C.textSecond }}>{val}</div>
-                    </div>
+                  {[["Date", task.serviceDate ? fmt(task.serviceDate) : "—"], ["Time", task.serviceTime || "—"], ["Amount", `NPR ${task.totalCost?.toLocaleString() || 0}`], ["Worker", task.assignedWorkerId ? shortId(task.assignedWorkerId) : "—"]].map(([label, val]) => (
+                    <div key={label}><div style={{ fontSize: 10, color: C.textMuted }}>{label}</div><div style={{ fontSize: 12, fontWeight: 600, color: C.textSecond }}>{val}</div></div>
                   ))}
                 </div>
-                {task.cancelReason && (
-                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.divider}`, fontSize: 11, color: C.red }}>
-                    Cancelled: {task.cancelReason}
-                  </div>
-                )}
+                {task.cancelReason && <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.divider}`, fontSize: 11, color: C.red }}>Cancelled: {task.cancelReason}</div>}
               </div>
             ))}
           </div>
@@ -379,252 +324,74 @@ const CustomerHistoryPanel = ({ customerId, customerEmail }) => {
   );
 };
 
-// const RefundAmountModal = ({ report, onClose, onConfirm }) => {
-//   const [workerAmount, setWorkerAmount] = useState("");
-//   const [customerAmount, setCustomerAmount] = useState("");
-//   const [loading, setLoading] = useState(false);
-
-//   const totalAmount = report.totalCost || report.amount || 0;
-  
-//   const handleSubmit = async () => {
-//     const workerAmt = parseFloat(workerAmount) || 0;
-//     const customerAmt = parseFloat(customerAmount) || 0;
-    
-//     if (workerAmt + customerAmt > totalAmount) {
-//       alert("Total refund amount cannot exceed the task amount!");
-//       return;
-//     }
-    
-//     setLoading(true);
-//     try {
-//       // Call your refund API here
-//       const response = await apiCall(`${BASE}/refunds/create`, {
-//         method: "POST",
-//         body: JSON.stringify({
-//           reportId: report.id,
-//           taskId: report.taskId,
-//           workerRefundAmount: workerAmt,
-//           customerRefundAmount: customerAmt,
-//           totalAmount: totalAmount,
-//         }),
-//       });
-      
-//       if (response.ok) {
-//         onConfirm({ workerAmount: workerAmt, customerAmount: customerAmt });
-//         onClose();
-//       } else {
-//         alert("Failed to create refund");
-//       }
-//     } catch (err) {
-//       alert("Error: " + err.message);
-//     } finally {
-//       setLoading(false);
-//     }
-//   };
-
-//   return (
-//     <div style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-//       <div style={{ background: C.surface, borderRadius: 24, padding: 28, width: 450, maxWidth: "90%", boxShadow: "0 25px 50px rgba(0,0,0,0.3)" }}>
-//         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-//           <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: C.textPrimary }}>Request Refund</h3>
-//           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
-//             <X size={20} color={C.textMuted} />
-//           </button>
-//         </div>
-        
-//         <div style={{ background: C.bg, borderRadius: 12, padding: 16, marginBottom: 20 }}>
-//           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-//             <span style={{ fontSize: 13, color: C.textMuted }}>Total Task Amount:</span>
-//             <span style={{ fontSize: 16, fontWeight: 700, color: C.textPrimary }}>NPR {totalAmount.toLocaleString()}</span>
-//           </div>
-//         </div>
-        
-//         <div style={{ marginBottom: 20 }}>
-//           <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 8 }}>
-//             <Briefcase size={14} style={{ display: "inline", marginRight: 6 }} />
-//             Refund to Worker
-//           </label>
-//           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-//             <span style={{ fontSize: 14, color: C.textSecond }}>NPR</span>
-//             <input
-//               type="number"
-//               value={workerAmount}
-//               onChange={(e) => setWorkerAmount(e.target.value)}
-//               placeholder="Enter amount"
-//               min="0"
-//               max={totalAmount}
-//               style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 14, outline: "none", fontFamily: "inherit" }}
-//               onFocus={e => e.target.style.borderColor = C.brand}
-//               onBlur={e => e.target.style.borderColor = C.border}
-//             />
-//           </div>
-//         </div>
-        
-//         <div style={{ marginBottom: 24 }}>
-//           <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 8 }}>
-//             <User size={14} style={{ display: "inline", marginRight: 6 }} />
-//             Refund to Customer
-//           </label>
-//           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-//             <span style={{ fontSize: 14, color: C.textSecond }}>NPR</span>
-//             <input
-//               type="number"
-//               value={customerAmount}
-//               onChange={(e) => setCustomerAmount(e.target.value)}
-//               placeholder="Enter amount"
-//               min="0"
-//               max={totalAmount}
-//               style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 14, outline: "none", fontFamily: "inherit" }}
-//               onFocus={e => e.target.style.borderColor = C.brand}
-//               onBlur={e => e.target.style.borderColor = C.border}
-//             />
-//           </div>
-//         </div>
-        
-//         <div style={{ background: C.aiLight, borderRadius: 10, padding: 12, marginBottom: 24 }}>
-//           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-//             <span style={{ color: C.textMuted }}>Total Refund:</span>
-//             <span style={{ fontWeight: 700, color: C.aiAccent }}>
-//               NPR {(parseFloat(workerAmount || 0) + parseFloat(customerAmount || 0)).toLocaleString()}
-//             </span>
-//           </div>
-//           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginTop: 6 }}>
-//             <span style={{ color: C.textMuted }}>Remaining:</span>
-//             <span style={{ color: totalAmount - (parseFloat(workerAmount || 0) + parseFloat(customerAmount || 0)) < 0 ? C.red : C.green }}>
-//               NPR {(totalAmount - (parseFloat(workerAmount || 0) + parseFloat(customerAmount || 0))).toLocaleString()}
-//             </span>
-//           </div>
-//         </div>
-        
-//         <div style={{ display: "flex", gap: 12 }}>
-//           <button onClick={onClose} style={{ flex: 1, padding: "12px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, cursor: "pointer", fontSize: 14, color: C.textSecond, fontFamily: "inherit" }}>
-//             Cancel
-//           </button>
-//           <button onClick={handleSubmit} disabled={loading} style={{ flex: 1, padding: "12px", borderRadius: 10, border: "none", background: C.green, color: "white", fontWeight: 600, fontSize: 14, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: loading ? 0.7 : 1 }}>
-//             {loading ? <><RefreshCw size={14} style={{ animation: "spin 1s linear infinite" }} /> Processing...</> : "Confirm Refund"}
-//           </button>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// };
-
-// ── Worker History Panel ────────────────────────────────────────────────────
+// ── Worker History Panel ──────────────────────────────────────────────────────
 const WorkerHistoryPanel = ({ workerId, workerEmail }) => {
-  const [worker, setWorker] = useState(null);
-  const [tasks, setTasks] = useState([]);
+  const [worker,  setWorker]  = useState(null);
+  const [tasks,   setTasks]   = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error,   setError]   = useState(null);
 
   useEffect(() => {
     if (!workerId && !workerEmail) return;
     const loadData = async () => {
       setLoading(true);
       try {
-        // Fetch worker details by email (since workerId is email)
         const workerRes = await apiCall(`${BASE}/worker/${workerId}`);
-        if (workerRes.ok) {
-          const workerData = await workerRes.json();
-          setWorker(workerData);
-        }
-        
-        // Fetch worker's tasks
+        if (workerRes.ok) setWorker(await workerRes.json());
         const tasksRes = await apiCall(`${BASE}/tasks/worker/${workerId}`);
-        if (tasksRes.ok) {
-          const tasksData = await tasksRes.json();
-          setTasks(tasksData.tasks || []);
-        }
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
+        if (tasksRes.ok) { const d = await tasksRes.json(); setTasks(d.tasks || []); }
+      } catch (err) { setError(err.message); }
+      finally { setLoading(false); }
     };
     loadData();
   }, [workerId, workerEmail]);
 
-  // Helper function to safely get skill name from object or string
   const getSkillName = (skill) => {
     if (!skill) return "";
-    if (typeof skill === 'string') return skill;
-    if (typeof skill === 'object') {
-      return skill.name || skill.skillName || JSON.stringify(skill);
-    }
+    if (typeof skill === "string") return skill;
+    if (typeof skill === "object") return skill.name || skill.skillName || JSON.stringify(skill);
     return String(skill);
   };
 
   if (loading) return <div style={{ padding: 40, textAlign: "center" }}>Loading worker history...</div>;
-  if (error) return <div style={{ padding: 40, textAlign: "center", color: C.red }}>Error: {error}</div>;
+  if (error)   return <div style={{ padding: 40, textAlign: "center", color: C.red }}>Error: {error}</div>;
   if (!worker) return <div style={{ padding: 40, textAlign: "center", color: C.textMuted }}>No worker history available</div>;
 
   const completedTasks = tasks.filter(t => t.status === "completed").length;
   const cancelledTasks = tasks.filter(t => t.status === "cancelled").length;
-  const totalEarned = tasks.reduce((sum, t) => sum + (t.totalCost || 0), 0);
+  const totalEarned    = tasks.reduce((sum, t) => sum + (t.totalCost || 0), 0);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      {/* Worker Profile Summary */}
       <div style={{ background: C.surface, borderRadius: 16, padding: 20, border: `1px solid ${C.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
           <div style={{ width: 60, height: 60, borderRadius: "50%", background: C.blueLight, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-            {worker.profilePhoto ? (
-              <img src={worker.profilePhoto} alt="profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            ) : (
-              <Briefcase size={30} color={C.blue} />
-            )}
+            {worker.profilePhoto ? <img src={worker.profilePhoto} alt="profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <Briefcase size={30} color={C.blue} />}
           </div>
           <div>
-            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.textPrimary }}>
-              {worker.firstName} {worker.lastName}
-            </h3>
-            <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-              <TypeBadge type="worker" />
-              <StatusBadge status={worker.status || "active"} />
-            </div>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.textPrimary }}>{worker.firstName} {worker.lastName}</h3>
+            <div style={{ display: "flex", gap: 8, marginTop: 6 }}><TypeBadge type="worker" /><StatusBadge status={worker.status || "active"} /></div>
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
-          {[
-            ["Email", worker.email, Mail],
-            ["Phone", worker.phoneNo || worker.phone_no ||  "—", Phone],
-            ["Task Type", worker.taskType || "—", Briefcase],
-            ["Base Price", `NPR ${worker.basePrice?.toLocaleString() || 0}`, DollarSign],
-            ["Rating", `⭐ ${worker.rating || worker.ratings || 0}`, Star],
-            ["Completed Tasks", worker.noOfCompletedTask || 0, CheckCircle],
-            ["Total Earnings", `NPR ${worker.total_earnings?.toLocaleString() || 0}`, DollarSign],
-            ["Status", worker.status || "active", User],
-          ].map(([label, value, Icon]) => (
+          {[["Email", worker.email, Mail], ["Phone", worker.phoneNo || worker.phone_no || "—", Phone], ["Task Type", worker.taskType || "—", Briefcase], ["Base Price", `NPR ${worker.basePrice?.toLocaleString() || 0}`, DollarSign], ["Rating", `⭐ ${worker.rating || worker.ratings || 0}`, Star], ["Completed Tasks", worker.noOfCompletedTask || 0, CheckCircle], ["Total Earnings", `NPR ${worker.total_earnings?.toLocaleString() || 0}`, DollarSign], ["Status", worker.status || "active", User]].map(([label, value, Icon]) => (
             <div key={label} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: C.bg, borderRadius: 10 }}>
               <Icon size={16} color={C.textMuted} />
-              <div>
-                <div style={{ fontSize: 11, color: C.textMuted }}>{label}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary }}>{value}</div>
-              </div>
+              <div><div style={{ fontSize: 11, color: C.textMuted }}>{label}</div><div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary }}>{value}</div></div>
             </div>
           ))}
         </div>
-        {worker.skills && worker.skills.length > 0 && (
+        {worker.skills?.length > 0 && (
           <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${C.divider}` }}>
             <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 8 }}>Skills</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {worker.skills.map((skill, idx) => (
-                <span key={idx} style={{ padding: "4px 10px", background: C.blueLight, color: C.blue, borderRadius: 20, fontSize: 11, fontWeight: 600 }}>
-                  {getSkillName(skill)}
-                </span>
-              ))}
+              {worker.skills.map((skill, idx) => <span key={idx} style={{ padding: "4px 10px", background: C.blueLight, color: C.blue, borderRadius: 20, fontSize: 11, fontWeight: 600 }}>{getSkillName(skill)}</span>)}
             </div>
           </div>
         )}
       </div>
-
-      {/* Statistics Cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-        {[
-          ["Total Tasks", tasks.length, C.brand, ShoppingBag],
-          ["Completed", completedTasks, C.green, CheckCircle],
-          ["Cancelled", cancelledTasks, C.red, XCircle],
-          ["Total Earned", `NPR ${totalEarned.toLocaleString()}`, C.green, DollarSign],
-        ].map(([label, value, color, Icon]) => (
+        {[["Total Tasks", tasks.length, C.brand, ShoppingBag], ["Completed", completedTasks, C.green, CheckCircle], ["Cancelled", cancelledTasks, C.red, XCircle], ["Total Earned", `NPR ${totalEarned.toLocaleString()}`, C.green, DollarSign]].map(([label, value, color, Icon]) => (
           <div key={label} style={{ background: C.surface, borderRadius: 12, padding: 14, textAlign: "center", border: `1px solid ${C.border}` }}>
             <Icon size={18} color={color} style={{ marginBottom: 6 }} />
             <div style={{ fontSize: 20, fontWeight: 700, color }}>{value}</div>
@@ -632,44 +399,22 @@ const WorkerHistoryPanel = ({ workerId, workerEmail }) => {
           </div>
         ))}
       </div>
-
-      {/* Task History List */}
       <div style={{ background: C.surface, borderRadius: 16, padding: 20, border: `1px solid ${C.border}` }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-          <History size={18} color={C.brand} />
-          <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.textPrimary }}>Assigned Tasks ({tasks.length})</h4>
-        </div>
-        {tasks.length === 0 ? (
-          <p style={{ textAlign: "center", color: C.textMuted, padding: 20 }}>No tasks assigned</p>
-        ) : (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}><History size={18} color={C.brand} /><h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.textPrimary }}>Assigned Tasks ({tasks.length})</h4></div>
+        {tasks.length === 0 ? <p style={{ textAlign: "center", color: C.textMuted, padding: 20 }}>No tasks assigned</p> : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12, maxHeight: 400, overflowY: "auto" }}>
             {tasks.map((task, idx) => (
               <div key={idx} style={{ padding: 14, background: C.bg, borderRadius: 12, border: `1px solid ${C.border}` }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                  <div>
-                    <div style={{ fontWeight: 700, color: C.textPrimary }}>{task.taskName || "Untitled Task"}</div>
-                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>ID: {shortId(task._id)}</div>
-                  </div>
+                  <div><div style={{ fontWeight: 700, color: C.textPrimary }}>{task.taskName || "Untitled Task"}</div><div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>ID: {shortId(task._id)}</div></div>
                   <StatusBadge status={task.status} />
                 </div>
                 <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 8 }}>
-                  {[
-                    ["Date", task.serviceDate ? fmt(task.serviceDate) : "—"],
-                    ["Time", task.serviceTime || "—"],
-                    ["Amount", `NPR ${task.totalCost?.toLocaleString() || 0}`],
-                    ["Customer", task.userId ? shortId(task.userId) : "—"],
-                  ].map(([label, val]) => (
-                    <div key={label}>
-                      <div style={{ fontSize: 10, color: C.textMuted }}>{label}</div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: C.textSecond }}>{val}</div>
-                    </div>
+                  {[["Date", task.serviceDate ? fmt(task.serviceDate) : "—"], ["Time", task.serviceTime || "—"], ["Amount", `NPR ${task.totalCost?.toLocaleString() || 0}`], ["Customer", task.userId ? shortId(task.userId) : "—"]].map(([label, val]) => (
+                    <div key={label}><div style={{ fontSize: 10, color: C.textMuted }}>{label}</div><div style={{ fontSize: 12, fontWeight: 600, color: C.textSecond }}>{val}</div></div>
                   ))}
                 </div>
-                {task.payment_status && (
-                  <div style={{ marginTop: 8, fontSize: 11, color: task.payment_status === "paid" ? C.green : C.brand }}>
-                    Payment: {task.payment_status} · Escrow: {task.escrow_status}
-                  </div>
-                )}
+                {task.payment_status && <div style={{ marginTop: 8, fontSize: 11, color: task.payment_status === "paid" ? C.green : C.brand }}>Payment: {task.payment_status} · Escrow: {task.escrow_status}</div>}
               </div>
             ))}
           </div>
@@ -679,11 +424,11 @@ const WorkerHistoryPanel = ({ workerId, workerEmail }) => {
   );
 };
 
-// ── Task History Panel ──────────────────────────────────────────────────────
+// ── Task History Panel ────────────────────────────────────────────────────────
 const TaskHistoryPanel = ({ taskId }) => {
-  const [task, setTask] = useState(null);
+  const [task,    setTask]    = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error,   setError]   = useState(null);
 
   useEffect(() => {
     if (!taskId) return;
@@ -691,100 +436,42 @@ const TaskHistoryPanel = ({ taskId }) => {
       setLoading(true);
       try {
         const res = await apiCall(`${BASE}/task/${taskId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setTask(data);
-        } else {
-          setError("Failed to load task details");
-        }
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
+        if (res.ok) setTask(await res.json());
+        else setError("Failed to load task details");
+      } catch (err) { setError(err.message); }
+      finally { setLoading(false); }
     };
     loadTask();
   }, [taskId]);
 
   if (loading) return <div style={{ padding: 40, textAlign: "center" }}>Loading task details...</div>;
-  if (error) return <div style={{ padding: 40, textAlign: "center", color: C.red }}>Error: {error}</div>;
-  if (!task) return <div style={{ padding: 40, textAlign: "center", color: C.textMuted }}>No task details available</div>;
+  if (error)   return <div style={{ padding: 40, textAlign: "center", color: C.red }}>Error: {error}</div>;
+  if (!task)   return <div style={{ padding: 40, textAlign: "center", color: C.textMuted }}>No task details available</div>;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      {/* Task Header */}
       <div style={{ background: C.surface, borderRadius: 16, padding: 20, border: `1px solid ${C.border}` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-          <div>
-            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.textPrimary }}>{task.taskName || "Task Details"}</h3>
-            <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>ID: {shortId(task._id)}</div>
-          </div>
+          <div><h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.textPrimary }}>{task.taskName || "Task Details"}</h3><div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>ID: {shortId(task._id)}</div></div>
           <StatusBadge status={task.status} />
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
-          {[
-            ["Task Type", task.taskType || "—", Briefcase],
-            ["Service", task.selectedService || "—", Award],
-            ["Description", task.taskDescrip || "—", FileText],
-            ["Address", task.address || "—", MapPin],
-            ["Scheduled Date", task.serviceDate ? fmt(task.serviceDate) : "—", CalendarIcon],
-            ["Scheduled Time", task.serviceTime || "—", Clock],
-            ["Customer", task.userId ? shortId(task.userId) : "—", User],
-            ["Worker", task.assignedWorkerId ? shortId(task.assignedWorkerId) : "—", Briefcase],
-          ].map(([label, value, Icon]) => (
+          {[["Task Type", task.taskType || "—", Briefcase], ["Service", task.selectedService || "—", Award], ["Description", task.taskDescrip || "—", FileText], ["Address", task.address || "—", MapPin], ["Scheduled Date", task.serviceDate ? fmt(task.serviceDate) : "—", CalendarIcon], ["Scheduled Time", task.serviceTime || "—", Clock], ["Customer", task.userId ? shortId(task.userId) : "—", User], ["Worker", task.assignedWorkerId ? shortId(task.assignedWorkerId) : "—", Briefcase]].map(([label, value, Icon]) => (
             <div key={label} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: C.bg, borderRadius: 10 }}>
               <Icon size={16} color={C.textMuted} />
-              <div>
-                <div style={{ fontSize: 11, color: C.textMuted }}>{label}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary }}>{value}</div>
-              </div>
+              <div><div style={{ fontSize: 11, color: C.textMuted }}>{label}</div><div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary }}>{value}</div></div>
             </div>
           ))}
         </div>
       </div>
-
-      {/* Pricing Section */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-        {[
-          ["Base Price", `NPR ${task.basePrice?.toLocaleString() || 0}`, C.brand],
-          ["Additional Cost", `NPR ${task.additionalCost?.toLocaleString() || 0}`, C.purple],
-          ["Total Cost", `NPR ${task.totalCost?.toLocaleString() || 0}`, C.green],
-        ].map(([label, value, color]) => (
+        {[["Base Price", `NPR ${task.basePrice?.toLocaleString() || 0}`, C.brand], ["Additional Cost", `NPR ${task.additionalCost?.toLocaleString() || 0}`, C.purple], ["Total Cost", `NPR ${task.totalCost?.toLocaleString() || 0}`, C.green]].map(([label, value, color]) => (
           <div key={label} style={{ background: C.surface, borderRadius: 12, padding: 14, textAlign: "center", border: `1px solid ${C.border}` }}>
             <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4 }}>{label}</div>
             <div style={{ fontSize: 20, fontWeight: 700, color }}>{value}</div>
           </div>
         ))}
       </div>
-
-      {/* Cancellation/Refund Info */}
-      {task.cancelledAt && (
-        <div style={{ background: C.redLight, borderRadius: 16, padding: 20, border: `1px solid ${C.red}30` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-            <XCircle size={18} color={C.red} />
-            <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.red }}>Cancellation Details</h4>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
-            {[
-              ["Cancelled At", task.cancelledAt ? fmt(task.cancelledAt) : "—"],
-              ["Cancelled By", task.cancelledBy || "—"],
-              ["Refund Amount", `NPR ${task.refundAmount?.toLocaleString() || 0}`],
-              ["Penalty", `NPR ${task.penaltyAmount?.toLocaleString() || 0}`],
-              ["Refund Status", task.refundStatus || "—"],
-              ["Cancel Reason", task.cancelReason || "—"],
-            ].map(([label, value]) => (
-              <div key={label}>
-                <div style={{ fontSize: 11, color: C.textMuted }}>{label}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: label === "Refund Status" && value === "approved" ? C.green : C.textPrimary }}>
-                  {value}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Payment Details */}
       {task.payment_method && (
         <div style={{ background: C.surface, borderRadius: 16, padding: 20, border: `1px solid ${C.border}` }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
@@ -793,29 +480,25 @@ const TaskHistoryPanel = ({ taskId }) => {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
             {[
-              ["Method", task.payment_method || "—"],
-              ["Transaction UUID", task.esewa_transaction_uuid || "—"],
-              ["Reference ID", task.esewa_ref_id || "—"],
-              ["Status", task.payment_status || "—"],
-              ["Escrow Status", task.escrow_status || "—"],
-              ["Paid At", task.paid_at ? fmt(task.paid_at) : "—"],
+              ["Method",         task.payment_method || "—"],
+              ["Status",         task.payment_status || "—"],
+              ["Escrow Status",  task.escrow_status  || "—"],
+              ["Paid At",        task.paid_at ? fmt(task.paid_at) : "—"],
+              ...(task.payment_method === "khalti" ? [
+                ["Khalti PIDX",   task.khalti_pidx   || "—"],
+                ["Khalti Txn ID", task.khalti_txn_id || "—"],
+              ] : []),
+              ...(task.payment_method === "esewa" ? [
+                ["eSewa Txn UUID", task.esewa_transaction_uuid || "—"],
+                ["eSewa Ref ID",   task.esewa_ref_id           || "—"],
+              ] : []),
             ].map(([label, value]) => (
               <div key={label}>
                 <div style={{ fontSize: 11, color: C.textMuted }}>{label}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: value === "paid" ? C.green : value === "held" ? C.brand : C.textPrimary }}>
-                  {value || "—"}
-                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: value === "paid" ? C.green : value === "held" ? C.brand : C.textPrimary, wordBreak: "break-all" }}>{value || "—"}</div>
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Note */}
-      {task.note && (
-        <div style={{ background: C.surface, borderRadius: 16, padding: 20, border: `1px solid ${C.border}` }}>
-          <h4 style={{ margin: 0, marginBottom: 12, fontSize: 15, fontWeight: 700, color: C.textPrimary }}>Note</h4>
-          <p style={{ margin: 0, fontSize: 14, color: C.textSecond, lineHeight: 1.6 }}>{task.note}</p>
         </div>
       )}
     </div>
@@ -833,600 +516,529 @@ const AIAnalysisPanel = ({ report }) => {
   const [innerTab,        setInnerTab]        = useState("analysis");
 
   async function runAnalysis() {
-    setLoading(true);
-    setAiResult(null);
-    setContext(null);
-    setApiError(null);
-    setInnerTab("analysis");
-
+    setLoading(true); setAiResult(null); setContext(null); setApiError(null); setInnerTab("analysis");
     try {
       const token = localStorage.getItem("access_token") || localStorage.getItem("token") || "";
       const response = await fetch(`${BASE}/reports/${report.id}/ai-review`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
-      }
-
-      const data = await response.json();
+      if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      const data   = await response.json();
       const result = data.aiResult ?? data.analysis ?? data.data ?? data;
       const ctx    = data.context ?? null;
-
-      setAiResult(result);
-      setContext(ctx);
+      setAiResult(result); setContext(ctx);
       setAnalysisHistory(prev => [...prev, { timestamp: new Date().toISOString(), result, context: ctx }]);
-    } catch (err) {
-      setApiError(err.message);
-      setAiResult({ error: `AI analysis failed: ${err.message}` });
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { setApiError(err.message); setAiResult({ error: `AI analysis failed: ${err.message}` }); }
+    finally { setLoading(false); }
   }
 
-  const getSeverityConfig = (s) => {
-    const l = s?.toLowerCase?.() || "medium";
-    if (l.includes("critical")) return SEV_CONFIG.Critical;
-    if (l.includes("high"))     return SEV_CONFIG.High;
-    if (l.includes("medium"))   return SEV_CONFIG.Medium;
-    return SEV_CONFIG.Low;
-  };
-  const getActionColor = (a) => {
-    if (!a) return ACTION_COLORS["Dismiss report"];
-    const l = a.toLowerCase();
-    if (l.includes("warn"))                            return ACTION_COLORS["Warn user"];
-    if (l.includes("suspend"))                         return ACTION_COLORS["Suspend account"];
-    if (l.includes("permanent") || l.includes("ban")) return ACTION_COLORS["Permanent ban"];
-    return ACTION_COLORS["Dismiss report"];
-  };
-  const getCredColor = (c) => {
-    if (!c) return CRED_COLORS.Medium;
-    const l = c.toLowerCase();
-    if (l.includes("high"))   return CRED_COLORS.High;
-    if (l.includes("medium")) return CRED_COLORS.Medium;
-    return CRED_COLORS.Low;
-  };
+  const getSeverityConfig = (s) => { const l = s?.toLowerCase?.() || "medium"; if (l.includes("critical")) return SEV_CONFIG.Critical; if (l.includes("high")) return SEV_CONFIG.High; if (l.includes("medium")) return SEV_CONFIG.Medium; return SEV_CONFIG.Low; };
+  const getActionColor    = (a) => { if (!a) return ACTION_COLORS["Dismiss report"]; const l = a.toLowerCase(); if (l.includes("warn")) return ACTION_COLORS["Warn user"]; if (l.includes("suspend")) return ACTION_COLORS["Suspend account"]; if (l.includes("permanent") || l.includes("ban")) return ACTION_COLORS["Permanent ban"]; return ACTION_COLORS["Dismiss report"]; };
+  const getCredColor      = (c) => { if (!c) return CRED_COLORS.Medium; const l = c.toLowerCase(); if (l.includes("high")) return CRED_COLORS.High; if (l.includes("medium")) return CRED_COLORS.Medium; return CRED_COLORS.Low; };
 
   const sev  = aiResult?.severity            ? getSeverityConfig(aiResult.severity)      : null;
   const act  = aiResult?.suggestedAction     ? getActionColor(aiResult.suggestedAction)  : null;
   const cred = aiResult?.reporterCredibility ? getCredColor(aiResult.reporterCredibility): null;
 
-  const Shimmer = ({ w = "100%", h = 13 }) => (
-    <div style={{ width: w, height: h, borderRadius: 6, background: "linear-gradient(90deg,#EDE8DF 25%,#F7F5EF 50%,#EDE8DF 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.4s infinite" }} />
-  );
-  const MiniLabel = ({ children }) => (
-    <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>{children}</div>
-  );
+  const Shimmer   = ({ w = "100%", h = 13 }) => <div style={{ width: w, height: h, borderRadius: 6, background: "linear-gradient(90deg,#EDE8DF 25%,#F7F5EF 50%,#EDE8DF 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.4s infinite" }} />;
+  const MiniLabel = ({ children }) => <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>{children}</div>;
 
   return (
     <div style={{ background: C.surface, borderRadius: 16, border: `1px solid ${C.aiMid}`, overflow: "hidden" }}>
-      {/* Header */}
       <div style={{ background: `linear-gradient(135deg, ${C.aiAccent} 0%, ${C.aiAccent}dd 100%)`, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Brain size={20} color="white" />
-          </div>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "white" }}>AI Deep Analysis</div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.8)" }}>Powered by AI · Comprehensive case analysis</div>
-          </div>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}><Brain size={20} color="white" /></div>
+          <div><div style={{ fontSize: 16, fontWeight: 700, color: "white" }}>AI Deep Analysis</div><div style={{ fontSize: 11, color: "rgba(255,255,255,0.8)" }}>Powered by AI · Comprehensive case analysis</div></div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          {analysisHistory.length > 0 && (
-            <button onClick={() => setShowHistory(!showHistory)}
-              style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: "rgba(255,255,255,0.2)", color: "white", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
-              <Clock size={14} /> History ({analysisHistory.length})
-            </button>
-          )}
-          <button onClick={runAnalysis} disabled={loading}
-            style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: loading ? "rgba(255,255,255,0.3)" : "white", color: loading ? "white" : C.aiAccent, fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit" }}>
-            {loading
-              ? <><RefreshCw size={14} style={{ animation: "spin 1s linear infinite" }} /> Analyzing…</>
-              : aiResult && !aiResult.error ? <><RefreshCw size={14} /> Re-analyze</> : <><Zap size={14} /> Run Deep Analysis</>}
+          {analysisHistory.length > 0 && <button onClick={() => setShowHistory(!showHistory)} style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: "rgba(255,255,255,0.2)", color: "white", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontFamily: "inherit" }}><Clock size={14} /> History ({analysisHistory.length})</button>}
+          <button onClick={runAnalysis} disabled={loading} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: loading ? "rgba(255,255,255,0.3)" : "white", color: loading ? "white" : C.aiAccent, fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit" }}>
+            {loading ? <><RefreshCw size={14} style={{ animation: "spin 1s linear infinite" }} /> Analyzing…</> : aiResult && !aiResult.error ? <><RefreshCw size={14} /> Re-analyze</> : <><Zap size={14} /> Run Deep Analysis</>}
           </button>
         </div>
       </div>
-
-      {showHistory && analysisHistory.length > 0 && (
-        <div style={{ borderBottom: `1px solid ${C.aiMid}`, background: C.aiLight, padding: "12px 20px" }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: C.aiAccent, marginBottom: 8 }}>Previous Analyses</div>
-          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
-            {analysisHistory.map((item, idx) => (
-              <button key={idx} onClick={() => { setAiResult(item.result); setContext(item.context); }}
-                style={{ padding: "6px 12px", borderRadius: 20, border: `1px solid ${C.aiMid}`, background: "white", fontSize: 11, color: C.textSecond, cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit" }}>
-                Analysis {idx + 1} • {new Date(item.timestamp).toLocaleTimeString()}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {apiError && (
-        <div style={{ margin: 16, padding: "12px 16px", background: C.redLight, border: `1px solid ${C.red}30`, borderRadius: 8, fontSize: 13, color: C.red }}>
-          <strong>Error:</strong> {apiError}
-        </div>
-      )}
-
       {!aiResult && !loading && !apiError && (
         <div style={{ padding: "48px 20px", textAlign: "center" }}>
           <Brain size={48} style={{ color: C.aiAccent, opacity: 0.3, marginBottom: 16 }} />
           <h3 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 600, color: C.textPrimary }}>AI-Powered Analysis</h3>
-          <p style={{ margin: "0 auto", fontSize: 14, color: C.textMuted, lineHeight: 1.6, maxWidth: 400 }}>
-            Click "Run Deep Analysis" to get comprehensive insights, credibility assessment, and recommended actions.
-          </p>
+          <p style={{ margin: "0 auto", fontSize: 14, color: C.textMuted, lineHeight: 1.6, maxWidth: 400 }}>Click "Run Deep Analysis" to get comprehensive insights, credibility assessment, and recommended actions.</p>
         </div>
       )}
-
-      {loading && (
-        <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 20 }}>
-          <Shimmer w="100%" h={20} />
-          <Shimmer w="90%"  h={16} />
-          <Shimmer w="95%"  h={16} />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 8 }}>
-            <Shimmer w="100%" h={120} />
-            <Shimmer w="100%" h={120} />
-          </div>
-          <Shimmer w="100%" h={80} />
-        </div>
-      )}
-
-      {aiResult?.error && (
-        <div style={{ margin: 20, padding: "16px 20px", background: C.redLight, border: `1px solid ${C.red}30`, borderRadius: 12, fontSize: 14, color: C.red, display: "flex", alignItems: "center", gap: 10 }}>
-          <AlertTriangle size={20} />{aiResult.error}
-        </div>
-      )}
-
+      {loading && <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 20 }}><Shimmer w="100%" h={20} /><Shimmer w="90%" h={16} /><Shimmer w="95%" h={16} /></div>}
+      {apiError && <div style={{ margin: 16, padding: "12px 16px", background: C.redLight, border: `1px solid ${C.red}30`, borderRadius: 8, fontSize: 13, color: C.red }}><strong>Error:</strong> {apiError}</div>}
       {aiResult && !aiResult.error && (
-        <>
-          <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, background: C.bg }}>
-            {[
-              { key: "analysis", icon: ShieldAlert, label: "Analysis" },
-              { key: "context",  icon: Layers,      label: "Context"  },
-            ].map(({ key, icon: Icon, label }) => (
-              <button key={key} onClick={() => setInnerTab(key)}
-                style={{ flex: 1, padding: "12px 0", border: "none", background: innerTab === key ? C.surface : "transparent", color: innerTab === key ? C.aiAccent : C.textMuted, fontSize: 13, fontWeight: innerTab === key ? 700 : 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "inherit", borderBottom: innerTab === key ? `2px solid ${C.aiAccent}` : "2px solid transparent", transition: "all 0.15s" }}>
-                <Icon size={14} />{label}
-              </button>
+        <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
+          {aiResult.summary && <div style={{ background: C.aiLight, borderRadius: 12, padding: 16 }}><div style={{ fontSize: 12, fontWeight: 700, color: C.aiAccent, marginBottom: 8 }}>Summary</div><p style={{ margin: 0, fontSize: 14, color: C.textSecond, lineHeight: 1.6 }}>{aiResult.summary}</p></div>}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {aiResult.severity && <div style={{ background: sev?.bg || C.aiLight, borderRadius: 12, padding: 16 }}><MiniLabel>Severity</MiniLabel><span style={{ fontSize: 18, fontWeight: 800, color: sev?.color }}>{aiResult.severity}</span></div>}
+            {aiResult.suggestedAction && <div style={{ background: act?.bg || C.aiLight, borderRadius: 12, padding: 16 }}><MiniLabel>Suggested Action</MiniLabel><span style={{ fontSize: 16, fontWeight: 700, color: act?.color }}>{aiResult.suggestedAction}</span></div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Action Modal (Warn/Suspend) ───────────────────────────────────────────────
+const ActionModal = ({ report, refundId, onClose, onSuccess, onShowToast }) => {
+  const [selectedAction, setSelectedAction] = useState("");
+  const [duration,       setDuration]       = useState(7);
+  const [message,        setMessage]        = useState("");
+  const [sending,        setSending]        = useState(false);
+  const [pastActions,    setPastActions]    = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoadingHistory(true);
+      try {
+        let res = await apiCall(`${BASE}/refunds?report_id=${report.id}&limit=1`);
+        if (res.ok) {
+          const d   = await res.json();
+          const doc = d.refunds?.[0];
+          if (doc?.admin_actions?.length) { setPastActions(doc.admin_actions); setLoadingHistory(false); return; }
+        }
+        if (report.taskId) {
+          res = await apiCall(`${BASE}/refunds?task_id=${report.taskId}&limit=1`);
+          if (res.ok) { const d = await res.json(); setPastActions(d.refunds?.[0]?.admin_actions || []); }
+        }
+      } catch {}
+      finally { setLoadingHistory(false); }
+    };
+    load();
+  }, [report.id, report.taskId]);
+
+  const actions = [
+    { id: "warn_customer",    label: "⚠️ Warn Customer",    color: C.brand, icon: AlertTriangle },
+    { id: "warn_worker",      label: "⚠️ Warn Worker",      color: C.brand, icon: AlertTriangle },
+    { id: "suspend_customer", label: "🚫 Suspend Customer", color: C.red,   icon: Ban           },
+    { id: "suspend_worker",   label: "🚫 Suspend Worker",   color: C.red,   icon: Ban           },
+  ];
+
+  const ACTION_LABEL = { warn_customer: "Customer Warned", warn_worker: "Worker Warned", suspend_customer: "Customer Suspended", suspend_worker: "Worker Suspended" };
+  const ACTION_COLOR = { warn_customer: C.brand, warn_worker: C.brand, suspend_customer: C.red, suspend_worker: C.red };
+
+  const handleSend = async () => {
+    if (!selectedAction) { onShowToast("Please select an action", "error"); return; }
+    setSending(true);
+    try {
+      const res = await apiCall(`${BASE}/refunds/${refundId}/action`, {
+        method: "PATCH",
+        body: JSON.stringify({ action: selectedAction, duration_days: selectedAction.includes("suspend") ? duration : null, message: message || null }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPastActions(prev => [...prev, { action: selectedAction, duration_days: selectedAction.includes("suspend") ? duration : null, message, applied_at: new Date().toISOString() }]);
+        onShowToast(`✓ ${data.message}`, "success");
+        onSuccess();
+        onClose();
+      } else {
+        const err = await res.json().catch(() => null);
+        onShowToast(err?.detail || "Action failed", "error");
+      }
+    } catch (err) { onShowToast(`Error: ${err.message}`, "error"); }
+    finally { setSending(false); }
+  };
+
+  const selectedConfig = actions.find(a => a.id === selectedAction);
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 100001, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: C.surface, borderRadius: 24, padding: 28, width: 540, maxWidth: "90%", boxShadow: "0 25px 50px rgba(0,0,0,0.3)", animation: "scaleIn 0.2s ease", maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: C.brandLight, display: "flex", alignItems: "center", justifyContent: "center" }}><Send size={18} color={C.brand} /></div>
+            <div><h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.textPrimary }}>Take Action</h3><div style={{ fontSize: 11, color: C.textMuted }}>Send warning or suspend account</div></div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><X size={20} color={C.textMuted} /></button>
+        </div>
+        {!loadingHistory && pastActions.length > 0 && (
+          <div style={{ marginBottom: 20, borderRadius: 14, border: `1px solid ${C.border}`, overflow: "hidden" }}>
+            <div style={{ padding: "10px 14px", background: C.bg, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 6 }}>
+              <History size={14} color={C.textMuted} />
+              <span style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Actions Already Taken ({pastActions.length})</span>
+            </div>
+            {pastActions.map((a, idx) => (
+              <div key={idx} style={{ padding: "12px 14px", borderBottom: idx < pastActions.length - 1 ? `1px solid ${C.divider}` : "none", display: "flex", alignItems: "flex-start", gap: 10, background: C.surface }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: ACTION_COLOR[a.action] || C.textSecond, marginTop: 5, flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: ACTION_COLOR[a.action] || C.textSecond }}>{ACTION_LABEL[a.action] || a.action}</span>
+                    <span style={{ fontSize: 11, color: C.textMuted }}>{a.applied_at ? new Date(a.applied_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</span>
+                  </div>
+                  {a.duration_days && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>Duration: {a.duration_days} day(s)</div>}
+                  {a.message && <div style={{ fontSize: 12, color: C.textSecond, marginTop: 3, fontStyle: "italic" }}>"{a.message}"</div>}
+                </div>
+              </div>
             ))}
           </div>
+        )}
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 10 }}>Select Action</label>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {actions.map(action => {
+              const alreadyDone = pastActions.some(p => p.action === action.id);
+              return (
+                <button key={action.id} onClick={() => setSelectedAction(action.id)}
+                  style={{ padding: "12px 16px", borderRadius: 12, border: `2px solid ${selectedAction === action.id ? action.color : alreadyDone ? `${action.color}50` : C.border}`, background: selectedAction === action.id ? `${action.color}15` : C.surface, color: selectedAction === action.id ? action.color : alreadyDone ? `${action.color}99` : C.textSecond, fontWeight: selectedAction === action.id ? 700 : 500, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, fontFamily: "inherit", position: "relative" }}>
+                  <action.icon size={16} />{action.label}
+                  {alreadyDone && <span style={{ position: "absolute", top: -7, right: -7, background: action.color, color: "white", fontSize: 9, fontWeight: 700, borderRadius: 20, padding: "2px 6px" }}>DONE</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {selectedAction.includes("suspend") && (
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 8 }}>Suspension Duration (days)</label>
+            <input type="number" min="1" max="365" value={duration} onChange={e => setDuration(parseInt(e.target.value) || 1)}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 14, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
+          </div>
+        )}
+        <div style={{ marginBottom: 24 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 8 }}>Message to User (optional)</label>
+          <textarea value={message} onChange={e => setMessage(e.target.value)} placeholder="Additional notes or explanation..." rows={3}
+            style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 13, outline: "none", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+        </div>
+        <div style={{ display: "flex", gap: 12 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "12px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, cursor: "pointer", fontSize: 14, color: C.textSecond, fontFamily: "inherit" }}>Cancel</button>
+          <button onClick={handleSend} disabled={sending || !selectedAction}
+            style={{ flex: 1, padding: "12px", borderRadius: 10, border: "none", background: !selectedAction || sending ? C.textMuted : (selectedConfig?.color || C.brand), color: "white", fontWeight: 600, fontSize: 14, cursor: !selectedAction || sending ? "not-allowed" : "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            {sending ? <><RefreshCw size={14} style={{ animation: "spin 1s linear infinite" }} /> Sending...</> : <><Send size={14} /> {pastActions.some(p => p.action === selectedAction) ? "Send Again" : "Send Action"}</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
-          {innerTab === "analysis" && (
-            <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16, animation: "fadeIn 0.2s ease" }}>
-              {aiResult.summary && (
-                <div style={{ background: C.aiLight, borderRadius: 12, padding: 16 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: C.aiAccent, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
-                    <FileText size={14} /> Summary
-                  </div>
-                  <p style={{ margin: 0, fontSize: 14, color: C.textSecond, lineHeight: 1.6 }}>{aiResult.summary}</p>
-                </div>
-              )}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                {aiResult.severity && (
-                  <div style={{ background: sev?.bg || C.aiLight, borderRadius: 12, padding: 16 }}>
-                    <MiniLabel>Severity</MiniLabel>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                      {sev?.icon && <sev.icon size={20} color={sev.color} />}
-                      <span style={{ fontSize: 18, fontWeight: 800, color: sev?.color || C.textPrimary }}>{aiResult.severity}</span>
-                    </div>
-                    {aiResult.severityReason && <p style={{ margin: 0, fontSize: 12, color: C.textMuted, lineHeight: 1.5 }}>{aiResult.severityReason}</p>}
-                  </div>
-                )}
-                {aiResult.suggestedAction && (
-                  <div style={{ background: act?.bg || C.aiLight, borderRadius: 12, padding: 16 }}>
-                    <MiniLabel>Suggested Action</MiniLabel>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                      {act?.icon && <act.icon size={20} color={act.color} />}
-                      <span style={{ fontSize: 16, fontWeight: 700, color: act?.color || C.textPrimary }}>{aiResult.suggestedAction}</span>
-                    </div>
-                    {aiResult.actionReason && <p style={{ margin: 0, fontSize: 12, color: C.textMuted, lineHeight: 1.5 }}>{aiResult.actionReason}</p>}
-                  </div>
-                )}
-              </div>
-              {aiResult.keyEvidence && (
-                <div style={{ background: C.bg, borderRadius: 12, padding: 16 }}>
-                  <MiniLabel>Key Evidence</MiniLabel>
-                  <p style={{ margin: 0, fontSize: 14, color: C.textPrimary, fontWeight: 500 }}>{aiResult.keyEvidence}</p>
-                </div>
-              )}
-              {aiResult.redFlags?.length > 0 && (
-                <div style={{ background: C.surface, borderRadius: 12, padding: 16, border: `1px solid ${C.border}` }}>
-                  <MiniLabel>Red Flags</MiniLabel>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {aiResult.redFlags.map((flag, idx) => (
-                      <span key={idx} style={{ padding: "4px 12px", background: C.redLight, color: C.red, borderRadius: 20, fontSize: 12, fontWeight: 500 }}>⚑ {flag}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {aiResult.reporterCredibility && (
-                <div style={{ background: cred?.bg || C.bg, borderRadius: 12, padding: 16 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                    {cred?.icon && <cred.icon size={16} color={cred.color} />}
-                    <span style={{ fontSize: 13, fontWeight: 700, color: cred?.color || C.textPrimary }}>
-                      Reporter Credibility: {aiResult.reporterCredibility}
-                    </span>
-                  </div>
-                  {aiResult.credibilityNote && <p style={{ margin: 0, fontSize: 12, color: C.textMuted }}>{aiResult.credibilityNote}</p>}
-                </div>
-              )}
-              {aiResult.profileInsight && (
-                <div style={{ background: C.bg, borderRadius: 12, padding: 16 }}>
-                  <MiniLabel>Profile Insight</MiniLabel>
-                  <p style={{ margin: 0, fontSize: 13, color: C.textSecond }}>{aiResult.profileInsight}</p>
-                </div>
-              )}
-              {aiResult.chatInsight && aiResult.chatInsight !== "N/A" && (
-                <div style={{ background: C.bg, borderRadius: 12, padding: 16 }}>
-                  <MiniLabel>Chat Insight</MiniLabel>
-                  <p style={{ margin: 0, fontSize: 13, color: C.textSecond }}>{aiResult.chatInsight}</p>
-                </div>
-              )}
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
-                <button onClick={() => {
-                  const blob = new Blob([JSON.stringify(aiResult, null, 2)], { type: "application/json" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a"); a.href = url;
-                  a.download = `analysis-${report.id}-${new Date().toISOString().slice(0,10)}.json`;
-                  a.click();
-                }} style={{ padding: "6px 12px", borderRadius: 6, border: `1px solid ${C.border}`, background: C.surface, color: C.textSecond, fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
-                  <FileText size={12} /> Export JSON
-                </button>
-                <button onClick={() => {
-                  const text = `AI Analysis\n${"=".repeat(30)}\nReport: ${shortId(report.id)}\nDate: ${new Date().toLocaleString()}\n\nSummary: ${aiResult.summary || "N/A"}\nSeverity: ${aiResult.severity || "N/A"}\nAction: ${aiResult.suggestedAction || "N/A"}\nEvidence: ${aiResult.keyEvidence || "N/A"}\nRed Flags: ${aiResult.redFlags?.join(", ") || "None"}\nCredibility: ${aiResult.reporterCredibility || "N/A"}`;
-                  navigator.clipboard?.writeText(text);
-                  alert("Copied to clipboard!");
-                }} style={{ padding: "6px 12px", borderRadius: 6, border: `1px solid ${C.border}`, background: C.surface, color: C.textSecond, fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
-                  <PenTool size={12} /> Copy Summary
-                </button>
+// ── Refund Amount Modal ───────────────────────────────────────────────────────
+// KEY CHANGE: amounts can be set while report is still pending.
+// The submit button saves amounts only (does NOT resolve the report).
+// Resolving the report happens separately via the Resolve button + confirm dialog.
+const RefundAmountModal = ({ report, onClose, onConfirm, onShowToast, onShowActionModal }) => {
+  const [refundDoc,   setRefundDoc]   = useState(null);
+  const [taskDoc,     setTaskDoc]     = useState(null);
+  const [workerPct,   setWorkerPct]   = useState("");
+  const [customerPct, setCustomerPct] = useState("");
+  const [loadingDoc,  setLoadingDoc]  = useState(true);
+  const [submitting,  setSubmitting]  = useState(false);
+  const [fetchError,  setFetchError]  = useState(null);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoadingDoc(true);
+      try {
+        let doc = null;
+        let res = await apiCall(`${BASE}/refunds?report_id=${report.id}&limit=1`);
+        if (res.ok) { const d = await res.json(); doc = d.refunds?.[0] || null; }
+        if (!doc && report.taskId) {
+          res = await apiCall(`${BASE}/refunds?task_id=${report.taskId}&limit=1`);
+          if (res.ok) { const d = await res.json(); doc = d.refunds?.[0] || null; }
+        }
+        if (doc) {
+          setRefundDoc(doc);
+          const totalAmount = doc.total_amount ?? doc.totalCost ?? report.totalCost ?? 0;
+          if (doc.amount_customer != null && totalAmount > 0) {
+            setCustomerPct(((doc.amount_customer / totalAmount) * 100).toFixed(1));
+            setWorkerPct((((doc.amount_worker ?? 0) / totalAmount) * 100).toFixed(1));
+          }
+        }
+        const taskId = doc?.task_id || report.taskId;
+        if (taskId) {
+          const taskRes = await apiCall(`${BASE}/task/${taskId}`);
+          if (taskRes.ok) setTaskDoc(await taskRes.json());
+        }
+      } catch (err) { setFetchError(err.message); }
+      finally { setLoadingDoc(false); }
+    };
+    load();
+  }, [report.id, report.taskId]);
+
+  // ── Cancellation policy ───────────────────────────────────────────────────
+  const policy = (() => {
+    if (!taskDoc) return null;
+    const serviceDateTime = taskDoc.serviceDate
+      ? new Date(`${taskDoc.serviceDate}T${taskDoc.serviceTime || "00:00"}`)
+      : null;
+    const cancelledAt = report.createdAt ? new Date(report.createdAt) : null;
+    if (!serviceDateTime || !cancelledAt) return null;
+    const hrs = (serviceDateTime - cancelledAt) / (1000 * 60 * 60);
+    if (hrs >= 4)  return { type: "early", hours: hrs, label: "Early Cancellation", detail: `Cancelled ${hrs.toFixed(1)} hrs before service — full refund applies.`, policyNote: "Policy: Full refund (cancelled 4+ hours in advance)", suggestedCustomerPct: 100, suggestedWorkerPct: 0, color: C.green, bg: C.greenLight, icon: "✅" };
+    if (hrs >= 0)  return { type: "late",  hours: hrs, label: "Late Cancellation",  detail: `Cancelled ${hrs.toFixed(1)} hrs before service — worker is owed 25%.`, policyNote: "Policy: 25% retained by worker (< 4 hours before service)", suggestedCustomerPct: 75, suggestedWorkerPct: 25, color: C.brand, bg: C.brandLight, icon: "⚠️" };
+    return { type: "after", hours: Math.abs(hrs), label: "Post-Service Report", detail: `Filed ${Math.abs(hrs).toFixed(1)} hrs after scheduled service.`, policyNote: "Policy: Manual review required.", suggestedCustomerPct: null, suggestedWorkerPct: null, color: C.red, bg: C.redLight, icon: "🔍" };
+  })();
+
+  const applyPolicy = () => {
+    if (!policy) return;
+    if (policy.suggestedCustomerPct != null) setCustomerPct(String(policy.suggestedCustomerPct));
+    if (policy.suggestedWorkerPct   != null) setWorkerPct(String(policy.suggestedWorkerPct));
+    onShowToast("Policy amounts applied", "success");
+  };
+
+  const totalAmount    = refundDoc?.total_amount ?? refundDoc?.totalCost ?? report.totalCost ?? report.amount ?? 0;
+  const customerAmt    = (totalAmount * (parseFloat(customerPct) || 0)) / 100;
+  const workerAmt      = (totalAmount * (parseFloat(workerPct)   || 0)) / 100;
+  const totalRefundPct = (parseFloat(customerPct) || 0) + (parseFloat(workerPct) || 0);
+  const totalRefundAmt = customerAmt + workerAmt;
+
+  // ── Save amounts only (does NOT resolve the report) ───────────────────────
+  const handleSaveAmounts = async () => {
+    const workerP   = parseFloat(workerPct)   || 0;
+    const customerP = parseFloat(customerPct) || 0;
+    if (customerP > 100 || workerP > 100)  { onShowToast("Percentages cannot exceed 100%!", "error"); return; }
+    if (customerP + workerP > 100)         { onShowToast("Total cannot exceed 100%!", "error"); return; }
+    if (customerP === 0)                   { onShowToast("Customer refund percentage is required.", "error"); return; }
+
+    setSubmitting(true);
+    try {
+      // Save via upsert — just stores the amounts, status stays "pending"
+      const res = await apiCall(`${BASE}/refunds/upsert/${report.taskId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          amount_customer: customerAmt,
+          amount_worker:   workerAmt,
+          reason:          report.reason || "Dispute adjustment",
+          requested_by:    "admin",
+          // Keep status as pending — report hasn't been resolved yet
+          status:          refundDoc?.status || "pending",
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setRefundDoc(data);
+        onConfirm(data);
+        onShowToast(`Refund amounts saved: ${customerP}% to customer, ${workerP}% worker penalty`, "success");
+        onClose();
+      } else {
+        const errBody = await res.json().catch(() => null);
+        onShowToast(`⚠️ ${errBody?.detail || `HTTP ${res.status}`}`, "error");
+      }
+    } catch (err) { onShowToast(`Error: ${err.message}`, "error"); }
+    finally { setSubmitting(false); }
+  };
+
+  const amountsAlreadySet = refundDoc?.amount_customer != null && refundDoc.amount_customer > 0;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: C.surface, borderRadius: 24, padding: 28, width: 520, maxWidth: "90%", boxShadow: "0 25px 50px rgba(0,0,0,0.3)", animation: "scaleIn 0.2s ease", maxHeight: "90vh", overflowY: "auto" }}>
+
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: "#2E9E8E18", display: "flex", alignItems: "center", justifyContent: "center" }}><Percent size={18} color="#2E9E8E" /></div>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.textPrimary }}>Set Refund Amounts</h3>
+              <div style={{ fontSize: 11, color: C.textMuted }}>Report {shortId(report.id)} · Amounts can be set before approving</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><X size={20} color={C.textMuted} /></button>
+        </div>
+
+        {/* Info banner — amounts can be set before approval */}
+        <div style={{ marginBottom: 16, padding: "12px 14px", background: "#EEF6FF", border: "1px solid #3D7EC930", borderRadius: 12, display: "flex", alignItems: "flex-start", gap: 10 }}>
+          <Info size={16} color={C.blue} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div style={{ fontSize: 12, color: C.blue, lineHeight: 1.5 }}>
+            <strong>Set amounts first, approve later.</strong> You can save refund amounts at any time. The refund will move to <em>in progress</em> once you approve the report.
+          </div>
+        </div>
+
+        {/* Cancellation policy banner */}
+        {policy && (
+          <div style={{ marginBottom: 20, borderRadius: 14, border: `1px solid ${policy.color}35`, overflow: "hidden" }}>
+            <div style={{ padding: "12px 16px", background: policy.bg, display: "flex", alignItems: "flex-start", gap: 10 }}>
+              <span style={{ fontSize: 18, lineHeight: 1 }}>{policy.icon}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: policy.color, marginBottom: 2 }}>{policy.label} — {policy.hours.toFixed(1)} hrs before service</div>
+                <div style={{ fontSize: 12, color: C.textSecond, lineHeight: 1.5 }}>{policy.detail}</div>
+                <div style={{ fontSize: 11, color: policy.color, marginTop: 4, fontWeight: 600 }}>{policy.policyNote}</div>
               </div>
             </div>
-          )}
+            {policy.suggestedCustomerPct != null && (
+              <div style={{ padding: "10px 16px", background: C.surface, borderTop: `1px solid ${policy.color}20`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 12, color: C.textMuted }}>
+                  Suggested: <strong style={{ color: C.green }}>{policy.suggestedCustomerPct}% to customer</strong>
+                  {policy.suggestedWorkerPct > 0 && <> · <strong style={{ color: C.red }}>{policy.suggestedWorkerPct}% worker penalty</strong></>}
+                </span>
+                <button onClick={applyPolicy} style={{ padding: "5px 12px", borderRadius: 20, border: "none", background: policy.color, color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Apply</button>
+              </div>
+            )}
+          </div>
+        )}
 
-          {innerTab === "context" && (
-            <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16, animation: "fadeIn 0.2s ease" }}>
-              {!context ? (
-                <div style={{ padding: "32px 0", textAlign: "center" }}>
-                  <Layers size={36} style={{ color: C.textMuted, opacity: 0.4, marginBottom: 10 }} />
-                  <p style={{ margin: 0, fontSize: 13, color: C.textMuted }}>No context data returned from the API.</p>
+        {loadingDoc && (
+          <div style={{ padding: "32px 0", textAlign: "center", color: C.textMuted }}>
+            <RefreshCw size={24} style={{ animation: "spin 1s linear infinite", marginBottom: 8 }} />
+            <div style={{ fontSize: 13 }}>Loading refund details...</div>
+          </div>
+        )}
+        {fetchError && <div style={{ padding: 16, background: C.redLight, borderRadius: 10, color: C.red, fontSize: 13, marginBottom: 16 }}>Could not load refund data: {fetchError}</div>}
+
+        {!loadingDoc && (
+          <>
+            {/* Summary */}
+            <div style={{ background: C.bg, borderRadius: 14, padding: 16, marginBottom: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                <span style={{ fontSize: 13, color: C.textMuted }}>Total Task Amount</span>
+                <span style={{ fontSize: 16, fontWeight: 700, color: C.textPrimary }}>NPR {totalAmount.toLocaleString()}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                <span style={{ fontSize: 12, color: C.textMuted }}>Report Status</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: report.status === "resolved" ? C.green : C.brand }}>{report.status}</span>
+              </div>
+              {taskDoc?.serviceDate && (
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 12, color: C.textMuted }}>Scheduled Service</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: C.textSecond }}>
+                    {new Date(`${taskDoc.serviceDate}T${taskDoc.serviceTime || "00:00"}`).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  </span>
                 </div>
-              ) : (
-                <>
-                  {context.reportedProfile && (
-                    <div style={{ background: C.surface, borderRadius: 14, padding: 18, border: `1px solid ${C.border}` }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                        <div style={{ width: 30, height: 30, borderRadius: 8, background: C.redLight, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <UserX size={15} color={C.red} />
-                        </div>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Reported User</div>
-                      </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                        {[
-                          ["Name",       context.reportedProfile.name],
-                          ["Email",      context.reportedProfile.email],
-                          ["Role",       context.reportedProfile.role],
-                          ["Status",     context.reportedProfile.status],
-                          ["Rating",     context.reportedProfile.ratings != null ? `⭐ ${context.reportedProfile.ratings}` : "—"],
-                          ["Jobs Done",  context.reportedProfile.completedTasks ?? "—"],
-                          ["Base Price", context.reportedProfile.basePrice != null ? `NPR ${context.reportedProfile.basePrice}` : "—"],
-                          ["Task Type",  context.reportedProfile.taskType ?? "—"],
-                        ].map(([label, value]) => (
-                          <div key={label} style={{ padding: "7px 0", borderBottom: `1px solid ${C.divider}` }}>
-                            <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 600, textTransform: "uppercase", marginBottom: 3 }}>{label}</div>
-                            <div style={{ fontSize: 12, color: C.textPrimary, fontWeight: 600, wordBreak: "break-all" }}>{String(value ?? "—")}</div>
-                          </div>
-                        ))}
-                      </div>
-                      <div style={{ display: "flex", gap: 10, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.divider}` }}>
-                        {[
-                          ["Face Verified",  context.reportedProfile.faceVerified],
-                          ["Skill Verified", context.reportedProfile.skillVerified],
-                        ].map(([label, yes]) => (
-                          <div key={label} style={{ flex: 1, textAlign: "center", padding: "10px", borderRadius: 10, background: yes ? C.greenLight : C.redLight, border: `1px solid ${yes ? C.green : C.red}25` }}>
-                            <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 600, marginBottom: 6 }}>{label.toUpperCase()}</div>
-                            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: yes ? C.green : C.red }}>
-                              {yes ? <CheckCircle size={13} /> : <XCircle size={13} />}{yes ? "Yes" : "No"}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {context.reporterProfile && (
-                    <div style={{ background: C.surface, borderRadius: 14, padding: 18, border: `1px solid ${C.border}` }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                        <div style={{ width: 30, height: 30, borderRadius: 8, background: C.blueLight, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <User size={15} color={C.blue} />
-                        </div>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Reporter</div>
-                      </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                        {[
-                          ["Name",   context.reporterProfile.name],
-                          ["Role",   context.reporterProfile.role],
-                          ["Status", context.reporterProfile.status],
-                          ["Email",  context.reporterProfile.email ?? "—"],
-                        ].map(([label, value]) => (
-                          <div key={label} style={{ padding: "7px 0", borderBottom: `1px solid ${C.divider}` }}>
-                            <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 600, textTransform: "uppercase", marginBottom: 3 }}>{label}</div>
-                            <div style={{ fontSize: 12, color: C.textPrimary, fontWeight: 600, wordBreak: "break-all" }}>{String(value ?? "—")}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {context.priorReports && (
-                    <div style={{ background: context.priorReports.total > 0 ? C.redLight : C.greenLight, borderRadius: 14, padding: 18, border: `1px solid ${context.priorReports.total > 0 ? C.red : C.green}25` }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14 }}>Prior Reports Against Reported User</div>
-                      <div style={{ display: "flex", gap: 20 }}>
-                        {[
-                          ["Total",    context.priorReports.total],
-                          ["Pending",  context.priorReports.pending],
-                          ["Resolved", context.priorReports.resolved],
-                          ["Declined", context.priorReports.declined],
-                        ].map(([label, val]) => (
-                          <div key={label} style={{ textAlign: "center" }}>
-                            <div style={{ fontSize: 22, fontWeight: 800, color: context.priorReports.total > 0 ? C.red : C.green }}>{val ?? 0}</div>
-                            <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 600, textTransform: "uppercase" }}>{label}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {context.jobs?.length > 0 && (
-                    <div style={{ background: C.surface, borderRadius: 14, padding: 18, border: `1px solid ${C.border}` }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Job History ({context.jobs.length})</div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 220, overflowY: "auto" }}>
-                        {context.jobs.map((job, i) => {
-                          const sc = job.status === "completed" ? C.green  : job.status === "pending" ? C.brand    : C.textMuted;
-                          const sb = job.status === "completed" ? C.greenLight : job.status === "pending" ? C.brandLight : "#B0A89E15";
-                          return (
-                            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", borderRadius: 10, background: C.bg }}>
-                              <div>
-                                <div style={{ fontSize: 12, fontWeight: 600, color: C.textPrimary, textTransform: "capitalize", marginBottom: 2 }}>{job.taskType}</div>
-                                {job.paymentStatus && (
-                                  <div style={{ fontSize: 11, color: C.textMuted }}>
-                                    Payment: <span style={{ color: job.paymentStatus === "paid" ? C.green : C.red, fontWeight: 600 }}>{job.paymentStatus}</span>
-                                    {job.escrowStatus && <> · Escrow: <span style={{ fontWeight: 600 }}>{job.escrowStatus}</span></>}
-                                  </div>
-                                )}
-                              </div>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <span style={{ padding: "2px 8px", borderRadius: 10, fontSize: 10, fontWeight: 600, background: sb, color: sc, textTransform: "capitalize" }}>{job.status}</span>
-                                <span style={{ color: C.green, fontWeight: 700, fontSize: 12 }}>NPR {job.totalCost}</span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {(() => {
-                        const completed = context.jobs.filter(j => j.status === "completed").length;
-                        const totalNPR  = context.jobs.reduce((s, j) => s + (j.totalCost || 0), 0);
-                        const paid      = context.jobs.filter(j => j.paymentStatus === "paid").length;
-                        return (
-                          <div style={{ display: "flex", gap: 12, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.divider}` }}>
-                            {[
-                              ["Completed", completed, C.green],
-                              [`NPR ${totalNPR.toLocaleString()}`, "Total Value", C.brand],
-                              ["Paid", paid, C.blue],
-                            ].map(([val, label, color]) => (
-                              <div key={label} style={{ flex: 1, textAlign: "center" }}>
-                                <div style={{ fontSize: 16, fontWeight: 800, color }}>{val}</div>
-                                <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 600, textTransform: "uppercase" }}>{label}</div>
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  )}
-
-                  {context.reviews?.filter(r => r.text || r.stars != null).length > 0 && (
-                    <div style={{ background: C.surface, borderRadius: 14, padding: 18, border: `1px solid ${C.border}` }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Reviews</div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 180, overflowY: "auto" }}>
-                        {context.reviews.filter(r => r.text || r.stars != null).map((rev, i) => (
-                          <div key={i} style={{ padding: "10px 12px", borderRadius: 10, background: C.bg }}>
-                            {rev.stars != null && (
-                              <div style={{ display: "flex", gap: 2, marginBottom: 4 }}>
-                                {[1,2,3,4,5].map(s => (
-                                  <Star key={s} size={12} fill={s <= rev.stars ? "#C9A83D" : "none"} color={s <= rev.stars ? "#C9A83D" : C.textMuted} />
-                                ))}
-                              </div>
-                            )}
-                            {rev.text && <p style={{ margin: 0, fontSize: 12, color: C.textSecond }}>{rev.text}</p>}
-                            {rev.createdAt && rev.createdAt !== "None" && <div style={{ fontSize: 10, color: C.textMuted, marginTop: 4 }}>{fmt(rev.createdAt)}</div>}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {context.chat && (
-                    <div style={{ background: C.surface, borderRadius: 14, padding: 18, border: `1px solid ${C.border}` }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <MessageCircle size={15} color={C.aiAccent} />
-                          <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Chat History</div>
-                        </div>
-                        <span style={{ padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: C.aiLight, color: C.aiAccent }}>
-                          {context.chat.total} messages
-                        </span>
-                      </div>
-                      {context.chat.total === 0 ? (
-                        <p style={{ margin: 0, fontSize: 13, color: C.textMuted, fontStyle: "italic" }}>No chat messages between the parties.</p>
-                      ) : (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 180, overflowY: "auto" }}>
-                          {context.chat.messages?.map((msg, i) => (
-                            <div key={i} style={{ padding: "8px 12px", borderRadius: 10, background: C.aiLight, fontSize: 12, color: C.textSecond }}>
-                              <div style={{ fontWeight: 600, color: C.aiAccent, marginBottom: 2 }}>{msg.sender ?? "Unknown"}</div>
-                              <div>{msg.text ?? msg.content ?? JSON.stringify(msg)}</div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
               )}
             </div>
-          )}
-        </>
-      )}
+
+            {/* Worker Penalty % */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 8 }}>
+                <Briefcase size={14} style={{ display: "inline", marginRight: 6 }} />Worker Penalty (%)
+              </label>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.bg }}>
+                <input type="number" min="0" max="100" step="1" value={workerPct} onChange={e => setWorkerPct(e.target.value)} placeholder="0"
+                  style={{ flex: 1, border: "none", background: "transparent", fontSize: 15, fontWeight: 600, color: C.textPrimary, outline: "none", fontFamily: "inherit" }} />
+                <span style={{ fontSize: 13, color: C.textMuted, fontWeight: 600 }}>%</span>
+                <span style={{ fontSize: 12, color: C.red, fontWeight: 700, minWidth: 100, textAlign: "right" }}>= NPR {workerAmt.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Customer Refund % */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 8 }}>
+                <User size={14} style={{ display: "inline", marginRight: 6 }} />Customer Refund (%)
+              </label>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.bg }}>
+                <input type="number" min="0" max="100" step="1" value={customerPct} onChange={e => setCustomerPct(e.target.value)} placeholder="0"
+                  style={{ flex: 1, border: "none", background: "transparent", fontSize: 15, fontWeight: 600, color: C.textPrimary, outline: "none", fontFamily: "inherit" }} />
+                <span style={{ fontSize: 13, color: C.textMuted, fontWeight: 600 }}>%</span>
+                <span style={{ fontSize: 12, color: C.green, fontWeight: 700, minWidth: 100, textAlign: "right" }}>= NPR {customerAmt.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Live summary */}
+            <div style={{ background: totalRefundPct > 100 ? C.redLight : C.aiLight, borderRadius: 12, padding: 14, marginBottom: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                <span style={{ fontSize: 13, color: C.textMuted }}>Total Refund</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: totalRefundPct > 100 ? C.red : C.aiAccent }}>{totalRefundPct.toFixed(1)}% = NPR {totalRefundAmt.toLocaleString()}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 12, color: C.textMuted }}>Remaining</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: totalRefundPct > 100 ? C.red : C.green }}>{(100 - totalRefundPct).toFixed(1)}% = NPR {(totalAmount - totalRefundAmt).toLocaleString()}</span>
+              </div>
+              {totalRefundPct > 100 && <div style={{ marginTop: 8, fontSize: 12, color: C.red, fontWeight: 600 }}>⚠ Total percentage exceeds 100%!</div>}
+            </div>
+
+            {/* Buttons */}
+            <div style={{ display: "flex", gap: 12, marginBottom: refundDoc?.id ? 12 : 0 }}>
+              <button onClick={onClose} style={{ flex: 1, padding: "12px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, cursor: "pointer", fontSize: 14, color: C.textSecond, fontFamily: "inherit" }}>
+                Cancel
+              </button>
+              <button onClick={handleSaveAmounts} disabled={submitting || totalRefundPct > 100 || (parseFloat(customerPct) || 0) === 0}
+                style={{ flex: 1, padding: "12px", borderRadius: 10, border: "none", background: totalRefundPct > 100 ? C.textMuted : "#2E9E8E", color: "white", fontWeight: 600, fontSize: 14, cursor: submitting || totalRefundPct > 100 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "inherit" }}>
+                {submitting
+                  ? <><RefreshCw size={14} style={{ animation: "spin 1s linear infinite" }} /> Saving...</>
+                  : totalRefundPct > 100
+                    ? <><AlertTriangle size={14} /> Total Exceeds 100%</>
+                    : amountsAlreadySet
+                      ? <><Check size={14} /> Update Amounts</>
+                      : <><Check size={14} /> Save Amounts</>
+                }
+              </button>
+            </div>
+
+            {/* Warn/Suspend shortcut */}
+            {refundDoc?.id && (
+              <button onClick={() => { onClose(); onShowActionModal(); }}
+                style={{ width: "100%", padding: "12px", borderRadius: 10, border: `1px solid ${C.brand}40`, background: C.brandLight, color: C.brand, fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "inherit" }}>
+                <Bell size={14} />Send Warning / Suspension
+              </button>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 };
 
 // ── Report Detail Modal ───────────────────────────────────────────────────────
-// ── Refund Amount Modal ──────────────────────────────────────────────────────────────
-const RefundAmountModal = ({ report, onClose, onConfirm }) => {
-  // Initialize with existing amounts if available, otherwise empty
-  const [workerAmount, setWorkerAmount] = useState(report.amount_worker || "");
-  const [customerAmount, setCustomerAmount] = useState(report.amount_customer || "");
-  const [loading, setLoading] = useState(false);
-
-  const totalAmount = report.totalCost || report.amount || 0;
-  
-  const handleSubmit = async () => {
-    const workerAmt = parseFloat(workerAmount) || 0;
-    const customerAmt = parseFloat(customerAmount) || 0;
-    
-    if (workerAmt + customerAmt > totalAmount) {
-      alert("Total refund amount cannot exceed the task amount!");
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      // Changed to a single "upsert" or "update" endpoint
-      // Using taskId ensures we only ever have ONE record for this task
-      const response = await apiCall(`${BASE}/refunds/upsert/${report.taskId}`, {
-  method: "PATCH",
-  body: JSON.stringify({
-    // ENSURE THESE NAMES MATCH THE PYTHON SCHEMA ABOVE
-    amount_customer: parseFloat(customerAmount) || 0,
-    amount_worker: parseFloat(workerAmount) || 0,
-    reason: report.reason || "Adjustment",
-    requested_by: "admin",
-    status: "refund_in_progress" 
-  }),
-});
-      
-      if (response.ok) {
-        const updatedDoc = await response.json();
-        onConfirm(updatedDoc); // Pass the updated document back to parent
-        onClose();
-      } else {
-        alert("Failed to update refund record");
-      }
-    } catch (err) {
-      alert("Error: " + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ background: C.surface, borderRadius: 24, padding: 28, width: 450, maxWidth: "90%", boxShadow: "0 25px 50px rgba(0,0,0,0.3)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: C.textPrimary }}>Adjust Refund</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
-            <X size={20} color={C.textMuted} />
-          </button>
-        </div>
-        
-        <div style={{ background: C.bg, borderRadius: 12, padding: 16, marginBottom: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-            <span style={{ fontSize: 13, color: C.textMuted }}>Total Task Amount:</span>
-            <span style={{ fontSize: 16, fontWeight: 700, color: C.textPrimary }}>NPR {totalAmount.toLocaleString()}</span>
-          </div>
-        </div>
-        
-        {/* Input for Worker */}
-        <div style={{ marginBottom: 20 }}>
-          <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 8 }}>
-            <Briefcase size={14} style={{ display: "inline", marginRight: 6 }} />
-            Adjustment: Worker Payout
-          </label>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 14, color: C.textSecond }}>NPR</span>
-            <input
-              type="number"
-              value={workerAmount}
-              onChange={(e) => setWorkerAmount(e.target.value)}
-              placeholder="0.00"
-              style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 14 }}
-            />
-          </div>
-        </div>
-        
-        {/* Input for Customer */}
-        <div style={{ marginBottom: 24 }}>
-          <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 8 }}>
-            <User size={14} style={{ display: "inline", marginRight: 6 }} />
-            Adjustment: Customer Refund
-          </label>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 14, color: C.textSecond }}>NPR</span>
-            <input
-              type="number"
-              value={customerAmount}
-              onChange={(e) => setCustomerAmount(e.target.value)}
-              placeholder="0.00"
-              style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 14 }}
-            />
-          </div>
-        </div>
-        
-        <div style={{ display: "flex", gap: 12 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: "12px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, cursor: "pointer" }}>
-            Cancel
-          </button>
-          <button onClick={handleSubmit} disabled={loading} style={{ flex: 1, padding: "12px", borderRadius: 10, border: "none", background: C.green, color: "white", fontWeight: 600, cursor: loading ? "not-allowed" : "pointer" }}>
-            {loading ? "Updating..." : "Update Amount"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const ReportDetailModal = ({ report, onClose, onResolve, onDecline, onDelete, onRefundCreated }) => {
+const ReportDetailModal = ({ report, onClose, onResolve, onDecline, onDelete, onRefundCreated, onShowToast }) => {
   const [adminNote,       setAdminNote]       = useState(report.adminNote || "");
   const [confirm,         setConfirm]         = useState(null);
   const [activeTab,       setActiveTab]       = useState("details");
   const [showRefundModal, setShowRefundModal] = useState(false);
+  const [showActionModal, setShowActionModal] = useState(false);
   const [refundCount,     setRefundCount]     = useState(0);
+  const [localReport,     setLocalReport]     = useState(report);
+  const [refundData,      setRefundData]      = useState(null);
   const backdropRef = useRef(null);
 
-  // Fetch how many refunds are already linked to this report
+  useEffect(() => { setLocalReport(report); }, [report]);
+
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await apiCall(`${BASE}/refunds?report_id=${report.id}&limit=1`);
-        if (res.ok) {
-          const d = await res.json();
-          setRefundCount(d.total ?? 0);
+        let res = await apiCall(`${BASE}/refunds?report_id=${report.id}&limit=1`);
+        if (res.ok) { const d = await res.json(); if ((d.total ?? 0) > 0) { setRefundCount(d.total); setRefundData(d.refunds?.[0]); return; } }
+        if (report.taskId) {
+          res = await apiCall(`${BASE}/refunds?task_id=${report.taskId}&limit=1`);
+          if (res.ok) { const d = await res.json(); setRefundCount(d.total ?? 0); setRefundData(d.refunds?.[0]); }
         }
       } catch {}
     };
     load();
-  }, [report.id]);
+  }, [report.id, report.taskId]);
 
-  const handleRefundConfirm = async (refundData) => {
-    setRefundCount(prev => prev + 1);
-    if (onRefundCreated) {
-      onRefundCreated(refundData);
-    }
-    setShowRefundModal(false);
+  const handleRefundConfirm = (refund) => {
+    setRefundCount(prev => Math.max(prev, 1));
+    setRefundData(refund);
+    if (onRefundCreated) onRefundCreated(refund);
+  };
+
+  const handleResolveLocal = async (reportId, note) => {
+    await onResolve(reportId, note);
+    setLocalReport(p => ({ ...p, status: "resolved", adminNote: note }));
+  };
+
+  const handleDeclineLocal = async (reportId, note) => {
+    await onDecline(reportId, note);
+    setLocalReport(p => ({ ...p, status: "declined", adminNote: note }));
+  };
+
+  // ── Resolve with confirmation dialog ─────────────────────────────────────
+  const triggerResolve = () => {
+    const hasAmounts = refundData?.amount_customer != null && refundData.amount_customer > 0;
+    setConfirm({
+      type: "resolve",
+      title: "Approve & Resolve Report",
+      message: hasAmounts
+        ? `Resolving this report will move the refund to in-progress and allow the money to be released.`
+        : `No refund amounts have been set yet. Resolving without amounts will approve the report but the refund will stay in "approved" state until amounts are added.`,
+      subMessage: hasAmounts
+        ? `Customer refund: NPR ${refundData.amount_customer?.toLocaleString() ?? 0} · Worker penalty: NPR ${refundData.amount_worker?.toLocaleString() ?? 0}`
+        : `Tip: Set refund amounts first using the "Set Refund %" button, then approve.`,
+      danger: false,
+      confirmLabel: "Yes, Resolve Report",
+    });
+  };
+
+  const triggerDecline = () => {
+    setConfirm({
+      type: "decline",
+      title: "Decline Report",
+      message: "Are you sure you want to decline this report? The refund request will also be declined.",
+      danger: true,
+      confirmLabel: "Yes, Decline",
+    });
   };
 
   const DetailRow = ({ icon: Icon, label, value }) => (
@@ -1443,26 +1055,20 @@ const ReportDetailModal = ({ report, onClose, onResolve, onDecline, onDelete, on
 
   return (
     <>
-      <div ref={backdropRef}
-        onClick={e => { if (e.target === backdropRef.current) onClose(); }}
+      <div ref={backdropRef} onClick={e => { if (e.target === backdropRef.current) onClose(); }}
         style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(28,20,16,0.5)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
         <div onClick={e => e.stopPropagation()}
           style={{ background: C.surface, borderRadius: 28, width: 900, height: "92vh", display: "flex", flexDirection: "column", boxShadow: "0 25px 60px rgba(0,0,0,0.3)", animation: "scaleIn 0.2s ease", overflow: "hidden" }}>
 
           {/* Header */}
           <div style={{ background: O.header, paddingTop: "20px", paddingLeft: "28px", paddingRight: "28px", flexShrink: 0, position: "relative" }}>
-            <button onClick={onClose} style={{ position: "absolute", top: 20, right: 20, background: "rgba(255,255,255,0.2)", border: "none", borderRadius: "50%", width: 36, height: 36, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "white" }}>
-              <X size={16} />
-            </button>
+            <button onClick={onClose} style={{ position: "absolute", top: 20, right: 20, background: "rgba(255,255,255,0.2)", border: "none", borderRadius: "50%", width: 36, height: 36, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "white" }}><X size={16} /></button>
             <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16 }}>
-              <div style={{ width: 48, height: 48, borderRadius: 14, background: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Flag size={22} color="white" />
-              </div>
+              <div style={{ width: 48, height: 48, borderRadius: 14, background: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}><Flag size={22} color="white" /></div>
               <div>
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", fontWeight: 600, marginBottom: 4 }}>{shortId(report.id)}</div>
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", fontWeight: 600, marginBottom: 4 }}>{shortId(localReport.id)}</div>
                 <h2 style={{ color: "white", margin: 0, fontSize: 20, fontWeight: 700 }}>Report Details</h2>
               </div>
-              {/* Linked refund indicator */}
               {refundCount > 0 && (
                 <div style={{ marginLeft: "auto", background: "rgba(255,255,255,0.2)", borderRadius: 20, padding: "6px 14px", display: "flex", alignItems: "center", gap: 6 }}>
                   <RotateCcw size={14} color="white" />
@@ -1470,58 +1076,69 @@ const ReportDetailModal = ({ report, onClose, onResolve, onDecline, onDelete, on
                 </div>
               )}
             </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-              <StatusBadge status={report.status} />
-              <ReasonBadge reason={report.reason} />
-            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}><StatusBadge status={localReport.status} /><ReasonBadge reason={localReport.reason} /></div>
             <div style={{ display: "flex", gap: 4, overflowX: "auto" }}>
-              {[
-                { key: "details",       icon: FileText,     label: "Details" },
-                { key: "customer-history", icon: User,      label: "Customer History" },
-                { key: "worker-history",  icon: Briefcase,  label: "Worker History" },
-                { key: "task-history",    icon: TrendingUp, label: "Task History" },
-                { key: "ai-analysis",     icon: Brain,      label: "AI Analysis" },
-              ].map(({ key, icon: Icon, label }) => (
-                <button key={key} onClick={() => setActiveTab(key)}
-                  style={{ padding: "8px 16px", borderRadius: "20px 20px 0 0", border: "none", background: activeTab === key ? "white" : "rgba(255,255,255,0.15)", color: activeTab === key ? O[600] : "white", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit", transition: "all 0.15s", whiteSpace: "nowrap" }}>
+              {[{ key: "details", icon: FileText, label: "Details" }, { key: "customer-history", icon: User, label: "Customer History" }, { key: "worker-history", icon: Briefcase, label: "Worker History" }, { key: "task-history", icon: TrendingUp, label: "Task History" }, { key: "ai-analysis", icon: Brain, label: "AI Analysis" }].map(({ key, icon: Icon, label }) => (
+                <button key={key} onClick={() => setActiveTab(key)} style={{ padding: "8px 16px", borderRadius: "20px 20px 0 0", border: "none", background: activeTab === key ? "white" : "rgba(255,255,255,0.15)", color: activeTab === key ? O[600] : "white", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit", transition: "all 0.15s", whiteSpace: "nowrap" }}>
                   <Icon size={14} />{label}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Action strip */}
-          {report.status === "pending" && activeTab === "details" && (
-            <div style={{ padding: "16px 24px", borderBottom: `1px solid ${C.border}`, background: C.bg, display: "flex", gap: 10, flexShrink: 0 }}>
-              <button
-                onClick={() => setConfirm({ type: "resolve", message: "Resolve this report? This will mark it as resolved." })}
+          {/* ── Action strip for PENDING reports ── */}
+          {localReport.status === "pending" && activeTab === "details" && (
+            <div style={{ padding: "14px 24px", borderBottom: `1px solid ${C.border}`, background: C.bg, display: "flex", gap: 10, flexShrink: 0, alignItems: "center" }}>
+
+              {/* Set Refund % — always available for pending reports with a taskId */}
+              {localReport.taskId && (
+                <button onClick={() => setShowRefundModal(true)}
+                  style={{ flex: 1, padding: "10px", borderRadius: 10, border: `1px solid #2E9E8E50`, background: "#2E9E8E15", color: "#2E9E8E", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "inherit", position: "relative" }}>
+                  <Percent size={16} />
+                  {refundData?.amount_customer != null ? "Edit Refund %" : "Set Refund %"}
+                  {refundData?.amount_customer != null && (
+                    <span style={{ position: "absolute", top: -6, right: -6, background: C.green, color: "white", borderRadius: "50%", width: 18, height: 18, fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>✓</span>
+                  )}
+                </button>
+              )}
+
+              {/* Resolve — triggers confirmation dialog */}
+              <button onClick={triggerResolve}
                 style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: C.green, color: "white", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "inherit" }}>
-                <CheckCircle size={16} /> Resolve
+                <CheckCircle size={16} /> Approve & Resolve
               </button>
-              <button
-                onClick={() => setConfirm({ type: "decline", message: "Decline this report?", danger: true })}
+
+              {/* Decline */}
+              <button onClick={triggerDecline}
                 style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: C.red, color: "white", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "inherit" }}>
                 <XCircle size={16} /> Decline
               </button>
 
-              {/* Request Refund — opens refund amount modal */}
-              <button
-                onClick={() => setShowRefundModal(true)}
-                style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: "#2E9E8E", color: "white", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "inherit", position: "relative" }}>
-                <RotateCcw size={16} />
-                Request Refund
-                {refundCount > 0 && (
-                  <span style={{ position: "absolute", top: -6, right: -6, background: C.brand, color: "white", borderRadius: "50%", width: 18, height: 18, fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {refundCount}
-                  </span>
-                )}
-              </button>
-
-              <button
-                onClick={() => setConfirm({ type: "delete", message: "Permanently delete this report? This cannot be undone.", danger: true })}
+              <button onClick={() => setConfirm({ type: "delete", title: "Delete Report", message: "Permanently delete this report? This cannot be undone.", danger: true, confirmLabel: "Delete" })}
                 style={{ padding: "10px 14px", borderRadius: 10, background: C.redLight, color: C.red, border: `1px solid ${C.red}30`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <Trash2 size={16} />
               </button>
+            </div>
+          )}
+
+          {/* ── Action strip for RESOLVED reports ── */}
+          {localReport.status === "resolved" && localReport.taskId && activeTab === "details" && (
+            <div style={{ padding: "12px 24px", borderBottom: `1px solid ${C.border}`, background: C.bg, display: "flex", gap: 10, flexShrink: 0, alignItems: "center" }}>
+              <div style={{ flex: 1, fontSize: 13, color: C.green, display: "flex", alignItems: "center", gap: 6, fontWeight: 500 }}>
+                <CheckCircle size={15} /> Report resolved — refund can now be processed
+              </div>
+              <button onClick={() => setShowRefundModal(true)}
+                style={{ padding: "10px 20px", borderRadius: 10, border: "none", background: "#2E9E8E", color: "white", fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit", position: "relative" }}>
+                <Percent size={16} />
+                {refundCount > 0 ? "Edit Refund %" : "Set Refund %"}
+                {refundCount > 0 && <span style={{ position: "absolute", top: -6, right: -6, background: C.brand, color: "white", borderRadius: "50%", width: 18, height: 18, fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{refundCount}</span>}
+              </button>
+              {refundData?.id && (
+                <button onClick={() => setShowActionModal(true)}
+                  style={{ padding: "10px 16px", borderRadius: 10, border: `1px solid ${C.brand}40`, background: C.brandLight, color: C.brand, fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit" }}>
+                  <Bell size={14} /> Warn/Suspend
+                </button>
+              )}
             </div>
           )}
 
@@ -1530,106 +1147,99 @@ const ReportDetailModal = ({ report, onClose, onResolve, onDecline, onDelete, on
             {activeTab === "details" ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                  {[
-                    { label: "Filed By", id: report.reporterId, type: report.reporterType, email: report.reporterEmail },
-                    { label: "Reported", id: report.reportedId,  type: report.reportedType, email: report.reportedEmail },
-                  ].map(({ label, id, type, email }) => (
+                  {[{ label: "Filed By", id: localReport.reporterId, type: localReport.reporterType }, { label: "Reported", id: localReport.reportedId, type: localReport.reportedType }].map(({ label, id, type }) => (
                     <div key={label} style={{ background: C.surface, borderRadius: 16, padding: 18, border: `1px solid ${C.border}` }}>
                       <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 12 }}>{label}</div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <Avatar type={type} size={44} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary, wordBreak: "break-all", marginBottom: 4 }}>{id || email || "—"}</div>
-                          <TypeBadge type={type} />
-                        </div>
-                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}><Avatar type={type} size={44} /><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary, wordBreak: "break-all", marginBottom: 4 }}>{id || "—"}</div><TypeBadge type={type} /></div></div>
                     </div>
                   ))}
                 </div>
-
                 <div style={{ background: C.surface, borderRadius: 16, padding: 18, border: `1px solid ${C.border}` }}>
                   <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 12 }}>Description</div>
-                  <p style={{ margin: 0, fontSize: 14, color: C.textSecond, lineHeight: 1.6 }}>{report.description || "No description provided."}</p>
+                  <p style={{ margin: 0, fontSize: 14, color: C.textSecond, lineHeight: 1.6 }}>{localReport.description || "No description provided."}</p>
                 </div>
-
                 <div style={{ background: C.surface, borderRadius: 16, padding: 18, border: `1px solid ${C.border}` }}>
                   <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 12 }}>Timeline</div>
-                  <DetailRow icon={Calendar} label="Filed on" value={`${fmt(report.createdAt)} at ${fmtTime(report.createdAt)}`} />
-                  {report.resolvedAt && <DetailRow icon={CheckCircle} label="Resolved on" value={`${fmt(report.resolvedAt)} at ${fmtTime(report.resolvedAt)}`} />}
+                  <DetailRow icon={Calendar} label="Filed on" value={`${fmt(localReport.createdAt)} at ${fmtTime(localReport.createdAt)}`} />
+                  {localReport.resolvedAt && <DetailRow icon={CheckCircle} label="Resolved on" value={`${fmt(localReport.resolvedAt)} at ${fmtTime(localReport.resolvedAt)}`} />}
                 </div>
 
-                {/* Show linked refunds summary */}
-                {refundCount > 0 && (
-                  <div style={{ background: "#2E9E8E15", borderRadius: 16, padding: 16, border: "1px solid #2E9E8E30", display: "flex", alignItems: "center", gap: 12 }}>
-                    <RotateCcw size={18} color="#2E9E8E" />
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#2E9E8E", marginBottom: 2 }}>
-                        {refundCount} refund request{refundCount > 1 ? "s" : ""} linked to this report
-                      </div>
-                      <div style={{ fontSize: 12, color: C.textMuted }}>View in Refund Management page</div>
+                {/* Refund amounts summary if set */}
+                {refundData?.amount_customer != null && (
+                  <div style={{ background: "#2E9E8E15", borderRadius: 16, padding: 16, border: "1px solid #2E9E8E30" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}><Percent size={16} color="#2E9E8E" /><span style={{ fontSize: 13, fontWeight: 700, color: "#2E9E8E" }}>Refund Amounts Set</span></div>
+                    <div style={{ display: "flex", gap: 20 }}>
+                      <div><div style={{ fontSize: 11, color: C.textMuted }}>Customer gets</div><div style={{ fontSize: 16, fontWeight: 700, color: C.green }}>NPR {refundData.amount_customer?.toLocaleString()}</div></div>
+                      <div><div style={{ fontSize: 11, color: C.textMuted }}>Worker penalty</div><div style={{ fontSize: 16, fontWeight: 700, color: C.red }}>NPR {refundData.amount_worker?.toLocaleString() || 0}</div></div>
+                      <div><div style={{ fontSize: 11, color: C.textMuted }}>Refund status</div><div style={{ fontSize: 13, fontWeight: 700, color: C.brand }}>{refundData.refundStatus || refundData.status}</div></div>
                     </div>
                   </div>
                 )}
 
-                {report.status === "pending" && (
+                {localReport.status === "pending" && (
                   <div style={{ background: C.surface, borderRadius: 16, padding: 18, border: `1px solid ${C.border}` }}>
                     <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 12 }}>Admin Note (optional)</div>
-                    <textarea value={adminNote} onChange={e => setAdminNote(e.target.value)}
-                      placeholder="Add a note about this decision..." rows={3}
-                      style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: `1px solid ${C.border}`, fontSize: 13, outline: "none", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", background: C.bg, color: C.textPrimary }}
-                      onFocus={e => { e.target.style.borderColor = C.brand; e.target.style.background = C.surface; }}
-                      onBlur={e  => { e.target.style.borderColor = C.border; e.target.style.background = C.bg; }}
-                    />
+                    <textarea value={adminNote} onChange={e => setAdminNote(e.target.value)} placeholder="Add a note about this decision..." rows={3}
+                      style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: `1px solid ${C.border}`, fontSize: 13, outline: "none", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", background: C.bg, color: C.textPrimary }} />
                   </div>
                 )}
-
-                {report.adminNote && report.status !== "pending" && (
+                {localReport.adminNote && localReport.status !== "pending" && (
                   <div style={{ background: C.brandLight, borderRadius: 16, padding: 16, border: `1px solid ${C.brand}30` }}>
                     <div style={{ fontSize: 11, color: C.brand, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>Admin Note</div>
-                    <p style={{ margin: 0, fontSize: 13, color: C.textSecond }}>{report.adminNote}</p>
+                    <p style={{ margin: 0, fontSize: 13, color: C.textSecond }}>{localReport.adminNote}</p>
                   </div>
                 )}
-
-                {report.status !== "pending" && (
-                  <button onClick={() => setConfirm({ type: "delete", message: "Permanently delete this report? This cannot be undone.", danger: true })}
+                {localReport.status !== "pending" && (
+                  <button onClick={() => setConfirm({ type: "delete", title: "Delete Report", message: "Permanently delete this report?", danger: true, confirmLabel: "Delete" })}
                     style={{ padding: "12px", borderRadius: 12, border: `1px solid ${C.red}30`, background: C.redLight, color: C.red, fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "inherit" }}>
                     <Trash2 size={16} /> Delete Report
                   </button>
                 )}
               </div>
             ) : activeTab === "customer-history" ? (
-              <CustomerHistoryPanel customerId={report.reporterId} customerEmail={report.reporterEmail} />
+              <CustomerHistoryPanel customerId={localReport.reporterId} customerEmail={localReport.reporterEmail} />
             ) : activeTab === "worker-history" ? (
-              <WorkerHistoryPanel workerId={report.reportedId} workerEmail={report.reportedEmail} />
+              <WorkerHistoryPanel workerId={localReport.reportedId} workerEmail={localReport.reportedEmail} />
             ) : activeTab === "task-history" ? (
-              <TaskHistoryPanel taskId={report.taskId} />
+              <TaskHistoryPanel taskId={localReport.taskId} />
             ) : (
-              <AIAnalysisPanel report={report} />
+              <AIAnalysisPanel report={localReport} />
             )}
           </div>
         </div>
       </div>
 
-      {/* Refund Amount Modal */}
       {showRefundModal && (
         <RefundAmountModal
-          report={{
-            ...report,
-            totalCost: report.totalCost || report.amount || 0,
-          }}
+          report={localReport}
           onClose={() => setShowRefundModal(false)}
           onConfirm={handleRefundConfirm}
+          onShowToast={onShowToast}
+          onShowActionModal={() => { setShowRefundModal(false); setShowActionModal(true); }}
+        />
+      )}
+
+      {showActionModal && refundData?.id && (
+        <ActionModal
+          report={localReport}
+          refundId={refundData.id}
+          onClose={() => setShowActionModal(false)}
+          onSuccess={() => onShowToast("Action sent successfully ✓", "success")}
+          onShowToast={onShowToast}
         />
       )}
 
       {confirm && (
         <ConfirmDialog
+          title={confirm.title}
           message={confirm.message}
+          subMessage={confirm.subMessage}
           danger={confirm.danger}
+          confirmLabel={confirm.confirmLabel}
           onConfirm={() => {
-            if (confirm.type === "resolve") onResolve(report.id, adminNote);
-            if (confirm.type === "decline") onDecline(report.id, adminNote);
-            if (confirm.type === "delete")  onDelete(report.id);
+            if (confirm.type === "resolve") handleResolveLocal(localReport.id, adminNote);
+            if (confirm.type === "decline") handleDeclineLocal(localReport.id, adminNote);
+            if (confirm.type === "delete")  onDelete(localReport.id);
             setConfirm(null);
           }}
           onCancel={() => setConfirm(null)}
@@ -1652,24 +1262,17 @@ const ReportRow = ({ report, onSelect, onResolve, onDecline, onDelete }) => {
     <tr style={{ borderBottom: `1px solid ${C.divider}`, transition: "background 0.2s", cursor: "pointer" }}
       onClick={() => onSelect(report)}
       onMouseEnter={e => e.currentTarget.style.background = C.bg}
-      onMouseLeave={e => e.currentTarget.style.background = C.surface}
-    >
+      onMouseLeave={e => e.currentTarget.style.background = C.surface}>
       <td style={{ padding: "16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <Avatar type={report.reporterType} size={38} />
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 4 }}>{shortId(report.reporterId)}</div>
-            <TypeBadge type={report.reporterType} />
-          </div>
+          <div><div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 4 }}>{shortId(report.reporterId)}</div><TypeBadge type={report.reporterType} /></div>
         </div>
       </td>
       <td style={{ padding: "16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <Avatar type={report.reportedType} size={38} />
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 4 }}>{shortId(report.reportedId)}</div>
-            <TypeBadge type={report.reportedType} />
-          </div>
+          <div><div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 4 }}>{shortId(report.reportedId)}</div><TypeBadge type={report.reportedType} /></div>
         </div>
       </td>
       <td style={{ padding: "16px" }}><ReasonBadge reason={report.reason} /></td>
@@ -1681,17 +1284,13 @@ const ReportRow = ({ report, onSelect, onResolve, onDecline, onDelete }) => {
       <td style={{ padding: "16px" }} onClick={e => e.stopPropagation()}>
         <div style={{ position: "relative", display: "flex", justifyContent: "flex-end" }}>
           <button onClick={() => setMenuOpen(v => !v)}
-            style={{ padding: "8px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, cursor: "pointer", color: C.textMuted, display: "flex", alignItems: "center" }}
-            onMouseEnter={e => { e.currentTarget.style.background = C.bg; e.currentTarget.style.color = C.textPrimary; }}
-            onMouseLeave={e => { e.currentTarget.style.background = C.surface; e.currentTarget.style.color = C.textMuted; }}
-          >
+            style={{ padding: "8px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, cursor: "pointer", color: C.textMuted, display: "flex", alignItems: "center" }}>
             <MoreVertical size={16} />
           </button>
           {menuOpen && <ContextMenu report={report} onAction={handleAction} onClose={() => setMenuOpen(false)} />}
         </div>
       </td>
     </tr>
-    
   );
 };
 
@@ -1719,10 +1318,10 @@ export default function ReportManagement() {
   const fetchPage = async (page, search = searchQuery) => {
     try {
       setLoading(true);
-      const skip = (page - 1) * PAGE_SIZE;
+      const skip   = (page - 1) * PAGE_SIZE;
       const params = new URLSearchParams({ skip, limit: PAGE_SIZE });
-      if (search?.trim())             params.append("search", search.trim());
-      if (filterStatus !== "all")     params.append("status", filterStatus);
+      if (search?.trim())               params.append("search",       search.trim());
+      if (filterStatus !== "all")       params.append("status",       filterStatus);
       if (filterReporterType !== "all") params.append("reporterType", filterReporterType);
       if (filterReportedType !== "all") params.append("reportedType", filterReportedType);
       const res = await apiCall(`${BASE}/reports?${params}`);
@@ -1731,115 +1330,61 @@ export default function ReportManagement() {
       setReports(data.reports ?? []);
       setTotalReports(data.total ?? 0);
       setCurrentPage(page);
-    } catch (e) {
-      setError(`Failed to load reports: ${e.message}`);
-      showToast(e.message, "error");
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { setError(`Failed to load reports: ${e.message}`); showToast(e.message, "error"); }
+    finally { setLoading(false); }
   };
 
   const fetchStats = async () => {
-    try { const res = await fetch(`${BASE}/reports/stats`); if (res.ok) setStats(await res.json()); }
-    catch {}
+    try { const res = await fetch(`${BASE}/reports/stats`); if (res.ok) setStats(await res.json()); } catch {}
   };
 
   useEffect(() => { fetchPage(1, ""); fetchStats(); }, []);
-
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return; }
     const t = setTimeout(() => fetchPage(1, searchQuery), 400);
     return () => clearTimeout(t);
   }, [searchQuery]);
-
-  useEffect(() => {
-    if (!isFirstRender.current) fetchPage(1, searchQuery);
-  }, [filterStatus, filterReporterType, filterReportedType]);
+  useEffect(() => { if (!isFirstRender.current) fetchPage(1, searchQuery); }, [filterStatus, filterReporterType, filterReportedType]);
 
   const handleResolve = async (reportId, adminNote) => {
-  // Try JSON format first (most REST APIs expect this)
-  let res = await apiCall(`${BASE}/reports/${reportId}/status`, { 
-    method: "PATCH", 
-    body: JSON.stringify({ status: "resolved", adminNote }),
-    headers: {
-      "Content-Type": "application/json"
-    }
-  });
-  
-  // If JSON fails with 422, try form-urlencoded (like Swagger)
-  if (res.status === 422) {
     const formData = new URLSearchParams();
     formData.append("status", "resolved");
     if (adminNote) formData.append("adminNote", adminNote);
-    
-    res = await fetch(`${BASE}/reports/${reportId}/status`, {
+    const token = localStorage.getItem("access_token") || localStorage.getItem("token") || "";
+    const res = await fetch(`${BASE}/reports/${reportId}/status`, {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        ...(localStorage.getItem("access_token") ? { Authorization: `Bearer ${localStorage.getItem("access_token")}` } : {})
-      },
-      body: formData
+      headers: { "Content-Type": "application/x-www-form-urlencoded", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: formData,
     });
-  }
-  
-  if (!res.ok) { 
-    const errorText = await res.text();
-    console.error("Failed to resolve:", errorText);
-    showToast("Failed to resolve", "error"); 
-    return; 
-  }
-  
-  setReports(prev => prev.map(r => r.id === reportId ? { ...r, status: "resolved", adminNote } : r));
-  if (selectedReport?.id === reportId) setSelectedReport(p => ({ ...p, status: "resolved", adminNote }));
-  setStats(p => ({ ...p, pending: p.pending - 1, resolved: p.resolved + 1 }));
-  showToast("Report resolved");
-};
+    if (!res.ok) { showToast("Failed to resolve", "error"); return; }
+    setReports(prev => prev.map(r => r.id === reportId ? { ...r, status: "resolved", adminNote } : r));
+    if (selectedReport?.id === reportId) setSelectedReport(p => ({ ...p, status: "resolved", adminNote }));
+    setStats(p => ({ ...p, pending: p.pending - 1, resolved: p.resolved + 1 }));
+    showToast("Report resolved — refund moved to in-progress ✓");
+  };
 
   const handleDecline = async (reportId, adminNote) => {
-    // Try JSON format first
-    let res = await apiCall(`${BASE}/reports/${reportId}/status`, { 
-      method: "PATCH", 
-      body: JSON.stringify({ status: "declined", adminNote }),
-      headers: {
-        "Content-Type": "application/json"
-      }
+    const formData = new URLSearchParams();
+    formData.append("status", "declined");
+    if (adminNote) formData.append("adminNote", adminNote);
+    const token = localStorage.getItem("access_token") || localStorage.getItem("token") || "";
+    const res = await fetch(`${BASE}/reports/${reportId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: formData,
     });
-    
-    // If JSON fails with 422, try form-urlencoded (like Swagger)
-    if (res.status === 422) {
-      const formData = new URLSearchParams();
-      formData.append("status", "declined");
-      if (adminNote) formData.append("adminNote", adminNote);
-      
-      res = await fetch(`${BASE}/reports/${reportId}/status`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          ...(localStorage.getItem("access_token") ? { Authorization: `Bearer ${localStorage.getItem("access_token")}` } : {})
-        },
-        body: formData
-      });
-    }
-    
-    if (!res.ok) { 
-      const errorText = await res.text();
-      console.error("Failed to decline:", errorText);
-      showToast("Failed to decline", "error"); 
-      return; 
-    }
-    
+    if (!res.ok) { showToast("Failed to decline", "error"); return; }
     setReports(prev => prev.map(r => r.id === reportId ? { ...r, status: "declined", adminNote } : r));
     if (selectedReport?.id === reportId) setSelectedReport(p => ({ ...p, status: "declined", adminNote }));
     setStats(p => ({ ...p, pending: p.pending - 1, declined: p.declined + 1 }));
     showToast("Report declined");
   };
 
- 
-
   const handleDelete = async (reportId) => {
     setConfirm({
-      message: "Permanently delete this report? This cannot be undone.",
-      danger: true,
+      title: "Delete Report",
+      message: "Permanently delete this report? This cannot be undone.", danger: true,
+      confirmLabel: "Delete",
       onConfirm: async () => {
         setConfirm(null);
         const res = await apiCall(`${BASE}/reports/${reportId}`, { method: "DELETE" });
@@ -1853,17 +1398,13 @@ export default function ReportManagement() {
   };
 
   const totalPages = Math.ceil(totalReports / PAGE_SIZE);
-
-  const Pill = ({ active, onClick, label }) => (
-    <button onClick={onClick} style={{ padding: "6px 14px", borderRadius: 20, cursor: "pointer", fontSize: 12, border: `1px solid ${active ? C.brand + "50" : C.border}`, background: active ? C.brandLight : C.surface, color: active ? C.brand : C.textSecond, fontWeight: active ? 600 : 500, transition: "all 0.15s", fontFamily: "inherit" }}>{label}</button>
-  );
+  const Pill    = ({ active, onClick, label }) => <button onClick={onClick} style={{ padding: "6px 14px", borderRadius: 20, cursor: "pointer", fontSize: 12, border: `1px solid ${active ? C.brand + "50" : C.border}`, background: active ? C.brandLight : C.surface, color: active ? C.brand : C.textSecond, fontWeight: active ? 600 : 500, transition: "all 0.15s", fontFamily: "inherit" }}>{label}</button>;
   const pageBtn = (disabled) => ({ padding: "6px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: disabled ? C.bg : C.surface, color: disabled ? C.textMuted : C.textSecond, cursor: disabled ? "default" : "pointer", fontSize: 13, fontFamily: "inherit" });
 
   return (
     <div style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", background: C.bg, minHeight: "100vh", padding: 24 }}>
       {toast   && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
-      {confirm && <ConfirmDialog message={confirm.message} danger={confirm.danger} onConfirm={confirm.onConfirm} onCancel={() => setConfirm(null)} />}
-
+      {confirm && <ConfirmDialog title={confirm.title} message={confirm.message} danger={confirm.danger} confirmLabel={confirm.confirmLabel} onConfirm={confirm.onConfirm} onCancel={() => setConfirm(null)} />}
       <style>{`
         @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
         @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
@@ -1878,39 +1419,24 @@ export default function ReportManagement() {
           <p style={{ margin: 0, fontSize: 14, color: C.textMuted }}>Review and manage reports filed by customers and workers</p>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={() => { fetchPage(1, searchQuery); fetchStats(); }}
-            style={{ padding: "10px 18px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.surface, cursor: "pointer", fontSize: 14, color: C.textSecond, display: "flex", alignItems: "center", gap: 8, fontFamily: "inherit" }}
-            onMouseEnter={e => { e.currentTarget.style.background = C.bg; e.currentTarget.style.color = C.brand; }}
-            onMouseLeave={e => { e.currentTarget.style.background = C.surface; e.currentTarget.style.color = C.textSecond; }}>
-            <RefreshCw size={16} /> Refresh
-          </button>
-          <button onClick={() => setShowFilters(v => !v)}
-            style={{ padding: "10px 18px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.surface, cursor: "pointer", fontSize: 14, fontWeight: 500, color: C.textSecond, display: "flex", alignItems: "center", gap: 8, fontFamily: "inherit" }}
-            onMouseEnter={e => { e.currentTarget.style.background = C.bg; e.currentTarget.style.color = C.brand; }}
-            onMouseLeave={e => { e.currentTarget.style.background = C.surface; e.currentTarget.style.color = C.textSecond; }}>
-            <Filter size={16} /> Filters
-            <ChevronDown size={14} style={{ transform: showFilters ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
-          </button>
+          <button onClick={() => { fetchPage(1, searchQuery); fetchStats(); }} style={{ padding: "10px 18px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.surface, cursor: "pointer", fontSize: 14, color: C.textSecond, display: "flex", alignItems: "center", gap: 8, fontFamily: "inherit" }}><RefreshCw size={16} /> Refresh</button>
+          <button onClick={() => setShowFilters(v => !v)} style={{ padding: "10px 18px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.surface, cursor: "pointer", fontSize: 14, fontWeight: 500, color: C.textSecond, display: "flex", alignItems: "center", gap: 8, fontFamily: "inherit" }}><Filter size={16} /> Filters<ChevronDown size={14} style={{ transform: showFilters ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} /></button>
         </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
-        <StatCard label="Total Reports" value={stats.total}    color={C.brand} icon={Flag}        />
-        <StatCard label="Pending"       value={stats.pending}  color={C.brand} icon={Clock}        sub="Awaiting review" />
-        <StatCard label="Resolved"      value={stats.resolved} color={C.green} icon={CheckCircle}  />
-        <StatCard label="Declined"      value={stats.declined} color={C.red}   icon={XCircle}      />
+        <StatCard label="Total Reports" value={stats.total}    color={C.brand} icon={Flag}       />
+        <StatCard label="Pending"       value={stats.pending}  color={C.brand} icon={Clock}       sub="Awaiting review" />
+        <StatCard label="Resolved"      value={stats.resolved} color={C.green} icon={CheckCircle} />
+        <StatCard label="Declined"      value={stats.declined} color={C.red}   icon={XCircle}     />
       </div>
 
       <div style={{ background: C.surface, borderRadius: 16, border: `1px solid ${C.border}`, padding: "16px 20px", marginBottom: 20 }}>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: showFilters ? 16 : 0 }}>
           <div style={{ flex: 2, position: "relative", minWidth: 280 }}>
             <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: C.textMuted }} />
-            <input type="text" placeholder="Search by ID, reason, description..."
-              value={searchQuery} onChange={e => setSearch(e.target.value)}
-              style={{ width: "100%", padding: "10px 12px 10px 38px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 14, outline: "none", background: C.bg, boxSizing: "border-box", color: C.textPrimary, fontFamily: "inherit" }}
-              onFocus={e => { e.target.style.borderColor = C.brand; e.target.style.background = C.surface; }}
-              onBlur={e  => { e.target.style.borderColor = C.border; e.target.style.background = C.bg; }}
-            />
+            <input type="text" placeholder="Search by ID, reason, description..." value={searchQuery} onChange={e => setSearch(e.target.value)}
+              style={{ width: "100%", padding: "10px 12px 10px 38px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 14, outline: "none", background: C.bg, boxSizing: "border-box", color: C.textPrimary, fontFamily: "inherit" }} />
           </div>
           <div style={{ display: "flex", gap: 6 }}>
             <Pill active={filterStatus === "all"}      onClick={() => setFilterStatus("all")}      label="All"      />
@@ -1921,17 +1447,11 @@ export default function ReportManagement() {
         </div>
         {showFilters && (
           <div style={{ display: "flex", gap: 12, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
-            <select value={filterReporterType} onChange={e => setFilterReporterType(e.target.value)}
-              style={{ padding: "10px 14px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 13, outline: "none", background: C.bg, cursor: "pointer", minWidth: 160, color: C.textSecond, fontFamily: "inherit" }}>
-              <option value="all">All Reporters</option>
-              <option value="customer">Customers</option>
-              <option value="worker">Workers</option>
+            <select value={filterReporterType} onChange={e => setFilterReporterType(e.target.value)} style={{ padding: "10px 14px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 13, outline: "none", background: C.bg, cursor: "pointer", minWidth: 160, color: C.textSecond, fontFamily: "inherit" }}>
+              <option value="all">All Reporters</option><option value="customer">Customers</option><option value="worker">Workers</option>
             </select>
-            <select value={filterReportedType} onChange={e => setFilterReportedType(e.target.value)}
-              style={{ padding: "10px 14px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 13, outline: "none", background: C.bg, cursor: "pointer", minWidth: 160, color: C.textSecond, fontFamily: "inherit" }}>
-              <option value="all">All Reported</option>
-              <option value="customer">Customers</option>
-              <option value="worker">Workers</option>
+            <select value={filterReportedType} onChange={e => setFilterReportedType(e.target.value)} style={{ padding: "10px 14px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 13, outline: "none", background: C.bg, cursor: "pointer", minWidth: 160, color: C.textSecond, fontFamily: "inherit" }}>
+              <option value="all">All Reported</option><option value="customer">Customers</option><option value="worker">Workers</option>
             </select>
           </div>
         )}
@@ -1939,36 +1459,20 @@ export default function ReportManagement() {
 
       <div style={{ background: C.surface, borderRadius: 20, border: `1px solid ${C.border}`, overflow: "hidden", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
         {loading ? (
-          <div style={{ padding: 80, textAlign: "center" }}>
-            <RefreshCw size={40} style={{ color: C.brand, marginBottom: 16, animation: "spin 1s linear infinite" }} />
-            <p style={{ color: C.textSecond, margin: 0, fontSize: 15 }}>Loading reports...</p>
-          </div>
+          <div style={{ padding: 80, textAlign: "center" }}><RefreshCw size={40} style={{ color: C.brand, marginBottom: 16, animation: "spin 1s linear infinite" }} /><p style={{ color: C.textSecond, margin: 0, fontSize: 15 }}>Loading reports...</p></div>
         ) : error ? (
-          <div style={{ padding: 80, textAlign: "center" }}>
-            <AlertTriangle size={40} style={{ color: C.red, marginBottom: 16 }} />
-            <p style={{ color: C.red, margin: 0, fontSize: 15 }}>{error}</p>
-          </div>
+          <div style={{ padding: 80, textAlign: "center" }}><AlertTriangle size={40} style={{ color: C.red, marginBottom: 16 }} /><p style={{ color: C.red, margin: 0, fontSize: 15 }}>{error}</p></div>
         ) : reports.length === 0 ? (
-          <div style={{ padding: 80, textAlign: "center" }}>
-            <Flag size={48} style={{ color: C.textMuted, marginBottom: 16 }} />
-            <h3 style={{ margin: "0 0 8px", color: C.textPrimary, fontSize: 18 }}>No reports found</h3>
-            <p style={{ color: C.textMuted, margin: 0, fontSize: 14 }}>
-              {searchQuery || filterStatus !== "all" ? "Try adjusting your filters" : "No reports have been filed yet"}
-            </p>
-          </div>
+          <div style={{ padding: 80, textAlign: "center" }}><Flag size={48} style={{ color: C.textMuted, marginBottom: 16 }} /><h3 style={{ margin: "0 0 8px", color: C.textPrimary, fontSize: 18 }}>No reports found</h3><p style={{ color: C.textMuted, margin: 0, fontSize: 14 }}>{searchQuery || filterStatus !== "all" ? "Try adjusting your filters" : "No reports have been filed yet"}</p></div>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: C.bg, borderBottom: `2px solid ${C.border}` }}>
-                {["Reporter", "Reported", "Reason", "Status", "Date", ""].map((h, i) => (
-                  <th key={h} style={{ padding: "14px 16px", textAlign: i === 5 ? "right" : "left", fontSize: 12, fontWeight: 600, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.5px" }}>{h}</th>
-                ))}
+                {["Reporter", "Reported", "Reason", "Status", "Date", ""].map((h, i) => <th key={h} style={{ padding: "14px 16px", textAlign: i === 5 ? "right" : "left", fontSize: 12, fontWeight: 600, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.5px" }}>{h}</th>)}
               </tr>
             </thead>
             <tbody>
-              {reports.map(report => (
-                <ReportRow key={report.id} report={report} onSelect={setSelectedReport} onResolve={handleResolve} onDecline={handleDecline} onDelete={handleDelete} />
-              ))}
+              {reports.map(report => <ReportRow key={report.id} report={report} onSelect={setSelectedReport} onResolve={handleResolve} onDecline={handleDecline} onDelete={handleDelete} />)}
             </tbody>
           </table>
         )}
@@ -1976,22 +1480,11 @@ export default function ReportManagement() {
 
       {!loading && !error && totalReports > 0 && (
         <div style={{ marginTop: 20, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ fontSize: 13, color: C.textMuted }}>
-            Showing {((currentPage - 1) * PAGE_SIZE) + 1}–{Math.min(currentPage * PAGE_SIZE, totalReports)} of {totalReports} reports
-          </div>
+          <div style={{ fontSize: 13, color: C.textMuted }}>Showing {((currentPage - 1) * PAGE_SIZE) + 1}–{Math.min(currentPage * PAGE_SIZE, totalReports)} of {totalReports} reports</div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <button onClick={() => fetchPage(1, searchQuery)} disabled={currentPage === 1} style={pageBtn(currentPage === 1)}>«</button>
             <button onClick={() => fetchPage(currentPage - 1, searchQuery)} disabled={currentPage === 1} style={pageBtn(currentPage === 1)}>‹</button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
-              .reduce((acc, p, idx, arr) => { if (idx > 0 && p - arr[idx-1] > 1) acc.push("..."); acc.push(p); return acc; }, [])
-              .map((p, i) => p === "..." ? (
-                <span key={`d${i}`} style={{ padding: "6px 8px", fontSize: 13, color: C.textMuted }}>…</span>
-              ) : (
-                <button key={p} onClick={() => fetchPage(p, searchQuery)}
-                  style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: currentPage === p ? C.textPrimary : C.surface, color: currentPage === p ? "white" : C.textSecond, cursor: "pointer", fontSize: 13, fontWeight: currentPage === p ? 700 : 500, fontFamily: "inherit" }}>{p}
-                </button>
-              ))}
+            {Array.from({ length: totalPages }, (_, i) => i + 1).filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1).reduce((acc, p, idx, arr) => { if (idx > 0 && p - arr[idx-1] > 1) acc.push("..."); acc.push(p); return acc; }, []).map((p, i) => p === "..." ? <span key={`d${i}`} style={{ padding: "6px 8px", fontSize: 13, color: C.textMuted }}>…</span> : <button key={p} onClick={() => fetchPage(p, searchQuery)} style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: currentPage === p ? C.textPrimary : C.surface, color: currentPage === p ? "white" : C.textSecond, cursor: "pointer", fontSize: 13, fontWeight: currentPage === p ? 700 : 500, fontFamily: "inherit" }}>{p}</button>)}
             <button onClick={() => fetchPage(currentPage + 1, searchQuery)} disabled={currentPage >= totalPages} style={pageBtn(currentPage >= totalPages)}>›</button>
             <button onClick={() => fetchPage(totalPages, searchQuery)} disabled={currentPage >= totalPages} style={pageBtn(currentPage >= totalPages)}>»</button>
           </div>
@@ -2005,9 +1498,8 @@ export default function ReportManagement() {
           onResolve={handleResolve}
           onDecline={handleDecline}
           onDelete={handleDelete}
-          onRefundCreated={(refund) => {
-            showToast("Refund request created ✓", "success");
-          }}
+          onShowToast={showToast}
+          onRefundCreated={() => showToast("Refund amounts saved ✓", "success")}
         />
       )}
     </div>

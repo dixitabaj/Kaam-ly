@@ -13,14 +13,12 @@ const workerName = (w) => w?.full_name || `${w?.first_name || ""} ${w?.last_name
 
 const normaliseTask = (t) => ({
   id:          t._id || t.id,
-  name:        t.customer_name || t.clientName || t.taskName || "—",
-  serviceType: t.task_type || t.taskType || t.selectedService || "—",
+  name:        t.title || t.customer_name || t.clientName || t.client_name || t.taskName || t.name || "Unknown Task",
+  serviceType: t.task_type || t.taskType || t.selectedService || t.service_type || t.service || "—",
   date:        t.serviceDate ? new Date(t.serviceDate).toLocaleDateString("en-CA") : "—",
   status:      t.status || "pending",
-  amount:      Number(t.totalCost || t.budget || 0),
+  amount:      Number(t.totalCost || t.budget || t.amount || 0),
 });
-
-
 
 /* ─── Components ───────────────────────────────────────────────── */
 const StatusPill = ({ status }) => (
@@ -33,12 +31,9 @@ const StatusPill = ({ status }) => (
   </span>
 );
 
-
 const formatDateTime = (dateString) => {
   if (!dateString) return "—";
-
   const date = new Date(dateString);
-
   return date.toLocaleString("en-IN", {
     day: "2-digit",
     month: "short",
@@ -51,7 +46,7 @@ const formatDateTime = (dateString) => {
 
 const StatCard = ({ label, value }) => (
   <div style={{ background: "#ffffff", borderRadius: 16, padding: "1.25rem 1.5rem", border: "1px solid #e8e6df", flex: 1, minWidth: 0 }}>
-    <div style={{ fontSize: "11px", color: "#888",   marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
+    <div style={{ fontSize: "11px", color: "#888", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
     <div style={{ fontSize: "22px", fontWeight: 700, fontFamily: "'inter'", color: "#1a1a1a" }}>{value}</div>
   </div>
 );
@@ -59,25 +54,13 @@ const StatCard = ({ label, value }) => (
 const MilestoneBadge = ({ label }) => (
   <div style={{ textAlign: "center", flex: 1 }}>
     <div style={{
-      width: 52,
-      height: 52,
-      borderRadius: "50%",
-      border: "1.5px solid #747474",
-      margin: "0 auto 8px",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      background: "#fff"
+      width: 52, height: 52, borderRadius: "50%", border: "1.5px solid #747474",
+      margin: "0 auto 8px", display: "flex", alignItems: "center",
+      justifyContent: "center", background: "#fff"
     }}>
       <img src={Badge} alt="Milestone" style={{ width: "40px" }} />
     </div>
-
-    <div style={{
-      fontSize: "0.72rem",
-      color: "#444",
-      fontFamily: "'inter', sans-serif",
-      fontWeight: 500
-    }}>
+    <div style={{ fontSize: "0.72rem", color: "#444", fontFamily: "'inter', sans-serif", fontWeight: 500 }}>
       {label}
     </div>
   </div>
@@ -108,7 +91,7 @@ const DonutChart = ({ segments, size = 130 }) => {
             return el;
           })
       }
-      <text x={cx} y={cy - 5} textAnchor="middle" fontSize="18" fontWeight="700" fill="#1a1a1a" >{total}</text>
+      <text x={cx} y={cy - 5} textAnchor="middle" fontSize="18" fontWeight="700" fill="#1a1a1a">{total}</text>
       <text x={cx} y={cy + 13} textAnchor="middle" fontSize="9" fill="#aaa" fontFamily="inter, sans-serif">Total</text>
     </svg>
   );
@@ -126,44 +109,52 @@ export default function WorkerDashboard() {
   const workerId   = userString ? JSON.parse(userString)?.id : null;
 
   useEffect(() => {
-    if (!workerId) { 
-      setError("No worker ID found. Please log in again."); setLoading(false); return; }
+    if (!workerId) {
+      setError("No worker ID found. Please log in again.");
+      setLoading(false);
+      return;
+    }
+
     workerStats(workerId)
-      .then(data => { setStats(data); setWorker(data.worker || {}); })
+      .then((data) => {
+        setStats(data);
+        setWorker(data.worker || {});
+      })
       .catch(() => setError("Failed to load dashboard. Please try again."))
       .finally(() => setLoading(false));
   }, [workerId]);
 
-  if (loading) return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'inter', sans-serif", color: "#888" }}>Loading your dashboard…</div>;
-  if (error)   return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'inter', sans-serif", color: "#e53e3e" }}>{error}</div>;
+  if (loading) return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'inter', sans-serif", color: "#888" }}>
+      Loading your dashboard…
+    </div>
+  );
+  if (error) return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'inter', sans-serif", color: "#e53e3e" }}>
+      {error}
+    </div>
+  );
 
   /* ── Derived ── */
-  const allTasks       = (stats?.tasksToday || []).map(normaliseTask);
-  const tasks          = allTasks.slice(0, 3); // top 3 recent tasks
-  const totalEarnings  = stats?.totalEarnings || 0;
+  const allTasks      = (stats?.tasksToday || []).map(normaliseTask);
+  const tasks         = allTasks.slice(0, 3);
+  const totalEarnings = stats?.totalEarnings || 0;
   const monthlyEarning = Math.round(totalEarnings / 12);
-  const todayEarning   = allTasks.filter(t => t.status === "completed").reduce((s, t) => s + t.amount, 0);
-  const stars          = Math.round(stats?.averageRating || 0);
+  const todayEarning  = allTasks.filter(t => t.status === "completed").reduce((s, t) => s + t.amount, 0);
+  const stars         = Math.round(stats?.averageRating || 0);
 
   const completed  = stats?.tasksCompleted  ?? 0;
   const pending    = stats?.tasksPending    ?? 0;
   const inProgress = stats?.tasksInProgress ?? 0;
   const cancelled  = stats?.tasksCancelled  ?? 0;
   const accepted   = stats?.tasksAccepted   ?? 0;
+
   const milestones = [
-  {
-    label: "10 Jobs Completed",
-    achieved: completed >= 10,
-  },
-  {
-    label: "Top Rated",
-    achieved: (stats?.averageRating || 0) >= 4 && completed > 20,
-  },
-  {
-    label: "Skill Expert",
-    achieved: worker?.is_verified === true || worker?.skill_verified === true,
-  },
-];
+    { label: "10 Jobs Completed", achieved: completed >= 10 },
+    { label: "Top Rated",         achieved: (stats?.averageRating || 0) >= 4 && completed > 20 },
+    { label: "Skill Expert",      achieved: worker?.is_verified === true || worker?.skill_verified === true },
+  ];
+
   const donutSegments = [
     { label: "Completed",   value: completed,  color: "#215c35" },
     { label: "In Progress", value: inProgress, color: "#E8843A" },
@@ -173,14 +164,14 @@ export default function WorkerDashboard() {
   ].filter(s => s.value > 0);
 
   const allReviews    = stats?.recentReviews || stats?.recent_review || [];
-  const recentReviews = allReviews.slice(0, 3); // top 3 recent reviews
+  const recentReviews = allReviews.slice(0, 3);
 
   return (
     <>
       <FontLink />
       <div>
         <BookingNavbar />
-        <div style={{ display: "flex", backgroundColor:"rgb(247, 245, 239)" }}>
+        <div style={{ display: "flex", backgroundColor: "rgb(247, 245, 239)" }}>
           <Sidebar workerId={worker} />
           <div style={{ flex: 2 }}>
             <main style={{ maxWidth: 1200, margin: "0 auto", padding: "2rem" }}>
@@ -208,21 +199,15 @@ export default function WorkerDashboard() {
                 <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
 
                   {/* 2×2 Grid: Donut + Earnings */}
-                  <div style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gridTemplateRows: "auto auto",
-                    gap: "1rem",
-                  }}>
-                    {/* Donut Chart — spans full height on the left */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "auto auto", gap: "1rem" }}>
+
+                    {/* Donut Chart */}
                     <div style={{
                       background: "#ffffff", borderRadius: 16, padding: "1.5rem",
                       border: "1px solid #e8e6df", gridRow: "1 / 3",
-                      display: "flex", flexDirection: "column",
-                      height: "380px"
+                      display: "flex", flexDirection: "column", height: "380px"
                     }}>
-                      <div style={{ 
-fontSize: "13px", color: "#888",   marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px",  marginBottom: "1.25rem", paddingBottom: "0.75rem", borderBottom: "1px solid #e8e6df" }}>
+                      <div style={{ fontSize: "13px", color: "#888", marginBottom: "1.25rem", textTransform: "uppercase", letterSpacing: "0.5px", paddingBottom: "0.75rem", borderBottom: "1px solid #e8e6df" }}>
                         Status Breakdown
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1.25rem", flex: 1, justifyContent: "center" }}>
@@ -247,100 +232,28 @@ fontSize: "13px", color: "#888",   marginBottom: 6, textTransform: "uppercase", 
                       </div>
                     </div>
 
-                    {/* Today's Earning — top right */}
-                    <div style={{ 
-  display: "flex", 
-  flexDirection: "column"}}>
+                    {/* Earnings Cards */}
+                    <div style={{ display: "flex", flexDirection: "column" }}>
 
-  {/* Today's Earning */}
-  <div style={{ 
-    background: "#ffffff",
-    borderRadius: 16,
-    padding: "1.4rem 1.5rem",
-    border: "1px solid #e8e6df",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    height: "110px"
-  }}>
-    <div style={{ 
-      
-fontSize: "11px", color: "#888",   marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" 
+                      <div style={{ background: "#ffffff", borderRadius: 16, padding: "1.4rem 1.5rem", border: "1px solid #e8e6df", display: "flex", flexDirection: "column", justifyContent: "center", height: "110px" }}>
+                        <div style={{ fontSize: "11px", color: "#888", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" }}>Today's Earning</div>
+                        <div style={{ fontSize: "22px", fontWeight: 700, color: "#1a1a1a" }}>Rs. {todayEarning?.toLocaleString() || 0}</div>
+                      </div>
 
-     
-    }}>
-      Today's Earning
-    </div>
-    <div style={{ 
-      fontSize: "22px",
-      fontWeight: 700,
-      color: "#1a1a1a"
-    }}>
-      Rs. {todayEarning?.toLocaleString() || 0}
-    </div>
-  </div>
+                      <div style={{ background: "#ffffff", borderRadius: 16, padding: "1.4rem 1.5rem", border: "1px solid #e8e6df", display: "flex", flexDirection: "column", justifyContent: "center", height: "110px", marginTop: "20px" }}>
+                        <div style={{ fontSize: "11px", color: "#888", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" }}>Weekly Earning</div>
+                        <div style={{ fontSize: "22px", fontWeight: 700, color: "#1a1a1a" }}>Rs. {monthlyEarning?.toLocaleString() || 0}</div>
+                      </div>
 
-  {/* Weekly Earning */}
-  <div style={{ 
-    background: "#ffffff",
-    borderRadius: 16,
-    padding: "1.4rem 1.5rem",
-    border: "1px solid #e8e6df",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    height: "110px",
-      marginTop:"20px"
-  }}>
-    <div style={{ 
-       fontSize: "11px", color: "#888",   marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" 
-    }}>
-      Weekly Earning
-    </div>
-    <div style={{ 
-      fontSize: "22px",
-      fontWeight: 700,
-      color: "#1a1a1a"
-    }}>
-      Rs. {monthlyEarning?.toLocaleString() || 0}
-    </div>
-  </div>
+                      <div style={{ background: "#ffffff", borderRadius: 16, padding: "1.4rem 1.5rem", border: "1px solid #e8e6df", display: "flex", flexDirection: "column", justifyContent: "center", height: "120px", marginTop: "20px" }}>
+                        <div style={{ fontSize: "11px", color: "#888", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" }}>Monthly Earning</div>
+                        <div style={{ fontSize: "22px", fontWeight: 700, color: "#1a1a1a" }}>Rs. {monthlyEarning?.toLocaleString() || 0}</div>
+                      </div>
 
-  {/* Monthly Earning */}
-  <div style={{ 
-    background: "#ffffff",
-    borderRadius: 16,
-    padding: "1.4rem 1.5rem",
-    border: "1px solid #e8e6df",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    height: "120px",
-      marginTop:"20px"
-  }}>
-    <div style={{ 
-      
-fontSize: "11px", color: "#888",   marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" 
-
-    }}>
-      Monthly Earning
-    </div>
-    <div style={{ 
-      fontSize: "22px",
-      fontWeight: 700,
-      color: "#1a1a1a"
-    }}>
-      Rs. {monthlyEarning?.toLocaleString() || 0}
-    </div>
-  </div>
-
-</div>
-                   
-                  
+                    </div>
                   </div>
-                  
 
-                  {/* Task Table — top 3 recent tasks */}
+                  {/* Task Table */}
                   <div style={{ background: "#ffffff", borderRadius: 16, padding: "1.5rem", border: "1px solid #e8e6df", height: "328px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
                       <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>Recent Tasks</div>
@@ -364,11 +277,7 @@ fontSize: "11px", color: "#888",   marginBottom: 6, textTransform: "uppercase", 
                             <td style={{ padding: "0.75rem", color: "#666" }}>{t.date}</td>
                             <td style={{ padding: "0.75rem" }}><StatusPill status={t.status} /></td>
                             <td style={{ padding: "0.75rem", fontWeight: 600 }}>Rs. {t.amount.toLocaleString()}</td>
-                            <td style={{ padding: "0.75rem" }}>
-                              <button style={{ background: "#fff", border: "1px solid #ddd", borderRadius: 8, padding: "4px 12px", cursor: "pointer", fontSize: "0.75rem", fontFamily: "'inter', sans-serif", color: "#555" }}>
-                                View more
-                              </button>
-                            </td>
+                            
                           </tr>
                         ))}
                       </tbody>
@@ -381,8 +290,7 @@ fontSize: "11px", color: "#888",   marginBottom: 6, textTransform: "uppercase", 
 
                   {/* Achievement Progress */}
                   <div style={{ background: "#ffffff", borderRadius: 16, padding: "1.5rem", border: "1px solid #e8e6df" }}>
-                    <div style={{ 
-fontSize: "11px", color: "#888",   marginBottom: "40px", textTransform: "uppercase", letterSpacing: "0.5px",  paddingBottom: "0.75rem", borderBottom: "1px solid #e8e6df" }}>
+                    <div style={{ fontSize: "11px", color: "#888", marginBottom: "40px", textTransform: "uppercase", letterSpacing: "0.5px", paddingBottom: "0.75rem", borderBottom: "1px solid #e8e6df" }}>
                       Achievement Progress
                     </div>
                     <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
@@ -396,89 +304,80 @@ fontSize: "11px", color: "#888",   marginBottom: "40px", textTransform: "upperca
                         Based on {stats?.totalReviews || 0} reviews
                       </div>
                     </div>
-                    <div style={{paddingTop: "1.25rem" }}>
-                      <div style={{ 
-fontSize: "11px", color: "#888",   marginBottom: "20px", textTransform: "uppercase", letterSpacing: "0.5px",  paddingBottom: "0.75rem", borderBottom: "1px solid #e8e6df" }}>
-                     Milestones</div>
+                    <div style={{ paddingTop: "1.25rem" }}>
+                      <div style={{ fontSize: "11px", color: "#888", marginBottom: "20px", textTransform: "uppercase", letterSpacing: "0.5px", paddingBottom: "0.75rem", borderBottom: "1px solid #e8e6df" }}>
+                        Milestones
+                      </div>
                       <div style={{ display: "flex", gap: "0.5rem" }}>
-                        <div style={{ display: "flex", gap: "0.5rem" }}>
-  {milestones
-    .filter(m => m.achieved)   // ✅ Only show achieved milestones
-    .map((m, i) => (
-      <MilestoneBadge key={i} label={m.label} achieved={true} />
-    ))
-  }
-</div></div>
+                        {milestones.filter(m => m.achieved).map((m, i) => (
+                          <MilestoneBadge key={i} label={m.label} achieved={true} />
+                        ))}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Recent Reviews — top 3 only */}
-                  <div style={{ background: "#ffffff", borderRadius: 16, padding: "1.5rem", border: "1px solid #e8e6df",     minHeight: "327px" }}>
+                  {/* Recent Reviews */}
+                  <div style={{ background: "#ffffff", borderRadius: 16, padding: "1.5rem", border: "1px solid #e8e6df", minHeight: "327px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
                       <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>Recent Reviews</div>
                       <span style={{ fontSize: "0.75rem", color: "#aaa", fontFamily: "'inter', sans-serif" }}>Showing latest 3</span>
                     </div>
-                    {recentReviews.map((r, i, arr) => {
-  const reviewId = r._id || i;
-  const fullText = r.text || r.comment || r.review || "";
-  const isExpanded = expandedReviewId === reviewId;
 
-  const shortText =
-    fullText.length > 80
-      ? fullText.slice(0, 80) + "..."
-      : fullText;
+                    {recentReviews.length === 0 ? (
+                      <div style={{ color: "#aaa", fontSize: "0.85rem", textAlign: "center", marginTop: "2rem" }}>No reviews yet</div>
+                    ) : recentReviews.map((r, i, arr) => {
+                      const reviewId   = r._id || i;
+                      const fullText   = r.text || r.comment || r.review || "";
+                      const isExpanded = expandedReviewId === reviewId;
+                      const shortText  = fullText.length > 80 ? fullText.slice(0, 80) + "..." : fullText;
 
-  return (
-    <div
-      key={reviewId}
-      style={{
-        borderBottom: i < arr.length - 1 ? "1px solid #e8e6df" : "none",
-        paddingBottom: "0.75rem",
-        marginBottom: "0.75rem"
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>
-          {r.reviewer_name || r.user_id || "Anonymous"}
-        </span>
+                      // ✅ Use first_name/last_name returned directly from the backend
+                      const reviewerName =
+                        (r.first_name || r.last_name)
+                          ? `${r.first_name || ""} ${r.last_name || ""}`.trim()
+                          : "Anonymous Customer";
 
-        <span style={{ color: "#f0a500", fontSize: "0.82rem" }}>
-          {"★".repeat(Math.round(r.stars || r.rating || 0))}
-          {"☆".repeat(5 - Math.round(r.stars || r.rating || 0))}
-        </span>
-      </div>
+                      return (
+                        <div
+                          key={reviewId}
+                          style={{
+                            borderBottom: i < arr.length - 1 ? "1px solid #e8e6df" : "none",
+                            paddingBottom: "0.75rem",
+                            marginBottom: "0.75rem"
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>
+                              {reviewerName}
+                            </span>
+                            <span style={{ color: "#f0a500", fontSize: "0.82rem" }}>
+                              {"★".repeat(Math.round(r.stars || r.rating || 0))}
+                              {"☆".repeat(5 - Math.round(r.stars || r.rating || 0))}
+                            </span>
+                          </div>
 
-      <p style={{ fontSize: "0.78rem", color: "#666", margin: "4px 0 0" }}>
-        {isExpanded ? fullText : shortText}
-      </p>
+                          <p style={{ fontSize: "0.78rem", color: "#666", margin: "4px 0 0" }}>
+                            {fullText
+                              ? (isExpanded ? fullText : shortText)
+                              : <span style={{ color: "#bbb", fontStyle: "italic" }}>No comment left</span>
+                            }
+                          </p>
 
-      {fullText.length > 80 && (
-        <button
-          onClick={() =>
-            setExpandedReviewId(isExpanded ? null : reviewId)
-          }
-          style={{
-            background: "none",
-            border: "none",
-            color: "gray",
-            fontSize: "0.72rem",
-            cursor: "pointer",
-            padding: 0,
-            fontFamily: "'inter', sans-serif",
-            fontWeight:600,
-            marginTop: "10px"
-          }}
-        >
-          {isExpanded ? "View less" : "View more"}
-        </button>
-      )}
+                          {fullText.length > 80 && (
+                            <button
+                              onClick={() => setExpandedReviewId(isExpanded ? null : reviewId)}
+                              style={{ background: "none", border: "none", color: "gray", fontSize: "0.72rem", cursor: "pointer", padding: 0, fontFamily: "'inter', sans-serif", fontWeight: 600, marginTop: "10px" }}
+                            >
+                              {isExpanded ? "View less" : "View more"}
+                            </button>
+                          )}
 
-<span style={{ fontSize: "0.72rem", color: "#aaa", marginLeft:"110px" }}>
-  {formatDateTime(r.createdAt || r.date)}
-</span>
-    </div>
-  );
-})}
+                          <div style={{ fontSize: "0.72rem", color: "#aaa", marginTop: "4px" }}>
+                            {formatDateTime(r.createdAt || r.date)}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
 
                 </div>

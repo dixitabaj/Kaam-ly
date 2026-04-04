@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field #pydantic validates all incoming requests loike the format is correcft or not
-from typing import List, Optional, Dict, Literal, Union
+from typing import Any, List, Optional, Dict, Literal, Union
 from datetime import datetime
 
 # This schema is used to validate customer-related requests
@@ -13,6 +13,29 @@ class CustomerSchema(BaseModel):
     address: Optional[str]
     province: Optional[str]
     role: str
+
+
+class SubSkillSchema(BaseModel):
+    name:  str
+    price: float
+
+class SkillSchema(BaseModel):
+    name:      str
+    subSkills: Optional[List[SubSkillSchema]] = None
+    price:     Optional[float]                = None   # legacy flat format
+
+class WorkerProfileUpdateSchema(BaseModel):
+    firstName:   Optional[str]              = None
+    lastName:    Optional[str]              = None
+    address:     Optional[str]              = None
+    description: Optional[str]             = None
+    basePrice:   Optional[float]           = None
+    serviceAreas:Optional[List[str]]       = None
+    minHours:    Optional[int]             = None
+    skills:      Optional[List[Any]]       = None   # accepts both formats
+    profilePhoto:Optional[str]             = None
+    taskType:    Optional[str]             = None
+
 
 class Availability(BaseModel):
     monday: Dict[str, bool]

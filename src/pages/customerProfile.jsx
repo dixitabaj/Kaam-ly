@@ -704,7 +704,7 @@ export default function CustomerProfile() {
     r.readAsDataURL(file);
     setAvatarUploading(true);
     try {
-      const res = await updatePhoto(customer?.email, file);
+      const res = await updatePhoto(id, file);
       if (!res.ok) throw new Error();
       const data = await res.json();
       if (data.photo_url) setAvatar(data.photo_url);

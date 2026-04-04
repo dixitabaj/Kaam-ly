@@ -71,16 +71,38 @@ function AmountBadge({ amount, label }) {
 /* ── STEP COMPONENTS ── */
 function StepPay({ task }) {
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState("");
-  const handlePay = async () => {
-    setLoading(true); setError("");
+  const [error, setError] = useState("");
+  
+  const handlePayEsewa = async () => {
+    setLoading(true); 
+    setError("");
     try {
-      const res  = await fetch(`${API}/task/${task._id}/pay/esewa`, { method: "POST" });
+      const res = await fetch(`${API}/task/${task._id}/pay/esewa`, { method: "POST" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Payment init failed");
+      if (!res.ok) throw new Error(data.detail || "eSewa payment init failed");
       submitEsewaForm(data.form_data, data.esewa_url);
-    } catch (err) { setError(err.message); setLoading(false); }
+    } catch (err) { 
+      setError(err.message); 
+      setLoading(false); 
+    }
   };
+
+  const handlePayKhalti = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(`${API}/task/${task._id}/pay/khalti`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Khalti payment init failed");
+      
+      // Khalti uses direct redirect (no form submission needed)
+      window.location.href = data.payment_url;
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+    }
+  };
+
   return (
     <>
       <p style={S.panelTitle}>💳 Complete Your Payment</p>
@@ -89,13 +111,43 @@ function StepPay({ task }) {
       <div style={S.infoRow}><span style={S.infoKey}>Service Date</span><span style={S.infoVal}>{task.serviceDate ? new Date(task.serviceDate).toLocaleDateString() : "—"}</span></div>
       <div style={S.infoRow}><span style={S.infoKey}>Address</span><span style={S.infoVal}>{task.address || "—"}</span></div>
       <div style={{ height: 1, background: "#f1f1f1", margin: "18px 0" }} />
+      
       <div style={{ background: "#f0fdf4", borderRadius: 10, padding: "12px 14px", marginBottom: 18, display: "flex", gap: 10, alignItems: "flex-start" }}>
         <span style={{ fontSize: 16 }}>🔒</span>
         <p style={{ margin: 0, fontSize: 12, color: "#166534", lineHeight: 1.5 }}>Funds are held securely in escrow until you confirm the task is complete.</p>
       </div>
+      
       {error && <p style={S.error}>{error}</p>}
-      <button onClick={handlePay} disabled={loading} style={{ ...S.btn, ...S.btnGreen }}>
+      
+      <p style={{ margin: "0 0 12px", fontSize: 12, fontWeight: 600, color: "#6b7280", textAlign: "center" }}>
+        Choose your preferred payment method
+      </p>
+      
+      {/* eSewa Button */}
+      <button 
+        onClick={handlePayEsewa} 
+        disabled={loading} 
+        style={{ 
+          ...S.btn, 
+          ...S.btnGreen,
+          marginBottom: 12
+        }}
+      >
         {loading ? <><span style={S.spin} /> Processing…</> : <><EsewaIcon /> Pay with eSewa</>}
+      </button>
+
+      {/* Khalti Button */}
+      <button 
+        onClick={handlePayKhalti} 
+        disabled={loading} 
+        style={{ 
+          ...S.btn, 
+          background: "linear-gradient(135deg, #5C2D91, #7C3FB2)",
+          color: "#fff",
+          boxShadow: "0 4px 14px rgba(92,45,145,.35)"
+        }}
+      >
+        {loading ? <><span style={S.spin} /> Processing…</> : <><KhaltiIcon /> Pay with Khalti</>}
       </button>
     </>
   );
@@ -122,14 +174,19 @@ function StepWaiting({ task }) {
 }
 
 function StepConfirmComplete({ task, userId, onComplete }) {
-  const [loading,   setLoading]   = useState(false);
+  const [loading, setLoading] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
-  const [error,     setError]     = useState("");
+  const [error, setError] = useState("");
+  
   const handleComplete = async () => {
-    if (!confirmed) { setError("Please confirm the checkbox first."); return; }
-    setLoading(true); setError("");
+    if (!confirmed) { 
+      setError("Please confirm the checkbox first."); 
+      return; 
+    }
+    setLoading(true); 
+    setError("");
     try {
-      const res  = await fetch(`${API}/task/${task._id}/complete`, { 
+      const res = await fetch(`${API}/task/${task._id}/complete`, { 
         method: "POST", 
         headers: { "Content-Type": "application/json" }, 
         body: JSON.stringify({ user_id: userId }) 
@@ -137,8 +194,13 @@ function StepConfirmComplete({ task, userId, onComplete }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail);
       onComplete(data);
-    } catch (err) { setError(err.message); } finally { setLoading(false); }
+    } catch (err) { 
+      setError(err.message); 
+    } finally { 
+      setLoading(false); 
+    }
   };
+
   return (
     <>
       <p style={S.panelTitle}>🎉 Ready to Release Payment?</p>
@@ -149,12 +211,30 @@ function StepConfirmComplete({ task, userId, onComplete }) {
           <p style={{ margin: "2px 0 0", fontSize: 12, color: "#047857" }}>Confirming releases funds to the worker immediately.</p>
         </div>
       </div>
+      
       <label style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 20, cursor: "pointer", padding: "14px 16px", background: "#f9fafb", borderRadius: 10, border: confirmed ? "1.5px solid #10b981" : "1.5px solid #e5e7eb" }}>
-        <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} style={{ marginTop: 2, width: 18, height: 18, accentColor: "#10b981", cursor: "pointer", flexShrink: 0 }} />
-        <span style={{ fontSize: 13, color: "#374151", lineHeight: 1.5 }}>I confirm the task has been completed to my satisfaction.</span>
+        <input 
+          type="checkbox" 
+          checked={confirmed} 
+          onChange={e => setConfirmed(e.target.checked)} 
+          style={{ marginTop: 2, width: 18, height: 18, accentColor: "#10b981", cursor: "pointer", flexShrink: 0 }} 
+        />
+        <span style={{ fontSize: 13, color: "#374151", lineHeight: 1.5 }}>
+          I confirm the task has been completed to my satisfaction.
+        </span>
       </label>
+      
       {error && <p style={S.error}>{error}</p>}
-      <button onClick={handleComplete} disabled={loading || !confirmed} style={{ ...S.btn, ...S.btnGreen, opacity: (!confirmed || loading) ? 0.5 : 1 }}>
+      
+      <button 
+        onClick={handleComplete} 
+        disabled={loading || !confirmed} 
+        style={{ 
+          ...S.btn, 
+          ...S.btnGreen, 
+          opacity: (!confirmed || loading) ? 0.5 : 1 
+        }}
+      >
         {loading ? <><span style={S.spin} /> Processing…</> : "✅ Confirm & Release Payment"}
       </button>
     </>
@@ -197,7 +277,9 @@ function StepDone({ task, role }) {
   return (
     <div style={{ textAlign: "center", padding: "32px 0" }}>
       <div style={{ fontSize: 64, marginBottom: 16 }}>{role === "worker" ? "💰" : "✅"}</div>
-      <p style={{ margin: 0, fontWeight: 800, fontSize: 22, color: "#111" }}>{role === "worker" ? "Payment Released!" : "Task Completed!"}</p>
+      <p style={{ margin: 0, fontWeight: 800, fontSize: 22, color: "#111" }}>
+        {role === "worker" ? "Payment Released!" : "Task Completed!"}
+      </p>
       <p style={{ margin: "8px 0 0", fontSize: 14, color: "#6b7280" }}>
         {role === "worker"
           ? `NPR ${(task.worker_payout || task.totalCost)?.toLocaleString()} has been released to your account.`
@@ -210,16 +292,64 @@ function StepDone({ task, role }) {
 function Step({ label, done, active }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-      <div style={{ width: 20, height: 20, borderRadius: "50%", flexShrink: 0, border: done ? "none" : active ? "2px solid #8b5cf6" : "2px solid #e5e7eb", background: done ? "#10b981" : active ? "#ede9fe" : "#f9fafb", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10 }}>
+      <div style={{ 
+        width: 20, height: 20, borderRadius: "50%", flexShrink: 0, 
+        border: done ? "none" : active ? "2px solid #8b5cf6" : "2px solid #e5e7eb", 
+        background: done ? "#10b981" : active ? "#ede9fe" : "#f9fafb", 
+        display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10 
+      }}>
         {done ? "✓" : active ? <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#8b5cf6", display: "block" }} /> : null}
       </div>
-      <span style={{ fontSize: 12, fontWeight: done ? 600 : active ? 700 : 400, color: done ? "#065f46" : active ? "#5b21b6" : "#9ca3af" }}>{label}</span>
+      <span style={{ 
+        fontSize: 12, 
+        fontWeight: done ? 600 : active ? 700 : 400, 
+        color: done ? "#065f46" : active ? "#5b21b6" : "#9ca3af" 
+      }}>
+        {label}
+      </span>
     </div>
   );
 }
 
 function EsewaIcon() {
-  return <span style={{ fontSize: 16, fontWeight: 900, fontFamily: "serif", color: "#fff", letterSpacing: "-0.5px" }}>e</span>;
+  return (
+    <span style={{ 
+      fontSize: 16, 
+      fontWeight: 900, 
+      fontFamily: "serif", 
+      color: "#fff", 
+      letterSpacing: "-0.5px" 
+    }}>
+      e
+    </span>
+  );
+}
+
+function KhaltiIcon() {
+  return (
+    <svg 
+      width="20" 
+      height="20" 
+      viewBox="0 0 50 50" 
+      fill="none" 
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ flexShrink: 0 }}
+    >
+      <rect width="50" height="50" rx="8" fill="white" fillOpacity="0.15"/>
+      <path 
+        d="M25 12L15 22L20 27L25 22L30 27L35 22L25 12Z" 
+        fill="white"
+      />
+      <path 
+        d="M15 28L20 33L25 28L30 33L35 28L30 23L25 28L20 23L15 28Z" 
+        fill="white"
+      />
+      <path 
+        d="M20 34L25 39L30 34" 
+        fill="white"
+      />
+    </svg>
+  );
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -246,20 +376,53 @@ function PaymentCard({ task, loading, error, taskId, role, userId, successMsg, s
       }}
       onClick={e => e.stopPropagation()}
     >
-      <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #f1f1f1", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div style={{ 
+        padding: "20px 24px 16px", 
+        borderBottom: "1px solid #f1f1f1", 
+        display: "flex", 
+        justifyContent: "space-between", 
+        alignItems: "flex-start" 
+      }}>
         <div>
-          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "#9ca3af" }}>
+          <p style={{ 
+            margin: 0, 
+            fontSize: 11, 
+            fontWeight: 700, 
+            letterSpacing: "0.12em", 
+            textTransform: "uppercase", 
+            color: "#9ca3af" 
+          }}>
             {role === "worker" ? "Worker View" : "Customer View"}
           </p>
-          <h1 style={{ margin: "4px 0 0", fontSize: 18, fontWeight: 800, color: "#111" }}>
+          <h1 style={{ 
+            margin: "4px 0 0", 
+            fontSize: 18, 
+            fontWeight: 800, 
+            color: "#111" 
+          }}>
             {loading ? "Loading…" : (task?.taskName || "Task Payment")}
           </h1>
-          {task?.address && <p style={{ margin: "2px 0 0", fontSize: 13, color: "#6b7280" }}>{task.address}</p>}
+          {task?.address && (
+            <p style={{ margin: "2px 0 0", fontSize: 13, color: "#6b7280" }}>
+              {task.address}
+            </p>
+          )}
         </div>
 
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexShrink: 0, marginLeft: 12 }}>
+        <div style={{ 
+          display: "flex", 
+          alignItems: "flex-start", 
+          gap: 8, 
+          flexShrink: 0, 
+          marginLeft: 12 
+        }}>
           {task && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-end" }}>
+            <div style={{ 
+              display: "flex", 
+              flexDirection: "column", 
+              gap: 5, 
+              alignItems: "flex-end" 
+            }}>
               <Pill status={task.status} />
               <Pill status={task.payment_status || "unpaid"} />
               {task.escrow_status && <Pill status={task.escrow_status} />}
@@ -268,7 +431,22 @@ function PaymentCard({ task, loading, error, taskId, role, userId, successMsg, s
           {isModal && (
             <button
               onClick={onClose}
-              style={{ width: 30, height: 30, borderRadius: "50%", background: "#f3f4f6", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "#6b7280", fontSize: 18, fontWeight: 700, marginTop: 2 }}
+              style={{ 
+                width: 30, 
+                height: 30, 
+                borderRadius: "50%", 
+                background: "#f3f4f6", 
+                border: "none", 
+                cursor: "pointer", 
+                display: "flex", 
+                alignItems: "center", 
+                justifyContent: "center", 
+                flexShrink: 0, 
+                color: "#6b7280", 
+                fontSize: 18, 
+                fontWeight: 700, 
+                marginTop: 2 
+              }}
             >
               ×
             </button>
@@ -279,22 +457,47 @@ function PaymentCard({ task, loading, error, taskId, role, userId, successMsg, s
       <div style={{ padding: "20px 24px 24px" }}>
         {loading && (
           <div style={{ textAlign: "center", padding: "40px 0" }}>
-            <div style={{ width: 32, height: 32, border: "3px solid #e5e7eb", borderTop: "3px solid #10b981", borderRadius: "50%", animation: "spin .8s linear infinite", margin: "0 auto 12px" }} />
-            <p style={{ margin: 0, color: "#6b7280", fontSize: 14 }}>Loading payment details…</p>
+            <div style={{ 
+              width: 32, 
+              height: 32, 
+              border: "3px solid #e5e7eb", 
+              borderTop: "3px solid #10b981", 
+              borderRadius: "50%", 
+              animation: "spin .8s linear infinite", 
+              margin: "0 auto 12px" 
+            }} />
+            <p style={{ margin: 0, color: "#6b7280", fontSize: 14 }}>
+              Loading payment details…
+            </p>
           </div>
         )}
 
         {!loading && (error || !task) && (
           <div style={{ borderLeft: "4px solid #ef4444", paddingLeft: 14 }}>
-            <p style={{ margin: 0, fontWeight: 700, color: "#dc2626" }}>⚠ {error || "Failed to load task"}</p>
-            <p style={{ margin: "4px 0 0", fontSize: 12, color: "#9ca3af" }}>Task ID: {taskId}</p>
+            <p style={{ margin: 0, fontWeight: 700, color: "#dc2626" }}>
+              ⚠ {error || "Failed to load task"}
+            </p>
+            <p style={{ margin: "4px 0 0", fontSize: 12, color: "#9ca3af" }}>
+              Task ID: {taskId}
+            </p>
           </div>
         )}
 
         {successMsg && !loading && task && (
-          <div style={{ background: "#ecfdf5", border: "1.5px solid #6ee7b7", borderRadius: 14, padding: "12px 16px", display: "flex", gap: 10, alignItems: "center", marginBottom: 16 }}>
+          <div style={{ 
+            background: "#ecfdf5", 
+            border: "1.5px solid #6ee7b7", 
+            borderRadius: 14, 
+            padding: "12px 16px", 
+            display: "flex", 
+            gap: 10, 
+            alignItems: "center", 
+            marginBottom: 16 
+          }}>
             <span style={{ fontSize: 18 }}>🎉</span>
-            <p style={{ margin: 0, fontWeight: 700, color: "#065f46", fontSize: 13 }}>{successMsg}</p>
+            <p style={{ margin: 0, fontWeight: 700, color: "#065f46", fontSize: 13 }}>
+              {successMsg}
+            </p>
           </div>
         )}
 
@@ -309,10 +512,14 @@ function PaymentCard({ task, loading, error, taskId, role, userId, successMsg, s
                   <StepWaiting task={task} />
                 )}
                 {isInProgress && isPaid && isHeld && (
-                  <StepConfirmComplete task={task} userId={userId} onComplete={(data) => {
-                    setSuccessMsg(data.message || "Payment released to worker!");
-                    refresh({ status: "completed", escrow_status: "released" });
-                  }} />
+                  <StepConfirmComplete 
+                    task={task} 
+                    userId={userId} 
+                    onComplete={(data) => {
+                      setSuccessMsg(data.message || "Payment released to worker!");
+                      refresh({ status: "completed", escrow_status: "released" });
+                    }} 
+                  />
                 )}
                 {isCompleted && <StepDone task={task} role="customer" />}
               </>
@@ -363,34 +570,52 @@ export default function PaymentFlow({ taskIdProp, userIdProp, roleProp, onClose 
   const role    = roleProp   ?? params.role ?? "customer";
   const isModal = !!onClose;
 
-  const [searchParams]              = useSearchParams();
-  const paymentSuccess              = searchParams.get("payment") === "success";
+  const [searchParams] = useSearchParams();
+  const paymentSuccess = searchParams.get("payment") === "success";
 
-  const [task,       setTask]       = useState(null);
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState("");
+  const [task, setTask] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState(
     paymentSuccess ? "Payment verified! Funds are now held in escrow." : ""
   );
 
   useEffect(() => {
     const load = async () => {
-      setLoading(true); setError("");
+      setLoading(true); 
+      setError("");
       try {
-        if (!taskId || taskId === "undefined") throw new Error("Invalid task ID");
-        const res  = await fetch(`${API}/task/${taskId}`);
+        if (!taskId || taskId === "undefined") {
+          throw new Error("Invalid task ID");
+        }
+        const res = await fetch(`${API}/task/${taskId}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "Task not found");
         setTask({ ...data, _id: String(data._id || data.id || taskId) });
-      } catch (err) { setError(err.message); }
-      finally { setLoading(false); }
+      } catch (err) { 
+        setError(err.message); 
+      } finally { 
+        setLoading(false); 
+      }
     };
     load();
   }, [taskId]);
 
   const refresh = (updates) => setTask(prev => ({ ...prev, ...updates }));
 
-  const sharedProps = { task, loading, error, taskId, role, userId, successMsg, setSuccessMsg, refresh, isModal, onClose };
+  const sharedProps = { 
+    task, 
+    loading, 
+    error, 
+    taskId, 
+    role, 
+    userId, 
+    successMsg, 
+    setSuccessMsg, 
+    refresh, 
+    isModal, 
+    onClose 
+  };
 
   return (
     <>
@@ -402,15 +627,39 @@ export default function PaymentFlow({ taskIdProp, userIdProp, roleProp, onClose 
 
       {isModal ? (
         <div
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'DM Sans', sans-serif" }}
+          style={{ 
+            position: "fixed", 
+            inset: 0, 
+            background: "rgba(0,0,0,0.55)", 
+            backdropFilter: "blur(6px)", 
+            WebkitBackdropFilter: "blur(6px)", 
+            zIndex: 1000, 
+            display: "flex", 
+            alignItems: "center", 
+            justifyContent: "center", 
+            padding: 16, 
+            fontFamily: "'DM Sans', sans-serif" 
+          }}
           onClick={onClose}
         >
           <PaymentCard {...sharedProps} />
         </div>
       ) : (
-        <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "#f3f4f6", fontFamily: "'DM Sans', sans-serif" }}>
+        <div style={{ 
+          minHeight: "100vh", 
+          display: "flex", 
+          flexDirection: "column", 
+          background: "#f3f4f6", 
+          fontFamily: "'DM Sans', sans-serif" 
+        }}>
           <BookingNavbar />
-          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "32px 16px" }}>
+          <div style={{ 
+            flex: 1, 
+            display: "flex", 
+            alignItems: "center", 
+            justifyContent: "center", 
+            padding: "32px 16px" 
+          }}>
             <PaymentCard {...sharedProps} />
           </div>
         </div>
@@ -420,17 +669,107 @@ export default function PaymentFlow({ taskIdProp, userIdProp, roleProp, onClose 
 }
 
 const S = {
-  panelTitle: { margin: "0 0 18px", fontSize: 16, fontWeight: 800, color: "#111" },
-  statusBox:  { display: "flex", gap: 14, alignItems: "flex-start", marginBottom: 20 },
-  iconCircle: { width: 48, height: 48, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 },
-  statusTitle:{ margin: 0, fontWeight: 800, fontSize: 16, color: "#111" },
-  statusSub:  { margin: "4px 0 0", fontSize: 13, color: "#6b7280", lineHeight: 1.55 },
-  timeline:   { display: "flex", flexDirection: "column", gap: 10, paddingLeft: 4, borderLeft: "2px solid #f1f1f1", marginLeft: 8, paddingTop: 4 },
-  infoRow:    { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderBottom: "1px solid #f9f9f9" },
-  infoKey:    { fontSize: 12, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em" },
-  infoVal:    { fontSize: 13, fontWeight: 600, color: "#374151", textAlign: "right", maxWidth: "60%" },
-  btn:        { width: "100%", padding: "14px 20px", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "'DM Sans', sans-serif", transition: "all .2s" },
-  btnGreen:   { background: "linear-gradient(135deg, #059669, #10b981)", color: "#fff", boxShadow: "0 4px 14px rgba(16,185,129,.35)" },
-  error:      { margin: "0 0 12px", padding: "10px 14px", background: "#fff1f2", border: "1px solid #fecdd3", borderRadius: 8, fontSize: 12, fontWeight: 600, color: "#dc2626" },
-  spin:       { width: 16, height: 16, border: "2px solid rgba(255,255,255,.3)", borderTop: "2px solid #fff", borderRadius: "50%", display: "inline-block", animation: "spin .7s linear infinite" },
+  panelTitle: { 
+    margin: "0 0 18px", 
+    fontSize: 16, 
+    fontWeight: 800, 
+    color: "#111" 
+  },
+  statusBox: { 
+    display: "flex", 
+    gap: 14, 
+    alignItems: "flex-start", 
+    marginBottom: 20 
+  },
+  iconCircle: { 
+    width: 48, 
+    height: 48, 
+    borderRadius: 14, 
+    display: "flex", 
+    alignItems: "center", 
+    justifyContent: "center", 
+    fontSize: 22, 
+    flexShrink: 0 
+  },
+  statusTitle: { 
+    margin: 0, 
+    fontWeight: 800, 
+    fontSize: 16, 
+    color: "#111" 
+  },
+  statusSub: { 
+    margin: "4px 0 0", 
+    fontSize: 13, 
+    color: "#6b7280", 
+    lineHeight: 1.55 
+  },
+  timeline: { 
+    display: "flex", 
+    flexDirection: "column", 
+    gap: 10, 
+    paddingLeft: 4, 
+    borderLeft: "2px solid #f1f1f1", 
+    marginLeft: 8, 
+    paddingTop: 4 
+  },
+  infoRow: { 
+    display: "flex", 
+    justifyContent: "space-between", 
+    alignItems: "center", 
+    padding: "9px 0", 
+    borderBottom: "1px solid #f9f9f9" 
+  },
+  infoKey: { 
+    fontSize: 12, 
+    fontWeight: 600, 
+    color: "#9ca3af", 
+    textTransform: "uppercase", 
+    letterSpacing: "0.05em" 
+  },
+  infoVal: { 
+    fontSize: 13, 
+    fontWeight: 600, 
+    color: "#374151", 
+    textAlign: "right", 
+    maxWidth: "60%" 
+  },
+  btn: { 
+    width: "100%", 
+    padding: "14px 20px", 
+    border: "none", 
+    borderRadius: 12, 
+    fontSize: 14, 
+    fontWeight: 700, 
+    cursor: "pointer", 
+    display: "flex", 
+    alignItems: "center", 
+    justifyContent: "center", 
+    gap: 8, 
+    fontFamily: "'DM Sans', sans-serif", 
+    transition: "all .2s" 
+  },
+  btnGreen: { 
+    background: "linear-gradient(135deg, #059669, #10b981)", 
+    color: "#fff", 
+    boxShadow: "0 4px 14px rgba(16,185,129,.35)" 
+  },
+  error: { 
+    margin: "0 0 12px", 
+    padding: "10px 14px", 
+    background: "#fff1f2", 
+    border: "1px solid #fecdd3", 
+    borderRadius: 8, 
+    fontSize: 12, 
+    fontWeight: 600, 
+    color: "#dc2626" 
+  },
+  spin: { 
+    width: 16, 
+    height: 16, 
+    border: "2px solid rgba(255,255,255,.3)", 
+    borderTop: "2px solid #fff", 
+    borderRadius: "50%", 
+    display: "inline-block", 
+    animation: "spin .7s linear infinite" 
+  },
 };

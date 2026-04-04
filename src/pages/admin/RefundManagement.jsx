@@ -59,17 +59,13 @@ const apiCall = async (url, options = {}) => {
   });
 };
 
-/**
- * patchStatus — sets amounts and moves refund to "refund_in_progress".
- * Does NOT trigger eSewa here. eSewa happens at Pay All time.
- */
 const patchStatus = async (refundId, status, adminNote, amountCustomer, amountWorker) => {
   const token = getToken();
   const form  = new URLSearchParams();
 
   form.append("status",     status);
   form.append("admin_note", adminNote ?? "");
-  form.append("sandbox",    String(USE_SANDBOX_MODE));  // ← Uses global sandbox setting
+  form.append("sandbox",    String(USE_SANDBOX_MODE));
 
   if (status === "approved") {
     form.append("amount_customer", String(Number(amountCustomer) || 0));
@@ -190,9 +186,19 @@ const StatCard = ({ label, value, color, icon: Icon, sub }) => (
 );
 
 // ── Sandbox Indicator Banner ─────────────────────────────────────────────────
+const SandboxBanner = () => {
+  if (!USE_SANDBOX_MODE) return null;
+  return (
+    <div style={{ background: C.blueLight, borderRadius: 12, padding: "10px 16px", marginBottom: 16, border: `1px solid ${C.blue}30`, display: "flex", alignItems: "center", gap: 10 }}>
+      <Zap size={16} color={C.blue} />
+      <span style={{ fontSize: 12, color: C.blue, fontWeight: 500 }}>
+        🔒 SANDBOX MODE ACTIVE — No actual money transferred. All eSewa calls are mocked for testing.
+      </span>
+    </div>
+  );
+};
 
-
-// ── Pay All Modal — targets in-progress refunds ────────────────────────────
+// ── Pay All Modal ────────────────────────────────────────────────────────────
 const PayAllModal = ({ inProgressCount, inProgressAmount, onConfirm, onCancel, processing }) => (
   <div style={{ position: "fixed", inset: 0, zIndex: 10001, background: "rgba(28,20,16,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
     <div style={{ background: C.surface, borderRadius: 24, width: 480, boxShadow: "0 30px 60px rgba(0,0,0,0.28)", animation: "scaleIn 0.2s ease", overflow: "hidden" }}>
@@ -205,16 +211,7 @@ const PayAllModal = ({ inProgressCount, inProgressAmount, onConfirm, onCancel, p
           {inProgressCount} refund{inProgressCount !== 1 ? "s" : ""} totaling {fmtNPR(inProgressAmount)}
         </p>
         {USE_SANDBOX_MODE && (
-          <div style={{ 
-            marginTop: 12, 
-            background: "rgba(255,255,255,0.15)", 
-            borderRadius: 20, 
-            padding: "4px 12px",
-            display: "inline-block",
-            fontSize: 11,
-            fontWeight: 600,
-            color: "white"
-          }}>
+          <div style={{ marginTop: 12, background: "rgba(255,255,255,0.15)", borderRadius: 20, padding: "4px 12px", display: "inline-block", fontSize: 11, fontWeight: 600, color: "white" }}>
             🔒 Sandbox Mode — Mock Only
           </div>
         )}
@@ -244,7 +241,7 @@ const PayAllModal = ({ inProgressCount, inProgressAmount, onConfirm, onCancel, p
   </div>
 );
 
-// ── Pay All Results Modal ──────────────────────────────────────────────────
+// ── Pay All Results Modal ────────────────────────────────────────────────────
 const PayAllResultModal = ({ result, onClose }) => {
   if (!result) return null;
   const { success = [], failed = [], total_success_amount, sandbox_mode } = result;
@@ -294,21 +291,41 @@ const PayAllResultModal = ({ result, onClose }) => {
                 {success.map((item, i) => (
                   <div key={i} style={{ background: C.greenLight, borderRadius: 10, padding: "10px 14px", marginBottom: 8, border: `1px solid ${C.green}20` }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: C.textPrimary, marginBottom: 2 }}>{shortId(item.refund_id)}</div>
-                        <div style={{ fontSize: 11, color: C.textSecond }}>{fmtNPR(item.amount)} → {item.customer_esewa || "Customer"}</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: C.textPrimary, marginBottom: 4 }}>{shortId(item.refund_id)}</div>
+                        {/* ── Customer line ── */}
+                        <div style={{ fontSize: 11, color: C.textSecond, display: "flex", alignItems: "center", gap: 4 }}>
+                          <User size={10} color={C.purple} />
+                          Customer: {fmtNPR(item.amount_customer ?? item.amount)} → {item.customer_esewa || "Customer"}
+                        </div>
+                        {/* ── Worker line ── */}
                         {item.worker_payout && (
-                          <div style={{ fontSize: 11, marginTop: 4, color: item.worker_payout.status === "sent" ? C.green : item.worker_payout.status === "no_phone" ? C.amber : C.red }}>
-                            Worker: {
-                              item.worker_payout.status === "sent"     ? `Payout sent → ${item.worker_payout.phone}` :
-                              item.worker_payout.status === "no_phone" ? "No phone on file — process manually" :
+                          <div style={{ fontSize: 11, marginTop: 4, display: "flex", alignItems: "center", gap: 4, color:
+                            item.worker_payout.status === "sent"         ? C.green :
+                            item.worker_payout.status === "mock_success" ? C.green :
+                            item.worker_payout.status === "no_phone"     ? C.amber : C.red
+                          }}>
+                            <Briefcase size={10} />
+                            Worker ({fmtNPR(item.amount_worker ?? 0)}): {
+                              item.worker_payout.status === "sent"         ? `Sent → ${item.worker_payout.phone}` :
+                              item.worker_payout.status === "mock_success" ? `Mock → ${item.worker_payout.phone || "worker"}` :
+                              item.worker_payout.status === "no_phone"     ? "No phone — process manually" :
                               item.worker_payout.error || "Failed"
                             }
                           </div>
                         )}
+                        {/* ── No worker payout set ── */}
+                        {!item.worker_payout && (
+                          <div style={{ fontSize: 11, marginTop: 4, color: C.textMuted, display: "flex", alignItems: "center", gap: 4 }}>
+                            <Briefcase size={10} />
+                            Worker: No payout set
+                          </div>
+                        )}
                       </div>
                       {item.transaction_uuid && (
-                        <span style={{ fontSize: 9, color: C.green, fontFamily: "monospace" }}>Txn: {item.transaction_uuid.slice(-8)}</span>
+                        <span style={{ fontSize: 9, color: C.green, fontFamily: "monospace", flexShrink: 0, marginLeft: 8 }}>
+                          Txn: {item.transaction_uuid.slice(-8)}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -327,7 +344,7 @@ const PayAllResultModal = ({ result, onClose }) => {
                   <div key={i} style={{ background: C.redLight, borderRadius: 10, padding: "10px 14px", marginBottom: 8, border: `1px solid ${C.red}20` }}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: C.textPrimary, marginBottom: 2 }}>{shortId(item.refund_id)}</div>
                     <div style={{ fontSize: 11, color: C.red }}>{item.error || "eSewa API error"}</div>
-                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 4 }}>{fmtNPR(item.amount)}</div>
+                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 4 }}>{fmtNPR(item.amount_customer ?? item.amount)}</div>
                   </div>
                 ))}
               </div>
@@ -345,7 +362,7 @@ const PayAllResultModal = ({ result, onClose }) => {
   );
 };
 
-// ── Task Details Tab ──────────────────────────────────────────────────────
+// ── Task Details Tab ─────────────────────────────────────────────────────────
 const TaskDetailsTab = ({ refund }) => {
   const [task,    setTask]    = useState(null);
   const [loading, setLoading] = useState(false);
@@ -469,7 +486,7 @@ const TaskDetailsTab = ({ refund }) => {
   );
 };
 
-// ── Refund Detail Modal ────────────────────────────────────────────────────
+// ── Refund Detail Modal ──────────────────────────────────────────────────────
 const RefundDetailModal = ({ refund, onClose, onApprove, onReject, onDelete, onWaive, onEnforce }) => {
   const [activeTab,  setActiveTab]  = useState("refund");
   const [confirm,    setConfirm]    = useState(null);
@@ -586,21 +603,49 @@ const RefundDetailModal = ({ refund, onClose, onApprove, onReject, onDelete, onW
             {activeTab === "refund" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
 
-                {/* Amount hero */}
-                <div style={{ background: isDispute ? C.disputeLight : C.tealLight, borderRadius: 14, padding: 18, border: `1px solid ${accent}25`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div>
-                    <div style={{ fontSize: 11, color: accent, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
-                      {isDispute ? "Dispute Charge Amount" : "Customer Refund"}
+                {/* ── Amount hero: two cards side by side ── */}
+                <div style={{ display: "grid", gridTemplateColumns: isDispute ? "1fr" : "1fr 1fr", gap: 12 }}>
+
+                  {/* Customer refund card */}
+                  <div style={{ background: isDispute ? C.disputeLight : C.tealLight, borderRadius: 14, padding: 18, border: `1px solid ${accent}25`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: accent, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
+                        {isDispute ? "Dispute Charge Amount" : "Customer Refund"}
+                      </div>
+                      <div style={{ fontSize: 32, fontWeight: 800, color: dispAmt > 0 ? accent : C.textMuted }}>
+                        {dispAmt > 0 ? fmtNPR(dispAmt) : "Not set"}
+                      </div>
+                      <div style={{ fontSize: 11, color: accent + "99", marginTop: 4 }}>
+                        {isDispute ? "Deducted from worker" : "Paid to customer via eSewa"}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 32, fontWeight: 800, color: accent }}>{fmtNPR(dispAmt)}</div>
-                    {!isDispute && dispWkr > 0 && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>Worker deduction: {fmtNPR(dispWkr)}</div>}
+                    <div style={{ width: 54, height: 54, borderRadius: 14, background: accent + "20", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {isDispute ? <ShieldAlert size={26} color={accent} /> : <Wallet size={26} color={accent} />}
+                    </div>
                   </div>
-                  <div style={{ width: 54, height: 54, borderRadius: 14, background: accent + "20", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {isDispute ? <ShieldAlert size={26} color={accent} /> : <Wallet size={26} color={accent} />}
-                  </div>
+
+                  {/* Worker payout card — only for non-dispute */}
+                  {!isDispute && (
+                    <div style={{ background: C.blueLight, borderRadius: 14, padding: 18, border: `1px solid ${C.blue}25`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: C.blue, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
+                          Worker Payout
+                        </div>
+                        <div style={{ fontSize: 32, fontWeight: 800, color: dispWkr > 0 ? C.blue : C.textMuted }}>
+                          {dispWkr > 0 ? fmtNPR(dispWkr) : "Not set"}
+                        </div>
+                        <div style={{ fontSize: 11, color: C.blue + "99", marginTop: 4 }}>
+                          Paid to worker via eSewa
+                        </div>
+                      </div>
+                      <div style={{ width: 54, height: 54, borderRadius: 14, background: C.blueLight, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Briefcase size={26} color={C.blue} />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Sandbox indicator on refund details */}
+                {/* Sandbox indicator */}
                 {USE_SANDBOX_MODE && refund.status === "refunded" && (
                   <div style={{ background: C.blueLight, borderRadius: 12, padding: "12px 16px", border: `1px solid ${C.blue}30`, display: "flex", alignItems: "center", gap: 10 }}>
                     <Zap size={16} color={C.blue} />
@@ -652,7 +697,7 @@ const RefundDetailModal = ({ refund, onClose, onApprove, onReject, onDelete, onW
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                       {[
                         { label: "Customer Refund",  value: amtCust,   setter: setAmtCust,   required: true,  hint: "Sent to customer via eSewa (ref_id)"    },
-                        { label: "Worker Deduction", value: amtWorker, setter: setAmtWorker, required: false, hint: "Sent to worker via eSewa (phone number)" },
+                        { label: "Worker Payout",    value: amtWorker, setter: setAmtWorker, required: false, hint: "Sent to worker via eSewa (phone number)" },
                       ].map(({ label, value, setter, required, hint }) => (
                         <div key={label}>
                           <label style={{ fontSize: 11, fontWeight: 600, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 4 }}>
@@ -714,17 +759,27 @@ const RefundDetailModal = ({ refund, onClose, onApprove, onReject, onDelete, onW
                         eSewa disbursement {USE_SANDBOX_MODE ? "simulated (MOCK MODE)" : "sent successfully"}
                       </span>
                     </div>
-                    {refund.esewa_refund?.transaction_uuid && <span style={{ fontSize: 11, color: USE_SANDBOX_MODE ? C.blue : C.green, paddingLeft: 23 }}>Txn: {refund.esewa_refund.transaction_uuid}</span>}
+                    {refund.esewa_refund?.transaction_uuid && (
+                      <span style={{ fontSize: 11, color: USE_SANDBOX_MODE ? C.blue : C.green, paddingLeft: 23 }}>
+                        Txn: {refund.esewa_refund.transaction_uuid}
+                      </span>
+                    )}
                     {USE_SANDBOX_MODE && (
                       <div style={{ paddingLeft: 23, fontSize: 11, color: C.blue }}>
                         🔒 No actual money transferred — sandbox simulation
                       </div>
                     )}
+                    {/* Worker payout status in eSewa result */}
                     {refund.worker_payout && (
-                      <div style={{ paddingLeft: 23, fontSize: 11, color: refund.worker_payout.status === "sent" ? C.green : refund.worker_payout.status === "no_phone" ? C.amber : C.red }}>
-                        Worker payout: {
-                          refund.worker_payout.status === "sent"     ? `Sent via eSewa (${refund.worker_payout.phone})` :
-                          refund.worker_payout.status === "no_phone" ? "No phone on file — process manually" :
+                      <div style={{ paddingLeft: 23, fontSize: 11, color:
+                        refund.worker_payout.status === "sent"         ? C.green :
+                        refund.worker_payout.status === "mock_success" ? C.green :
+                        refund.worker_payout.status === "no_phone"     ? C.amber : C.red
+                      }}>
+                        Worker payout ({fmtNPR(dispWkr)}): {
+                          refund.worker_payout.status === "sent"         ? `Sent via eSewa (${refund.worker_payout.phone})` :
+                          refund.worker_payout.status === "mock_success" ? `Mock sent (${refund.worker_payout.phone || "worker"})` :
+                          refund.worker_payout.status === "no_phone"     ? "No phone on file — process manually" :
                           refund.worker_payout.error || "Failed"
                         }
                       </div>
@@ -794,7 +849,7 @@ const RefundDetailModal = ({ refund, onClose, onApprove, onReject, onDelete, onW
   );
 };
 
-// ── Refund Table Row ──────────────────────────────────────────────────────────
+// ── Refund Table Row ─────────────────────────────────────────────────────────
 const RefundRow = ({ refund, onSelect, onApprove, onReject, onDelete, onWaive, onEnforce }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const isDispute = isDisputeCharge(refund);
@@ -837,7 +892,16 @@ const RefundRow = ({ refund, onSelect, onApprove, onReject, onDelete, onWaive, o
         </div>
       </td>
       <td style={{ padding: "13px 16px" }}>
-        {isDispute ? <DisputeBadge /> : <AmountBadge amount={amount} />}
+        {isDispute ? <DisputeBadge /> : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <AmountBadge amount={amount} />
+            {Number(refund.amount_worker ?? 0) > 0 && (
+              <span style={{ fontSize: 10, color: C.blue, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 3 }}>
+                <Briefcase size={9} /> Worker: {fmtNPR(refund.amount_worker)}
+              </span>
+            )}
+          </div>
+        )}
       </td>
       <td style={{ padding: "13px 16px" }}>
         <div style={{ fontSize: 13, color: C.textSecond, fontWeight: 500, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{refund.reason || "—"}</div>
@@ -1035,7 +1099,7 @@ export default function RefundManagement() {
       if (rRes?.ok) { const d = await rRes.json(); rejected   = d.refunds ?? []; }
       if (iRes?.ok) { const d = await iRes.json(); inProgress = d.refunds ?? []; }
 
-      const inProgressAmount = sum(inProgress, "amount_customer");
+      const inProgressAmount = sum(inProgress, "amount_customer", "amount_worker");
 
       setStats({
         total:           pending.length + approved.length + rejected.length + inProgress.length,
@@ -1053,7 +1117,6 @@ export default function RefundManagement() {
     }
   }, []);
 
-  // ── Pay All — uses sandbox mode from global constant ─────────────────────────────────
   const handlePayAll = async () => {
     setPayAllProcessing(true);
     try {
@@ -1088,7 +1151,6 @@ export default function RefundManagement() {
     }
   };
 
-  // ── Individual Handlers ───────────────────────────────────────────────────
   const handleApprove = async (id, note, amtC, amtW) => {
     const res = await patchStatus(id, "approved", note, amtC, amtW);
     if (!res.ok) {
@@ -1230,6 +1292,8 @@ export default function RefundManagement() {
         </div>
       </div>
 
+      <SandboxBanner />
+
       {/* Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 12, marginBottom: 22 }}>
         <StatCard label="Total"           value={stats.total}                                                   color={C.teal}    icon={Receipt}     />
@@ -1242,7 +1306,6 @@ export default function RefundManagement() {
         <StatCard label="Dispute Pending" value={stats.disputePending ?? 0}                                     color={C.dispute} icon={ShieldAlert} sub="Charges to review" />
       </div>
 
-      {/* Pending admin decision banner */}
       {stats.pending > 0 && (
         <div style={{ background: C.brandLight, borderRadius: 14, padding: "14px 20px", marginBottom: 18, border: `1px solid ${C.brand}30`, display: "flex", alignItems: "center", gap: 12 }}>
           <Clock size={18} color={C.brand} />
@@ -1253,7 +1316,6 @@ export default function RefundManagement() {
         </div>
       )}
 
-      {/* In-progress ready for Pay All banner */}
       {stats.inProgress > 0 && (
         <div style={{ background: C.amberLight, borderRadius: 14, padding: "14px 20px", marginBottom: 18, border: `1px solid ${C.amber}30`, display: "flex", alignItems: "center", gap: 12 }}>
           <RefreshCw size={18} color={C.amber} />
@@ -1324,7 +1386,7 @@ export default function RefundManagement() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: C.bg, borderBottom: `2px solid ${C.border}` }}>
-                {["ID / Report", "Requester", "Type / Amount", "Reason", "Status", "Date", ""].map((h, i) => (
+                {["ID / Report", "Requester", "Amounts", "Reason", "Status", "Date", ""].map((h, i) => (
                   <th key={h || i} style={{ padding: "13px 16px", textAlign: i === 6 ? "right" : "left", fontSize: 11, fontWeight: 600, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.5px" }}>{h}</th>
                 ))}
               </tr>

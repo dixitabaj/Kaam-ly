@@ -32,6 +32,7 @@ import Notification from './components/Notification';
 import CompleteProfile from './components/CompleteProfile/CompleteProfile';
 import RefundManagement from './pages/admin/RefundManagement';
 import WorkerSettings from './pages-worker/workerProfile';
+import FraudDashboard from './pages/admin/FraudDetectionBoard';
 function App() {
   return (
     <div>
@@ -42,6 +43,7 @@ function App() {
         <Routes>
 
           <Route path="/" element={<LandingPage />} />
+          <Route path="/customer/pay/:taskId/:userId/:role" element={<PaymentFlow />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register-worker" element={<ServiceRegistration />} />
           <Route path="/register-customer" element={<CustomerRegistration />} />
@@ -51,6 +53,7 @@ function App() {
           <Route path="/landing" element={<LandingPage />} />
           <Route path="/complete-profile" element={<CompleteProfile/>} />
 <Route path="/chat/:senderId/:recieverId" element={<MessagePage />} />
+<Route path="/fraud" element={<FraudDashboard />} />
 
           <Route path="/refund" element={<RefundManagement/>}/>
 <Route path="/chat/:senderId" element={<MessagePage />} />
@@ -76,12 +79,7 @@ function App() {
 <Route path="/customer/pay/:taskId/:workerId/:customerId/:role" element={<PaymentFlow />} />
 <Route path="/customer/pay/:taskId" element={<PaymentVerifyRedirect />} />
 <Route path="/workerVerification" element={<WorkerVerification />} />
-
          <Route path="/admin/dashboard" element={<AdminDashboard />} />
-
-
-         
-
 <Route path="/profile/:id"                    element={<CustomerProfile />} />
 <Route path="/worker/profile/:id"             element={<WorkerSettings />} />
 {/*<Route path="/admin/settings"                 element={<AdminSettings />} /> */}

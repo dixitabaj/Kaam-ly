@@ -3,7 +3,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Query, WebSocket, WebSock
 
 
 
-from .router import registerCustomer, dashboard, availability,fraud_router, refundCustomer,refund, updateProfile, skillVerification, faceVerify, adminPayout, registerWorker, login, otp, createTask, chat, duplicateCheck, faceVerify, recommend_router, esewaVerify, predictTask, review_route, search_router, image_classify_router, report, adminReviewAI, pendingActivities, notifications
+from .router import registerCustomer, dashboard, khaltiPayment, esewaPayment, availability,fraud_router, refundCustomer,refund, updateProfile, skillVerification, faceVerify, adminPayout, registerWorker, login, otp, createTask, chat, duplicateCheck, faceVerify, recommend_router, esewaVerify, predictTask, review_route, search_router, image_classify_router, report, adminReviewAI, pendingActivities, notifications
 from .schemas.schemas import WorkerCreateSchema, WorkerResponseSchema, WorkerStatsResponse
 from worker.config.database import collection, collection_worker, chat_collection, collection_reviews, collection_task, collection_reports
 from .services.hashing import Hash
@@ -22,15 +22,39 @@ from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.background import BackgroundScheduler
 from .repository.taskRepo import auto_release_job
+
+MONGO_URI = "mongodb+srv://dixita1:Shuvechhya@cluster0.ue3kxzv.mongodb.net/?appName=Cluster0"
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(auto_release_job, "interval", hours=1,
-                      id="auto_release", max_instances=1)
-    scheduler.start()
-    yield
-    scheduler.shutdown()
+    print("Starting app...")
 
+    # ✅ 1. Initialize DB HERE (not in @on_event)
+    app.state.db_client = AsyncIOMotorClient(MONGO_URI)
+    app.state.db = app.state.db_client["user"]
+    print("DB initialized ✅")
+
+    # ✅ 2. Start scheduler
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(
+        auto_release_job,
+        "interval",
+        hours=1,
+        id="auto_release",
+        max_instances=1
+    )
+    scheduler.start()
+    print("Scheduler started ✅")
+
+    yield  # 🚀 app runs here
+
+    # 🔻 3. Shutdown cleanup
+    print("Shutting down...")
+    scheduler.shutdown()
+    app.state.db_client.close()
+    print("Cleanup done ✅")
+
+app = FastAPI(lifespan=lifespan)
 app = FastAPI(lifespan=lifespan)
 
 
@@ -54,7 +78,6 @@ from bson import ObjectId
 
 from motor.motor_asyncio import AsyncIOMotorClient
 
-MONGO_URI = "mongodb+srv://dixita1:Shuvechhya@cluster0.ue3kxzv.mongodb.net/?appName=Cluster0"
 
 @app.on_event("startup")
 async def startup_db_client():
@@ -261,7 +284,6 @@ from datetime import datetime
 from collections import defaultdict
 from datetime import datetime, timedelta
 from dateutil import parser as dateutil_parser
-
 @app.get("/api/stats/{workerId}")
 def get_worker_stats(workerId: str):
     try:
@@ -283,7 +305,29 @@ def get_worker_stats(workerId: str):
         reviews        = list(collection_reviews.find({"workerId": workerId}))
         total_reviews  = len(reviews)
         average_rating = (sum(r.get("stars", 0) for r in reviews) / total_reviews) if total_reviews > 0 else 0
-        recent_review  = list(collection_reviews.find({"workerId": workerId}).sort("createdAt", -1).limit(5))
+
+        # Fetch recent reviews with user firstName + lastName
+        recent_review_docs = list(collection_reviews.find({"workerId": workerId}).sort("createdAt", -1).limit(5))
+        recent_review = []
+        for r in recent_review_docs:
+            review_data = dict(r)
+            user_id = r.get("user_id")
+            if user_id:
+                try:
+                    user = collection.find_one(
+                        {"_id": ObjectId(user_id)},
+                        {"first_name": 1, "last_name": 1}
+                    )
+                    print(f"Fetched user for review: {user}")
+                    review_data["first_name"] = user.get("first_name", "") if user else ""
+                    review_data["last_name"]  = user.get("last_name", "")  if user else ""
+                except Exception:
+                    review_data["first_name"] = ""
+                    review_data["last_name"]  = ""
+            else:
+                review_data["first_name"] = ""
+                review_data["last_name"]  = ""
+            recent_review.append(review_data)
 
         # ===== HELPER: parse serviceDate safely =====
         def parse_service_date(service_date):
@@ -307,11 +351,12 @@ def get_worker_stats(workerId: str):
                     continue
                 if start <= service_date < end:
                     result.append({
-                        "_id": str(t["_id"]),
-                        "title": t.get("taskName"),
-                        "status": t.get("status"),
-                        "serviceDate": service_date.strftime("%Y-%m-%d %H:%M:%S"),
-                        "totalCost": t.get("totalCost", 0)
+                        "_id":             str(t["_id"]),
+                        "title":           t.get("taskName"),
+                        "status":          t.get("status"),
+                        "selectedService": t.get("selectedService"),   # ✅ added
+                        "serviceDate":     service_date.strftime("%Y-%m-%d %H:%M:%S"),
+                        "totalCost":       t.get("totalCost", 0)
                     })
             return result
 
@@ -358,7 +403,8 @@ def get_worker_stats(workerId: str):
 
     except Exception as e:
         print(f"❌ Error fetching worker stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))
+    
 from fastapi import FastAPI, HTTPException
 from datetime import datetime, timedelta
 from bson import ObjectId
@@ -850,64 +896,64 @@ from worker.config.database import collection, collection_worker, collection_tas
 load_dotenv()
 
 
-# ─────────────────────────────────────────────────────────────
-# CONFIG
-# ─────────────────────────────────────────────────────────────
-BASE_URL            = os.getenv("BASE_URL", "http://localhost:5173")
-ESEWA_MERCHANT_CODE = os.getenv("ESEWA_MERCHANT_CODE", "EPAYTEST")
-ESEWA_SECRET_KEY    = os.getenv("ESEWA_SECRET_KEY", "8gBm/:&EnhH.1/q")
-ESEWA_BASE_URL      = "https://rc.esewa.com.np"  # change to https://epay.esewa.com.np in production
+# # ─────────────────────────────────────────────────────────────
+# # CONFIG
+# # ─────────────────────────────────────────────────────────────
+# BASE_URL            = os.getenv("BASE_URL", "http://localhost:5173")
+# ESEWA_MERCHANT_CODE = os.getenv("ESEWA_MERCHANT_CODE", "EPAYTEST")
+# ESEWA_SECRET_KEY    = os.getenv("ESEWA_SECRET_KEY", "8gBm/:&EnhH.1/q")
+# ESEWA_BASE_URL      = "https://rc.esewa.com.np"  # change to https://epay.esewa.com.np in production
 
 
-# ─────────────────────────────────────────────────────────────
-# PYDANTIC MODELS
-# ─────────────────────────────────────────────────────────────
-class VerifyEsewa(BaseModel):
-    task_id: str
-    transaction_uuid: str
-    total_amount: float
+# # ─────────────────────────────────────────────────────────────
+# # PYDANTIC MODELS
+# # ─────────────────────────────────────────────────────────────
+# class VerifyEsewa(BaseModel):
+#     task_id: str
+#     transaction_uuid: str
+#     total_amount: float
 
-class VerifyExtraEsewa(BaseModel):
-    task_id: str
-    transaction_uuid: str
-    total_amount: float
+# class VerifyExtraEsewa(BaseModel):
+#     task_id: str
+#     transaction_uuid: str
+#     total_amount: float
 
-class FinishTask(BaseModel):
-    worker_id: str
-    final_price: float
+# class FinishTask(BaseModel):
+#     worker_id: str
+#     final_price: float
 
-class RenegotiateRequest(BaseModel):
-    worker_id: str
-    new_price: float
-    reason: str
+# class RenegotiateRequest(BaseModel):
+#     worker_id: str
+#     new_price: float
+#     reason: str
 
-class RenegotiateRespond(BaseModel):
-    user_id: str
-    decision: str         # "accept" or "reject"
+# class RenegotiateRespond(BaseModel):
+#     user_id: str
+#     decision: str         # "accept" or "reject"
 
-class WorkerAfterRejection(BaseModel):
-    worker_id: str
-    decision: str         # "proceed" or "cancel"
+# class WorkerAfterRejection(BaseModel):
+#     worker_id: str
+#     decision: str         # "proceed" or "cancel"
 
-class DisputeRequest(BaseModel):
-    user_id: str
-    reason: str
+# class DisputeRequest(BaseModel):
+#     user_id: str
+#     reason: str
 
-class ResolveDispute(BaseModel):
-    decision: str         # "release" or "refund"
+# class ResolveDispute(BaseModel):
+#     decision: str         # "release" or "refund"
 
 class CompleteTask(BaseModel):
     user_id: str
 
 
-# ─────────────────────────────────────────────────────────────
-# HELPERS
-# ─────────────────────────────────────────────────────────────
-def generate_esewa_signature(message: str) -> str:
-    key       = ESEWA_SECRET_KEY.encode("utf-8")
-    msg_bytes = message.encode("utf-8")
-    sig       = hmac.new(key, msg_bytes, hashlib.sha256).digest()
-    return base64.b64encode(sig).decode("utf-8")
+# # ─────────────────────────────────────────────────────────────
+# # HELPERS
+# # ─────────────────────────────────────────────────────────────
+# def generate_esewa_signature(message: str) -> str:
+#     key       = ESEWA_SECRET_KEY.encode("utf-8")
+#     msg_bytes = message.encode("utf-8")
+#     sig       = hmac.new(key, msg_bytes, hashlib.sha256).digest()
+#     return base64.b64encode(sig).decode("utf-8")
 
 
 def get_task_or_404(task_id: str):
@@ -917,258 +963,258 @@ def get_task_or_404(task_id: str):
     return task
 
 
-def build_esewa_form(task_id: str, amount: float, success_path: str) -> dict:
-    total_amount = int(amount)  # ← cast HERE, before building the message
-    transaction_uuid = str(uuid.uuid4())
+# def build_esewa_form(task_id: str, amount: float, success_path: str) -> dict:
+#     total_amount = int(amount)  # ← cast HERE, before building the message
+#     transaction_uuid = str(uuid.uuid4())
     
-    # ← signature must use the SAME value as the form (int, not float)
-    message   = f"total_amount={total_amount},transaction_uuid={transaction_uuid},product_code={ESEWA_MERCHANT_CODE}"
-    signature = generate_esewa_signature(message)
-    print("transaction_uuid", transaction_uuid)
-    print("signature", signature)
+#     # ← signature must use the SAME value as the form (int, not float)
+#     message   = f"total_amount={total_amount},transaction_uuid={transaction_uuid},product_code={ESEWA_MERCHANT_CODE}"
+#     signature = generate_esewa_signature(message)
+#     print("transaction_uuid", transaction_uuid)
+#     print("signature", signature)
     
-    return {
-        "esewa_url": f"{ESEWA_BASE_URL}/api/epay/main/v2/form",
-        "form_data": {
-            "amount":                  str(total_amount),
-            "tax_amount":              "0",
-            "total_amount":            str(total_amount),
-            "transaction_uuid":        transaction_uuid,
-            "product_code":            ESEWA_MERCHANT_CODE,
-            "product_service_charge":  "0",
-            "product_delivery_charge": "0",
-            "success_url":             f"http://localhost:8000/payment/verify/esewa/{task_id}",
-            "failure_url":             f"{BASE_URL}/payment/failed",
-            "signed_field_names":      "total_amount,transaction_uuid,product_code",
-            "signature":               signature
-        }
-    }
+#     return {
+#         "esewa_url": f"{ESEWA_BASE_URL}/api/epay/main/v2/form",
+#         "form_data": {
+#             "amount":                  str(total_amount),
+#             "tax_amount":              "0",
+#             "total_amount":            str(total_amount),
+#             "transaction_uuid":        transaction_uuid,
+#             "product_code":            ESEWA_MERCHANT_CODE,
+#             "product_service_charge":  "0",
+#             "product_delivery_charge": "0",
+#             "success_url":             f"http://localhost:8000/payment/verify/esewa/{task_id}",
+#             "failure_url":             f"{BASE_URL}/payment/failed",
+#             "signed_field_names":      "total_amount,transaction_uuid,product_code",
+#             "signature":               signature
+#         }
+#     }
 
 
-from fastapi import Depends, HTTPException
-from datetime import datetime
-from bson import ObjectId
+# from fastapi import Depends, HTTPException
+# from datetime import datetime
+# from bson import ObjectId
 
-from .services.OAuth2 import get_current_user
-from fastapi import Request
-@app.patch("/customer/release/{task_id}", tags=["payment"])
-def release_to_worker(task_id: str, current_user: dict = Depends(get_current_user)):
-    """
-    Securely releases escrowed funds to worker.
-    Only the task owner (customer) can release.
-    """
+# from .services.OAuth2 import get_current_user
+# from fastapi import Request
+# @app.patch("/customer/release/{task_id}", tags=["payment"])
+# def release_to_worker(task_id: str, current_user: dict = Depends(get_current_user)):
+#     """
+#     Securely releases escrowed funds to worker.
+#     Only the task owner (customer) can release.
+#     """
 
-    # ───────────────────────────────
-    # 1️⃣ Fetch Task
-    # ───────────────────────────────
-    task = get_task_or_404(task_id)
+#     # ───────────────────────────────
+#     # 1️⃣ Fetch Task
+#     # ───────────────────────────────
+#     task = get_task_or_404(task_id)
 
-    # ───────────────────────────────
-    # 2️⃣ Authorization Check
-    # ───────────────────────────────
-    if current_user["user_id"] != task.get("userId"):
-        print("current_user user_id:", current_user["user_id"])
-        print("task userId:", task.get("userId"))
-        raise HTTPException(status_code=403, detail="Not authorized to release this payment")
+#     # ───────────────────────────────
+#     # 2️⃣ Authorization Check
+#     # ───────────────────────────────
+#     if current_user["user_id"] != task.get("userId"):
+#         print("current_user user_id:", current_user["user_id"])
+#         print("task userId:", task.get("userId"))
+#         raise HTTPException(status_code=403, detail="Not authorized to release this payment")
 
-    # ───────────────────────────────
-    # 3️⃣ Task Must Be Completed
-    # ───────────────────────────────
-    if task.get("status") != "completed":
-        raise HTTPException(status_code=400, detail="Task is not marked as completed")
+#     # ───────────────────────────────
+#     # 3️⃣ Task Must Be Completed
+#     # ───────────────────────────────
+#     if task.get("status") != "completed":
+#         raise HTTPException(status_code=400, detail="Task is not marked as completed")
 
-    # ───────────────────────────────
-    # 4️⃣ Payment Must Be Paid
-    # ───────────────────────────────
-    if task.get("payment_status") != "paid":
-        raise HTTPException(status_code=400, detail="Payment not completed")
+#     # ───────────────────────────────
+#     # 4️⃣ Payment Must Be Paid
+#     # ───────────────────────────────
+#     if task.get("payment_status") != "paid":
+#         raise HTTPException(status_code=400, detail="Payment not completed")
 
-    # ───────────────────────────────
-    # 5️⃣ Escrow Must Still Be Held
-    # ───────────────────────────────
-    if task.get("escrow_status") != "held":
-        raise HTTPException(status_code=400, detail="Escrow already released or refunded")
-    print("Task fetched:", task)
-    print("esewa_ref_id:", task.get("esewa_ref_id"))
-    # ───────────────────────────────
-    # 6️⃣ Validate Payment Reference
-    # ───────────────────────────────
-    if not task.get("esewa_ref_id"):
-        raise HTTPException(status_code=400, detail="Missing eSewa transaction reference")
+#     # ───────────────────────────────
+#     # 5️⃣ Escrow Must Still Be Held
+#     # ───────────────────────────────
+#     if task.get("escrow_status") != "held":
+#         raise HTTPException(status_code=400, detail="Escrow already released or refunded")
+#     print("Task fetched:", task)
+#     print("esewa_ref_id:", task.get("esewa_ref_id"))
+#     # ───────────────────────────────
+#     # 6️⃣ Validate Payment Reference
+#     # ───────────────────────────────
+#     if not task.get("esewa_ref_id"):
+#         raise HTTPException(status_code=400, detail="Missing eSewa transaction reference")
 
-    # ───────────────────────────────
-    # 7️⃣ Calculate Payout
-    # ───────────────────────────────
-    final_price = task.get("final_price", task.get("totalCost", 0))
-    if final_price <= 0:
-        raise HTTPException(status_code=400, detail="Invalid task amount")
+#     # ───────────────────────────────
+#     # 7️⃣ Calculate Payout
+#     # ───────────────────────────────
+#     final_price = task.get("final_price", task.get("totalCost", 0))
+#     if final_price <= 0:
+#         raise HTTPException(status_code=400, detail="Invalid task amount")
 
-    platform_fee  = round(final_price * 0.05, 2)
-    worker_payout = round(final_price - platform_fee, 2)
+#     platform_fee  = round(final_price * 0.05, 2)
+#     worker_payout = round(final_price - platform_fee, 2)
 
-    # ───────────────────────────────
-    # 8️⃣ Find Worker
-    # ───────────────────────────────
-    worker = collection_worker.find_one({"email": task.get("assignedWorkerId")})
-    if not worker:
-        raise HTTPException(status_code=404, detail="Assigned worker not found")
+#     # ───────────────────────────────
+#     # 8️⃣ Find Worker
+#     # ───────────────────────────────
+#     worker = collection_worker.find_one({"email": task.get("assignedWorkerId")})
+#     if not worker:
+#         raise HTTPException(status_code=404, detail="Assigned worker not found")
 
-    # ───────────────────────────────
-    # 9️⃣ Update Worker Earnings
-    # ───────────────────────────────
-    collection_worker.update_one(
-        {"email": task.get("assignedWorkerId")},
-        {"$inc": {"total_earnings": worker_payout}}
-    )
+#     # ───────────────────────────────
+#     # 9️⃣ Update Worker Earnings
+#     # ───────────────────────────────
+#     collection_worker.update_one(
+#         {"email": task.get("assignedWorkerId")},
+#         {"$inc": {"total_earnings": worker_payout}}
+#     )
 
-    # ───────────────────────────────
-    # 🔟 Update Task Escrow Status
-    # ───────────────────────────────
-    collection_task.update_one(
-        {"_id": ObjectId(task_id)},
-        {"$set": {
-            "escrow_status": "released",
-            "released_at": datetime.utcnow(),
-            "platform_fee": platform_fee,
-            "worker_payout": worker_payout
-        }}
-    )
+#     # ───────────────────────────────
+#     # 🔟 Update Task Escrow Status
+#     # ───────────────────────────────
+#     collection_task.update_one(
+#         {"_id": ObjectId(task_id)},
+#         {"$set": {
+#             "escrow_status": "released",
+#             "released_at": datetime.utcnow(),
+#             "platform_fee": platform_fee,
+#             "worker_payout": worker_payout
+#         }}
+#     )
 
-    return {
-        "success": True,
-        "message": "Payment released successfully",
-        "worker_payout": worker_payout,
-        "platform_fee": platform_fee
-    }
-# ─────────────────────────────────────────────────────────────
-# 1. INITIATE PAYMENT — eSewa
-# ─────────────────────────────────────────────────────────────
-@app.post("/task/{task_id}/pay/esewa", tags=["payment"])
-def pay_via_esewa(task_id: str):
-    task = get_task_or_404(task_id)
-    if task.get("payment_status") == "paid":
-        raise HTTPException(status_code=400, detail="Task already paid")
+#     return {
+#         "success": True,
+#         "message": "Payment released successfully",
+#         "worker_payout": worker_payout,
+#         "platform_fee": platform_fee
+#     }
+# # ─────────────────────────────────────────────────────────────
+# # 1. INITIATE PAYMENT — eSewa
+# # ─────────────────────────────────────────────────────────────
+# @app.post("/task/{task_id}/pay/esewa", tags=["payment"])
+# def pay_via_esewa(task_id: str):
+#     task = get_task_or_404(task_id)
+#     if task.get("payment_status") == "paid":
+#         raise HTTPException(status_code=400, detail="Task already paid")
 
-    total_amount     = int(task["totalCost"])  # ← cast to int first
-    transaction_uuid = str(uuid.uuid4())
-    message          = f"total_amount={total_amount},transaction_uuid={transaction_uuid},product_code={ESEWA_MERCHANT_CODE}"
-    signature        = generate_esewa_signature(message)
-    print("Generated eSewa signature:", signature)
-    print("eSewa transaction UUID:", transaction_uuid)
-    print("Message for signature:", message)
-    collection_task.update_one(
-        {"_id": ObjectId(task_id)},
-        {"$set": {
-            "esewa_transaction_uuid": transaction_uuid,
-            "payment_method":         "esewa",
-            "payment_status":         "unpaid",
-            "escrow_status":          "pending"
-        }}
-    )
+#     total_amount     = int(task["totalCost"])  # ← cast to int first
+#     transaction_uuid = str(uuid.uuid4())
+#     message          = f"total_amount={total_amount},transaction_uuid={transaction_uuid},product_code={ESEWA_MERCHANT_CODE}"
+#     signature        = generate_esewa_signature(message)
+#     print("Generated eSewa signature:", signature)
+#     print("eSewa transaction UUID:", transaction_uuid)
+#     print("Message for signature:", message)
+#     collection_task.update_one(
+#         {"_id": ObjectId(task_id)},
+#         {"$set": {
+#             "esewa_transaction_uuid": transaction_uuid,
+#             "payment_method":         "esewa",
+#             "payment_status":         "unpaid",
+#             "escrow_status":          "pending"
+#         }}
+#     )
 
-    return {
-        "esewa_url": f"{ESEWA_BASE_URL}/api/epay/main/v2/form",
-        "form_data": {
-            "amount":                  str(total_amount),
-            "tax_amount":              "0",
-            "total_amount":            str(total_amount),
-            "transaction_uuid":        transaction_uuid,
-            "product_code":            ESEWA_MERCHANT_CODE,
-            "product_service_charge":  "0",
-            "product_delivery_charge": "0",
-            "success_url":             f"http://localhost:8000/payment/verify/esewa/{task_id}",
-            "failure_url":             f"{BASE_URL}/payment/failed",
-            "signed_field_names":      "total_amount,transaction_uuid,product_code",
-            "signature":               signature
-        }
-    }
-
-
-# ─────────────────────────────────────────────────────────────
-# 2a. VERIFY PAYMENT — eSewa redirect (GET from eSewa)
-# ─────────────────────────────────────────────────────────────
-from fastapi import Query
-
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import RedirectResponse
-from datetime import datetime
-from bson import ObjectId
-
-BASE_URL = "http://localhost:5173"  # React frontend URL
-@app.get("/payment/verify/esewa/{task_id}")
-def verify_esewa_redirect(
-    task_id: str,
-    data: Optional[str] = Query(None),
-):
-    if not data:
-        raise HTTPException(status_code=400, detail="Missing data param from eSewa")
-
-    try:
-        # ── Decode the base64 data eSewa sends ──
-        decoded = json.loads(base64.b64decode(data).decode("utf-8"))
-        print("✅ eSewa decoded data:", decoded)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to decode eSewa data: {e}")
-
-    if decoded.get("status") != "COMPLETE":
-        return RedirectResponse(url=f"{BASE_URL}/payment/failed")
-
-    # ── NOW you have the ref_id ──
-    ref_id = decoded.get("transaction_code")   # ← this is the real ref id
-    amount = decoded.get("total_amount")
-
-    collection_task.update_one(
-        {"_id": ObjectId(task_id)},
-        {"$set": {
-            "payment_status": "paid",
-            "escrow_status":  "held",
-            "esewa_ref_id":   ref_id,   # ← now properly saved
-            "paid_at":        datetime.utcnow()
-        }}
-    )
-
-    task = collection_task.find_one({"_id": ObjectId(task_id)})
-    user_email = task.get("userEmail", "Sitalll@gmail.com")
-    user_id = str(task.get("userId", "unknown"))
-    role    = "customer"
-
-    return RedirectResponse(
-        url=f"{BASE_URL}/customer/pay/{task_id}/{user_email}/{user_id}/{role}?payment=success"
-    )
-# ─────────────────────────────────────────────────────────────
-# 2b. VERIFY PAYMENT — eSewa manual (POST for Swagger testing)
-# ─────────────────────────────────────────────────────────────
-@app.post("/payment/verify/esewa", tags=["payment"])
-def verify_esewa_manual(body: VerifyEsewa):
-    """Manual verification for Swagger/Postman testing"""
-    resp = requests.get(
-        f"{ESEWA_BASE_URL}/api/epay/transaction/status/",
-        params={
-            "product_code":     ESEWA_MERCHANT_CODE,
-            "total_amount":     body.total_amount,
-            "transaction_uuid": body.transaction_uuid
-        }
-    )
-    data = resp.json()
-
-    if data.get("status") == "COMPLETE":
-        collection_task.update_one(
-            {"_id": ObjectId(body.task_id)},
-            {"$set": {
-                "payment_status": "paid",
-                "escrow_status":  "held",
-                "esewa_ref_id":   body.transaction_uuid,
-                "paid_at":        datetime.utcnow()
-            }}
-        )
-        return {"message": "Payment verified. Funds held in escrow.", "status": "success"}
-
-    return {"message": "Payment not completed", "status": data.get("status")}
+#     return {
+#         "esewa_url": f"{ESEWA_BASE_URL}/api/epay/main/v2/form",
+#         "form_data": {
+#             "amount":                  str(total_amount),
+#             "tax_amount":              "0",
+#             "total_amount":            str(total_amount),
+#             "transaction_uuid":        transaction_uuid,
+#             "product_code":            ESEWA_MERCHANT_CODE,
+#             "product_service_charge":  "0",
+#             "product_delivery_charge": "0",
+#             "success_url":             f"http://localhost:8000/payment/verify/esewa/{task_id}",
+#             "failure_url":             f"{BASE_URL}/payment/failed",
+#             "signed_field_names":      "total_amount,transaction_uuid,product_code",
+#             "signature":               signature
+#         }
+#     }
 
 
-# ─────────────────────────────────────────────────────────────
-# 3. CUSTOMER MARKS TASK COMPLETE → AUTO RELEASE TO WORKER
-# ─────────────────────────────────────────────────────────────
+# # ─────────────────────────────────────────────────────────────
+# # 2a. VERIFY PAYMENT — eSewa redirect (GET from eSewa)
+# # ─────────────────────────────────────────────────────────────
+# from fastapi import Query
+
+# from fastapi import FastAPI, HTTPException, Query
+# from fastapi.responses import RedirectResponse
+# from datetime import datetime
+# from bson import ObjectId
+
+# BASE_URL = "http://localhost:5173"  # React frontend URL
+# @app.get("/payment/verify/esewa/{task_id}")
+# def verify_esewa_redirect(
+#     task_id: str,
+#     data: Optional[str] = Query(None),
+# ):
+#     if not data:
+#         raise HTTPException(status_code=400, detail="Missing data param from eSewa")
+
+#     try:
+#         # ── Decode the base64 data eSewa sends ──
+#         decoded = json.loads(base64.b64decode(data).decode("utf-8"))
+#         print("✅ eSewa decoded data:", decoded)
+#     except Exception as e:
+#         raise HTTPException(status_code=400, detail=f"Failed to decode eSewa data: {e}")
+
+#     if decoded.get("status") != "COMPLETE":
+#         return RedirectResponse(url=f"{BASE_URL}/payment/failed")
+
+#     # ── NOW you have the ref_id ──
+#     ref_id = decoded.get("transaction_code")   # ← this is the real ref id
+#     amount = decoded.get("total_amount")
+
+#     collection_task.update_one(
+#         {"_id": ObjectId(task_id)},
+#         {"$set": {
+#             "payment_status": "paid",
+#             "escrow_status":  "held",
+#             "esewa_ref_id":   ref_id,   # ← now properly saved
+#             "paid_at":        datetime.utcnow()
+#         }}
+#     )
+
+#     task = collection_task.find_one({"_id": ObjectId(task_id)})
+#     user_email = task.get("userEmail", "Sitalll@gmail.com")
+#     user_id = str(task.get("userId", "unknown"))
+#     role    = "customer"
+
+#     return RedirectResponse(
+#         url=f"{BASE_URL}/customer/pay/{task_id}/{user_email}/{user_id}/{role}?payment=success"
+#     )
+# # ─────────────────────────────────────────────────────────────
+# # 2b. VERIFY PAYMENT — eSewa manual (POST for Swagger testing)
+# # ─────────────────────────────────────────────────────────────
+# @app.post("/payment/verify/esewa", tags=["payment"])
+# def verify_esewa_manual(body: VerifyEsewa):
+#     """Manual verification for Swagger/Postman testing"""
+#     resp = requests.get(
+#         f"{ESEWA_BASE_URL}/api/epay/transaction/status/",
+#         params={
+#             "product_code":     ESEWA_MERCHANT_CODE,
+#             "total_amount":     body.total_amount,
+#             "transaction_uuid": body.transaction_uuid
+#         }
+#     )
+#     data = resp.json()
+
+#     if data.get("status") == "COMPLETE":
+#         collection_task.update_one(
+#             {"_id": ObjectId(body.task_id)},
+#             {"$set": {
+#                 "payment_status": "paid",
+#                 "escrow_status":  "held",
+#                 "esewa_ref_id":   body.transaction_uuid,
+#                 "paid_at":        datetime.utcnow()
+#             }}
+#         )
+#         return {"message": "Payment verified. Funds held in escrow.", "status": "success"}
+
+#     return {"message": "Payment not completed", "status": data.get("status")}
+
+
+# # ─────────────────────────────────────────────────────────────
+# # 3. CUSTOMER MARKS TASK COMPLETE → AUTO RELEASE TO WORKER
+# # ─────────────────────────────────────────────────────────────
 
 
 @app.post("/task/{task_id}/complete", tags=["payment"])
@@ -1477,7 +1523,7 @@ CONTEXT:
     return await retry_with_backoff(run_model)
 
 
-@app.post("/chatbot")
+@app.post("/api/chatbot")
 async def start_chat(request: ChatRequest):
     try:
         response = await call_agent(request.message)
@@ -1570,3 +1616,5 @@ app.include_router(notifications_router)
 app.include_router(tasks_router)
 app.include_router(availability.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
+app.include_router(esewaPayment.router)
+app.include_router(khaltiPayment.router)

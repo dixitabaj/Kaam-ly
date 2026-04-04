@@ -7,11 +7,25 @@ from ..config import database
 from ..services.esewaService import refund_to_customer, disburse_to_worker
 import asyncio
 import uuid
+import asyncio, json
+from ..services.emailUtil import send_action_email
+from ..router import notifications
+from ..manager import websocket_manager
 
 router = APIRouter(tags=["refunds"])
 
 from pydantic import BaseModel
 from ..config.database import refund_collection, collection_reports, collection_task, collection
+import json
+from ..router import notifications          # notify_with_fallback
+from ..manager import websocket_manager     # send_to_user
+from ..config.database import collection_worker  # already have collection
+
+# ── Paste this Pydantic schema with your other schemas ────────
+class RefundActionBody(BaseModel):
+    action:        str                # "warn_customer" | "warn_worker" | "suspend_customer" | "suspend_worker"
+    duration_days: Optional[int] = None   # required when action contains "suspend"
+    message:       Optional[str] = None   # extra admin note shown to user
 
 
 # ─────────────────────────────────────────────────────────────
@@ -69,9 +83,10 @@ def create_refund(body: CreateRefundBody):
         "amount_customer": None,
         "amount_worker":   None,
         "status":          "pending",
+        "refundStatus":    "pending",       # ← lifecycle field, starts as pending
         "created_at":      datetime.utcnow(),
         "evidence_files":  [],
-        "esewa_ref_id": task.get("esewa_ref_id") if task else None,
+        "esewa_ref_id":    task.get("esewa_ref_id") if task else None,
     }
 
     result    = refund_collection.insert_one(refund_doc)
@@ -102,12 +117,15 @@ def create_refund(body: CreateRefundBody):
 @router.get("/refunds")
 def get_refunds(
     report_id: Optional[str] = None,
+    task_id:   Optional[str] = None,
     skip:      int = 0,
     limit:     int = 50,
 ):
     query = {}
     if report_id:
         query["report_id"] = report_id
+    if task_id:
+        query["task_id"] = task_id
 
     docs  = list(refund_collection.find(query).skip(skip).limit(limit).sort("created_at", -1))
     total = refund_collection.count_documents(query)
@@ -148,8 +166,9 @@ async def list_pending_refunds():
 # ─────────────────────────────────────────────────────────────
 @router.get("/refunds/approved")
 async def list_approved_refunds():
+    # FIX: include refund_in_progress since that is the approved-but-not-yet-paid state
     docs = list(database.refund_collection.find(
-        {"status": {"$in": ["approved", "refunded"]}}
+        {"status": {"$in": ["refund_in_progress", "refunded"]}}
     ).sort("resolved_at", -1))
 
     for d in docs:
@@ -199,7 +218,7 @@ async def list_in_progress_refunds():
     These are ready for Pay All processing.
     """
     docs = list(database.refund_collection.find(
-        {"status": {"$in": ["refund_in_progress", "processing"]}}
+        {"refundStatus": {"$in": ["refund_in_progress", "processing"]}}
     ).sort("created_at", -1))
 
     for d in docs:
@@ -218,7 +237,6 @@ async def list_in_progress_refunds():
 
 # ─────────────────────────────────────────────────────────────
 # PATCH /api/update-status/{refund_id}
-# UPDATED WITH MOCK MODE
 # ─────────────────────────────────────────────────────────────
 @router.patch("/update-status/{refund_id}")
 async def update_refund_status(
@@ -227,14 +245,21 @@ async def update_refund_status(
     amount_customer: float | None  = Form(None),
     amount_worker:   float | None  = Form(None),
     admin_note:      str           = Form(""),
-    sandbox:         bool          = Form(True)  # ← ADDED: Mock mode enabled by default
+    sandbox:         bool          = Form(True),
 ):
     """
     Admin sets status + amounts.
 
-    - "approved"  → records amounts, sets status to "refund_in_progress".
-                    With sandbox=True: Mocks eSewa response
-                    With sandbox=False: Calls real eSewa API (needs production)
+    Lifecycle:
+      pending → (admin reviews & sets amounts) → refund_in_progress
+      refund_in_progress → (eSewa succeeds) → refunded
+      refund_in_progress → (eSewa fails)    → refund_in_progress (stays, retry via pay-all)
+      pending → (admin declines)            → declined
+
+    - "approved"  → sets refundStatus to "refund_in_progress", then attempts eSewa.
+                    If eSewa succeeds → status "refunded", refundStatus "refunded"
+                    If eSewa fails    → status "refund_failed", refundStatus "refund_in_progress"
+                    With sandbox=True: Mocks eSewa response, always marks as refunded
     - "declined"  → sets status to "declined". No eSewa.
     """
     if status not in ("approved", "declined"):
@@ -271,11 +296,9 @@ async def update_refund_status(
                 detail=f"Refund amount ({amount_customer}) exceeds what the customer paid ({total_paid})."
             )
 
-        # Get customer eSewa ID
         customer_esewa_id = None
         customer_id = refund.get("requester_id")
-        customer = None
-        
+
         if customer_id:
             try:
                 from ..config import database as db
@@ -286,25 +309,27 @@ async def update_refund_status(
                 print(f"[REFUND] Customer lookup failed: {e}")
 
         transaction_uuid = str(uuid.uuid4())
-        
-        # ── MOCK OR REAL eSEWA CALL ──
+
+        # Mark as refund_in_progress immediately on approval
+        database.refund_collection.update_one(
+            {"_id": obj_id},
+            {"$set": {"refundStatus": "refund_in_progress"}}
+        )
+
         if sandbox:
-            # ✅ MOCK RESPONSE - No real API call
             esewa_refund_result = {
-                "status": "mock_success",
+                "status":           "mock_success",
                 "transaction_uuid": transaction_uuid,
-                "esewa_id": customer_esewa_id,
-                "note": "MOCK refund - sandbox mode (no actual money transferred)",
-                "timestamp": datetime.utcnow().isoformat()
+                "esewa_id":         customer_esewa_id,
+                "note":             "MOCK refund - sandbox mode (no actual money transferred)",
+                "timestamp":        datetime.utcnow().isoformat(),
             }
             refund_success = True
         else:
-            # ❌ REAL eSewa API call (needs production credentials)
             if customer_esewa_id:
                 try:
-                    # Get esewa_ref_id from task
                     esewa_ref_id = refund.get("esewa_ref_id") or task.get("esewa_ref_id")
-                    
+
                     if esewa_ref_id:
                         esewa_ok, api_resp = await refund_to_customer(
                             esewa_id=customer_esewa_id,
@@ -313,79 +338,76 @@ async def update_refund_status(
                             remarks=f"Refund: {refund.get('reason', 'task dispute')[:50]}",
                             idempotency_key=f"refund-{refund_id}",
                         )
-                        
+
                         if esewa_ok:
                             esewa_refund_result = {
-                                "status": "sent",
+                                "status":           "sent",
                                 "transaction_uuid": api_resp.get("transaction_uuid"),
-                                "esewa_id": customer_esewa_id,
-                                "timestamp": datetime.utcnow().isoformat()
+                                "esewa_id":         customer_esewa_id,
+                                "timestamp":        datetime.utcnow().isoformat(),
                             }
                             refund_success = True
                         else:
                             esewa_refund_result = {
-                                "status": "failed",
-                                "error": api_resp.get("message", "Unknown error"),
-                                "esewa_id": customer_esewa_id,
-                                "timestamp": datetime.utcnow().isoformat()
+                                "status":    "failed",
+                                "error":     api_resp.get("message", "Unknown error"),
+                                "esewa_id":  customer_esewa_id,
+                                "timestamp": datetime.utcnow().isoformat(),
                             }
                             refund_success = False
                     else:
                         esewa_refund_result = {
-                            "status": "no_ref_id",
-                            "error": "No eSewa transaction reference found",
-                            "timestamp": datetime.utcnow().isoformat()
+                            "status":    "no_ref_id",
+                            "error":     "No eSewa transaction reference found",
+                            "timestamp": datetime.utcnow().isoformat(),
                         }
                         refund_success = False
                 except Exception as e:
                     esewa_refund_result = {
-                        "status": "error",
-                        "error": str(e),
-                        "timestamp": datetime.utcnow().isoformat()
+                        "status":    "error",
+                        "error":     str(e),
+                        "timestamp": datetime.utcnow().isoformat(),
                     }
                     refund_success = False
             else:
                 esewa_refund_result = {
-                    "status": "no_esewa_id",
-                    "note": "Customer has no eSewa ID. Process refund manually.",
-                    "timestamp": datetime.utcnow().isoformat()
+                    "status":    "no_esewa_id",
+                    "note":      "Customer has no eSewa ID. Process refund manually.",
+                    "timestamp": datetime.utcnow().isoformat(),
                 }
                 refund_success = False
 
         if sandbox or refund_success:
             update_fields = {
-                "status":          "refunded" if (sandbox or refund_success) else "refund_in_progress",
-                "amount_customer": amount_customer,
-                "amount_worker":   amount_worker or 0.0,
-                "admin_note":      admin_note,
-                "approved_at":     datetime.utcnow(),
-                "resolved_at":     datetime.utcnow(),
-                "sandbox_mode":    sandbox,
-                "refund_transaction": transaction_uuid if sandbox else (esewa_refund_result.get("transaction_uuid") if esewa_refund_result else None),
+                "status":                "refunded",
+                "refundStatus":          "refunded",        # ← lifecycle: money released
+                "amount_customer":       amount_customer,
+                "amount_worker":         amount_worker or 0.0,
+                "admin_note":            admin_note,
+                "approved_at":           datetime.utcnow(),
+                "resolved_at":           datetime.utcnow(),
+                "sandbox_mode":          sandbox,
+                "refund_transaction":    transaction_uuid if sandbox else (esewa_refund_result.get("transaction_uuid") if esewa_refund_result else None),
                 "esewa_refund_response": esewa_refund_result,
             }
         else:
             update_fields = {
-                "status":          "refund_failed",
-                "amount_customer": amount_customer,
-                "amount_worker":   amount_worker or 0.0,
-                "admin_note":      admin_note,
-                "approved_at":     datetime.utcnow(),
-                "resolved_at":     datetime.utcnow(),
-                "sandbox_mode":    sandbox,
+                "status":                "refund_failed",
+                "refundStatus":          "refund_in_progress",  # ← stays in_progress so pay-all can retry
+                "amount_customer":       amount_customer,
+                "amount_worker":         amount_worker or 0.0,
+                "admin_note":            admin_note,
+                "approved_at":           datetime.utcnow(),
+                "resolved_at":           datetime.utcnow(),
+                "sandbox_mode":          sandbox,
                 "esewa_refund_response": esewa_refund_result,
             }
-
-        # Mark task as approved/pending-refund
-        database.collection_task.update_one(
-            {"_id": ObjectId(task_id)},
-            {"$set": {"taskStatus": "refund_approved" if not refund_success else "refunded"}}
-        )
 
     else:
         # declined
         update_fields = {
             "status":      "declined",
+            "refundStatus": "declined",
             "admin_note":  admin_note,
             "resolved_at": datetime.utcnow(),
         }
@@ -396,6 +418,7 @@ async def update_refund_status(
         "message":         f"Refund {status} successfully. Status set to '{update_fields['status']}'.{' (MOCK MODE)' if sandbox and status == 'approved' else ''}",
         "refund_id":       refund_id,
         "status":          update_fields["status"],
+        "refundStatus":    update_fields["refundStatus"],
         "amount_customer": update_fields.get("amount_customer"),
         "amount_worker":   update_fields.get("amount_worker"),
         "admin_note":      admin_note,
@@ -407,18 +430,18 @@ async def update_refund_status(
 
 # ─────────────────────────────────────────────────────────────
 # POST /api/refunds/pay-all-in-progress
-# UPDATED WITH MOCK MODE
 # ─────────────────────────────────────────────────────────────
 @router.post("/refunds/pay-all-in-progress")
-async def pay_all_in_progress_refunds(sandbox: bool = True):  # ← ADDED sandbox parameter
+async def pay_all_in_progress_refunds(sandbox: bool = True):
     """
     Process all in-progress refunds.
     sandbox=True: Mock eSewa responses (for testing)
     sandbox=False: Call real eSewa API (needs production credentials)
     """
     in_progress = list(database.refund_collection.find({
-        "status": {"$in": ["refund_in_progress", "processing"]},
-        "amount_customer": {"$exists": True, "$ne": None, "$gt": 0}
+"$or": [
+    {"status": {"$in": ["refund_in_progress", "processing"]}},
+    {"refundStatus": {"$in": ["refund_in_progress", "processing"]}},]
     }))
 
     if not in_progress:
@@ -434,8 +457,9 @@ async def pay_all_in_progress_refunds(sandbox: bool = True):  # ← ADDED sandbo
         amount_worker   = float(refund.get("amount_worker", 0))
         task_id         = refund.get("task_id")
 
-        # ── 1. Resolve esewa_ref_id ──
-        esewa_ref_id = refund.get("esewa_ref_id")
+        task=collection_task.find_one({"_id": ObjectId(task_id)}) if task_id else None
+
+        esewa_ref_id = task.get("esewa_ref_id") if task else None
         if not esewa_ref_id and task_id:
             try:
                 task = database.collection_task.find_one({"_id": ObjectId(task_id)})
@@ -457,10 +481,8 @@ async def pay_all_in_progress_refunds(sandbox: bool = True):  # ← ADDED sandbo
             })
             continue
 
-        # ── 2. Resolve customer eSewa ID ──
         customer_id       = refund.get("requester_id")
         customer_esewa_id = None
-        customer = None
 
         if customer_id:
             try:
@@ -483,13 +505,18 @@ async def pay_all_in_progress_refunds(sandbox: bool = True):  # ← ADDED sandbo
             })
             continue
 
-        # ── 3. Resolve worker phone ──
         worker_esewa_id = None
         if amount_worker > 0:
             reported_id = refund.get("reported_id")
             if reported_id:
                 try:
-                    worker = database.collection_worker.find_one({"_id": (reported_id)})
+                    worker = database.collection_worker.find_one(
+    {"$or": [
+        {"email": reported_id},
+        {"phoneNo": reported_id},
+        {"phone": reported_id},
+    ]}
+)
                     if worker:
                         worker_esewa_id = (
                             worker.get("phoneNo")
@@ -500,23 +527,19 @@ async def pay_all_in_progress_refunds(sandbox: bool = True):  # ← ADDED sandbo
                     print(f"[pay-all] Error fetching worker: {e}")
 
         transaction_uuid = str(uuid.uuid4())
-        
-        # ── 4. MOCK OR REAL CUSTOMER REFUND ──
-        customer_result = None
-        
+        customer_result  = None
+
         if sandbox:
-            # ✅ MOCK RESPONSE
             customer_result = {
-                "status": "mock_success",
+                "status":           "mock_success",
                 "transaction_uuid": transaction_uuid,
-                "esewa_id": customer_esewa_id,
-                "esewa_ref_id": esewa_ref_id,
-                "note": "MOCK refund - sandbox mode (no actual money transferred)",
-                "timestamp": datetime.utcnow().isoformat()
+                "esewa_id":         customer_esewa_id,
+                "esewa_ref_id":     esewa_ref_id,
+                "note":             "MOCK refund - sandbox mode (no actual money transferred)",
+                "timestamp":        datetime.utcnow().isoformat(),
             }
             customer_sent = True
         else:
-            # REAL eSewa API call
             try:
                 esewa_ok, api_resp = await refund_to_customer(
                     esewa_id=customer_esewa_id,
@@ -525,36 +548,33 @@ async def pay_all_in_progress_refunds(sandbox: bool = True):  # ← ADDED sandbo
                     remarks=f"Refund: {refund.get('reason', 'task dispute')[:50]}",
                     idempotency_key=f"pay-all-cust-{refund_id}",
                 )
-
                 customer_result = {
-                    "status": "sent" if esewa_ok else "failed",
+                    "status":           "sent" if esewa_ok else "failed",
                     "transaction_uuid": api_resp.get("transaction_uuid") if esewa_ok else None,
-                    "esewa_id": customer_esewa_id,
-                    "esewa_ref_id": esewa_ref_id,
-                    "error": None if esewa_ok else api_resp.get("message"),
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "esewa_id":         customer_esewa_id,
+                    "esewa_ref_id":     esewa_ref_id,
+                    "error":            None if esewa_ok else api_resp.get("message"),
+                    "timestamp":        datetime.utcnow().isoformat(),
                 }
                 customer_sent = esewa_ok
             except Exception as e:
                 customer_result = {
-                    "status": "error",
-                    "error": str(e),
-                    "esewa_id": customer_esewa_id,
+                    "status":    "error",
+                    "error":     str(e),
+                    "esewa_id":  customer_esewa_id,
                     "timestamp": datetime.utcnow().isoformat(),
                 }
                 customer_sent = False
 
-        # ── 5. MOCK OR REAL WORKER PAYOUT ──
         worker_result = None
         if amount_worker > 0:
             if sandbox:
-                # ✅ MOCK RESPONSE
                 worker_result = {
-                    "status": "mock_success",
+                    "status":           "mock_success",
                     "transaction_uuid": str(uuid.uuid4()),
-                    "phone": worker_esewa_id,
-                    "note": "MOCK payout - sandbox mode (no actual money transferred)",
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "phone":            worker_esewa_id,
+                    "note":             "MOCK payout - sandbox mode (no actual money transferred)",
+                    "timestamp":        datetime.utcnow().isoformat(),
                 }
             elif worker_esewa_id:
                 try:
@@ -565,38 +585,39 @@ async def pay_all_in_progress_refunds(sandbox: bool = True):  # ← ADDED sandbo
                         idempotency_key=f"pay-all-wrkr-{refund_id}",
                     )
                     worker_result = {
-                        "status": "sent" if w_ok else "failed",
+                        "status":           "sent" if w_ok else "failed",
                         "transaction_uuid": w_resp.get("transaction_uuid") if w_ok else None,
-                        "error": None if w_ok else w_resp.get("message"),
-                        "phone": worker_esewa_id,
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "error":            None if w_ok else w_resp.get("message"),
+                        "phone":            worker_esewa_id,
+                        "timestamp":        datetime.utcnow().isoformat(),
                     }
                 except Exception as e:
                     worker_result = {
-                        "status": "error",
-                        "error": str(e),
-                        "phone": worker_esewa_id,
+                        "status":    "error",
+                        "error":     str(e),
+                        "phone":     worker_esewa_id,
                         "timestamp": datetime.utcnow().isoformat(),
                     }
             else:
                 worker_result = {
-                    "status": "no_phone",
-                    "note": "Worker has no phone number on file — process manually.",
+                    "status":    "no_phone",
+                    "note":      "Worker has no phone number on file — process manually.",
                     "timestamp": datetime.utcnow().isoformat(),
                 }
 
-        # ── 6. Persist result ──
-        new_status = "refunded" if (sandbox or customer_sent) else "refund_in_progress"
+        new_status       = "refunded"          if (sandbox or customer_sent) else "refund_in_progress"
+        new_refund_status = "refunded"         if (sandbox or customer_sent) else "refund_in_progress"
 
         database.refund_collection.update_one(
             {"_id": refund["_id"]},
             {"$set": {
-                "status":          new_status,
-                "esewa_refund":    customer_result,
-                "worker_payout":   worker_result,
-                "processed_at":    datetime.utcnow(),
-                "bulk_processed":  True,
-                "sandbox_mode":    sandbox,
+                "status":           new_status,
+                "refundStatus":     new_refund_status,   # ← keep lifecycle field in sync
+                "esewa_refund":     customer_result,
+                "worker_payout":    worker_result,
+                "processed_at":     datetime.utcnow(),
+                "bulk_processed":   True,
+                "sandbox_mode":     sandbox,
                 "transaction_uuid": transaction_uuid if sandbox else None,
             }}
         )
@@ -615,13 +636,14 @@ async def pay_all_in_progress_refunds(sandbox: bool = True):  # ← ADDED sandbo
 
         if sandbox or customer_sent:
             success.append({
-                "refund_id":        refund_id,
-                "amount":           amount_customer,
-                "customer_esewa":   customer_esewa_id,
-                "transaction_uuid": transaction_uuid if sandbox else customer_result.get("transaction_uuid"),
-                "sandbox_mode":     sandbox,
-                "worker_payout":    worker_result,
-            })
+    "refund_id":        refund_id,
+    "amount_customer":  amount_customer,
+    "amount_worker":    amount_worker,
+    "customer_esewa":   customer_esewa_id,
+    "transaction_uuid": transaction_uuid,
+    "sandbox_mode":     sandbox,
+    "worker_payout":    worker_result,
+})
         else:
             failed.append({
                 "refund_id":     refund_id,
@@ -631,7 +653,7 @@ async def pay_all_in_progress_refunds(sandbox: bool = True):  # ← ADDED sandbo
             })
 
     mock_note = " (MOCK MODE - No actual money transferred)" if sandbox else ""
-    
+
     return {
         "message":              f"Processed {len(in_progress)} refunds: {len(success)} succeeded, {len(failed)} failed.{mock_note}",
         "success":              success,
@@ -679,17 +701,63 @@ class RefundUpdateSchema(BaseModel):
     admin_note:      Optional[str] = None
 
 
+# ─────────────────────────────────────────────────────────────
+# PATCH /api/refunds/upsert/{task_id}
+# ─────────────────────────────────────────────────────────────
 @router.patch("/refunds/upsert/{task_id}")
 async def upsert_refund(task_id: str, data: RefundUpdateSchema):
     from pymongo import ReturnDocument
 
     now = datetime.now(timezone.utc)
 
+    # ── Guard: block refund_in_progress unless the linked report is resolved ──
+    if data.status == "refund_in_progress":
+        report_id = None
+
+        # 1. Check existing refund doc for a linked report_id
+        existing_refund = refund_collection.find_one({"task_id": task_id})
+        if existing_refund:
+            report_id = existing_refund.get("report_id")
+
+        # 2. Fallback — look at the task doc itself
+        if not report_id:
+            try:
+                task_doc = collection_task.find_one({"_id": ObjectId(task_id)})
+                if task_doc:
+                    report_id = task_doc.get("report_id")
+            except Exception as e:
+                print(f"[upsert_refund] Task lookup failed: {e}")
+
+        # 3. If we found a report_id, verify the report is resolved
+        if report_id:
+            try:
+                report_doc = collection_reports.find_one({"_id": ObjectId(str(report_id))})
+                if report_doc:
+                    report_status = report_doc.get("status", "pending")
+                    if report_status != "resolved":
+                        raise HTTPException(
+                            status_code=400,
+                            detail=(
+                                f"Cannot move refund to 'refund_in_progress' until the linked report is resolved. "
+                                f"Current report status: '{report_status}'. "
+                                f"Please resolve the report first before processing the refund."
+                            ),
+                        )
+            except HTTPException:
+                raise  # Re-raise our guard — don't swallow it
+            except bson_errors.InvalidId:
+                # Malformed report_id — skip the check rather than hard-blocking
+                print(f"[upsert_refund] Malformed report_id '{report_id}', skipping status check.")
+            except Exception as e:
+                print(f"[upsert_refund] Report lookup failed: {e}")
+
+    # ── Proceed with upsert ───────────────────────────────────────────────────
     update_op = {
         "$set": {
             "amount_customer": data.amount_customer,
             "amount_worker":   data.amount_worker,
             "status":          data.status,
+            "refundStatus":    data.status,   # keep lifecycle field in sync
             "reason":          data.reason,
             "updated_at":      now,
         },
@@ -719,6 +787,8 @@ async def upsert_refund(task_id: str, data: RefundUpdateSchema):
         del result["_id"]
         return result
 
+    except HTTPException:
+        raise  # Re-raise guard exceptions
     except Exception as e:
         print(f"Error in upsert_refund: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -745,3 +815,276 @@ async def refund_history(skip: int = 0, limit: int = 50):
                 pass
 
     return {"refunds": refunds, "skip": skip, "limit": limit}
+
+
+# ─────────────────────────────────────────────────────────────
+# PATCH /api/refunds/{refund_id}/action
+# Sends warn / suspend to customer or worker via FCM, email,
+# and WebSocket in-app toast.
+# ─────────────────────────────────────────────────────────────
+@router.patch("/refunds/{refund_id}/action")
+async def refund_action(refund_id: str, body: RefundActionBody):
+    VALID_ACTIONS = {
+        "warn_customer", "warn_worker",
+        "suspend_customer", "suspend_worker",
+    }
+    if body.action not in VALID_ACTIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid action. Choose from: {', '.join(VALID_ACTIONS)}",
+        )
+
+    # ── 1. Load refund (UUID string _id OR ObjectId) ──────────
+    refund = refund_collection.find_one({"_id": refund_id})
+    if not refund:
+        try:
+            refund = refund_collection.find_one({"_id": ObjectId(refund_id)})
+        except Exception:
+            pass
+    if not refund:
+        raise HTTPException(status_code=404, detail="Refund not found")
+
+    # ── DEBUG: log every field so you can see what's in the doc ──
+    print(f"[ACTION DEBUG] refund doc keys: {list(refund.keys())}")
+    print(f"[ACTION DEBUG] refund doc: { {k: v for k, v in refund.items() if k != '_id'} }")
+
+    is_worker_target = "worker"  in body.action
+    is_suspend       = "suspend" in body.action
+
+    # ── 2. Resolve target_id — try every possible field name ──
+    target_id = None
+
+    if is_worker_target:
+        target_id = (
+            refund.get("reported_id")
+            or refund.get("worker_id")
+            or refund.get("assignedWorkerId")
+        )
+    else:
+        target_id = (
+            refund.get("requester_id")
+            or refund.get("customer_id")
+            or refund.get("userId")
+            or refund.get("user_id")
+        )
+
+    # ── 3. If still not found, pull from the linked task doc ──
+    if not target_id:
+        task_id_ref = refund.get("task_id")
+        print(f"[ACTION DEBUG] target_id not in refund, trying task_id={task_id_ref}")
+
+        if task_id_ref:
+            try:
+                task_doc = collection_task.find_one({"_id": ObjectId(task_id_ref)})
+                if task_doc:
+                    print(f"[ACTION DEBUG] task doc keys: {list(task_doc.keys())}")
+                    if is_worker_target:
+                        target_id = (
+                            task_doc.get("assignedWorkerId")
+                            or task_doc.get("worker_id")
+                            or task_doc.get("workerId")
+                        )
+                    else:
+                        target_id = (
+                            task_doc.get("userId")
+                            or task_doc.get("customerId")
+                            or task_doc.get("customer_id")
+                        )
+            except Exception as e:
+                print(f"[ACTION DEBUG] task lookup failed: {e}")
+
+    # ── 4. If still not found, pull from the linked report doc ──
+    if not target_id:
+        report_id_ref = refund.get("report_id")
+        print(f"[ACTION DEBUG] target_id not in task, trying report_id={report_id_ref}")
+
+        if report_id_ref:
+            try:
+                report_doc = collection_reports.find_one({"_id": ObjectId(str(report_id_ref))})
+                if report_doc:
+                    print(f"[ACTION DEBUG] report doc keys: {list(report_doc.keys())}")
+                    if is_worker_target:
+                        target_id = report_doc.get("reportedId")
+                    else:
+                        target_id = report_doc.get("reporterId")
+            except Exception as e:
+                print(f"[ACTION DEBUG] report lookup failed: {e}")
+
+    if not target_id:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Could not resolve target user. "
+                f"Refund fields present: {list(refund.keys())}. "
+                f"Make sure the refund doc has 'requester_id'/'reported_id', "
+                f"or a valid 'task_id' or 'report_id' to look up from."
+            ),
+        )
+
+    print(f"[ACTION] ✓ Resolved target_id={target_id} for action={body.action}")
+
+    # ── 5. Load user doc ──────────────────────────────────────
+    user_doc   = None
+    target_col = collection_worker if is_worker_target else collection
+
+    try:
+        user_doc = target_col.find_one({"_id": ObjectId(target_id)})
+    except Exception:
+        pass
+    if not user_doc:
+        user_doc = target_col.find_one({"_id": target_id})
+    # last resort — try the other collection
+    if not user_doc:
+        other_col = collection if is_worker_target else collection_worker
+        try:
+            user_doc = other_col.find_one({"_id": ObjectId(target_id)})
+        except Exception:
+            pass
+        if not user_doc:
+            user_doc = other_col.find_one({"_id": target_id})
+
+    print(f"[ACTION] user_doc found: {user_doc is not None}, email={user_doc.get('email') if user_doc else 'N/A'}")
+
+    fcm_token = user_doc.get("fcmToken") if user_doc else None
+    email     = user_doc.get("email")    if user_doc else None
+
+    # ── 6. Build notification content ────────────────────────
+    reason  = refund.get("reason", "a dispute")
+    task_id = refund.get("task_id", "")
+
+    if is_suspend:
+        duration_str = f" for {body.duration_days} day(s)" if body.duration_days else ""
+        title     = "Your Account Has Been Suspended"
+        body_text = (
+            f"Your account has been suspended{duration_str} due to: {reason}. "
+            f"{'Note: ' + body.message if body.message else 'Contact support if you have questions.'}"
+        )
+        ws_type    = "account_suspended"
+        toast_type = "error"
+    else:
+        title     = "Warning from Kaamly Admin"
+        body_text = (
+            f"You have received a formal warning regarding: {reason}. "
+            f"{'Note: ' + body.message if body.message else 'Please review our community guidelines.'}"
+        )
+        ws_type    = "account_warning"
+        toast_type = "warning"
+
+    # ── 7. Apply suspension in DB ─────────────────────────────
+    suspended_until = None
+    if is_suspend:
+        from datetime import timedelta
+        days            = body.duration_days or 7
+        suspended_until = datetime.utcnow() + timedelta(days=days)
+
+        updated = False
+        try:
+            r = target_col.update_one(
+                {"_id": ObjectId(target_id)},
+                {"$set": {
+                    "status":            "suspended",
+                    "suspended_until":   suspended_until,
+                    "suspension_reason": reason,
+                    "suspended_at":      datetime.utcnow(),
+                }},
+            )
+            updated = r.matched_count > 0
+        except Exception:
+            pass
+
+        if not updated:
+            target_col.update_one(
+                {"_id": target_id},
+                {"$set": {
+                    "status":            "suspended",
+                    "suspended_until":   suspended_until,
+                    "suspension_reason": reason,
+                    "suspended_at":      datetime.utcnow(),
+                }},
+            )
+
+    # ── 8. Log action on the refund doc ──────────────────────
+    refund_collection.update_one(
+        {"_id": refund["_id"]},
+        {"$push": {
+            "admin_actions": {
+                "action":          body.action,
+                "duration_days":   body.duration_days,
+                "message":         body.message,
+                "suspended_until": suspended_until,
+                "applied_at":      datetime.utcnow(),
+            }
+        }},
+    )
+
+    # ── 9. FCM push ───────────────────────────────────────────
+    try:
+        await notifications.notify_with_fallback(
+            userId    = str(target_id),
+            title     = title,
+            body      = body_text,
+            token     = fcm_token,
+            email     = None,       # email sent separately via SMTP below
+            is_worker = is_worker_target,
+            data      = {
+                "action":    body.action,
+                "task_id":   str(task_id),
+                "refund_id": str(refund_id),
+            },
+        )
+        print(f"[ACTION] ✅ FCM sent → {target_id}")
+    except Exception as e:
+        print(f"[ACTION] FCM failed (non-fatal): {e}")
+
+    # ── 10. Email via SMTP ────────────────────────────────────
+    if email:
+        try:
+            await asyncio.to_thread(
+                send_action_email,
+                receiver_email = email,
+                title          = title,
+                body_text      = body_text,
+                action         = body.action,
+                duration_days  = body.duration_days,
+                admin_note     = body.message,
+            )
+            print(f"[ACTION] ✅ Email sent → {email}")
+        except Exception as e:
+            print(f"[ACTION] Email failed (non-fatal): {e}")
+    else:
+        print(f"[ACTION] ⚠ No email found for target_id={target_id}")
+
+    # ── 11. WebSocket in-app toast ────────────────────────────
+    try:
+        await websocket_manager.manager.send_to_user(
+            str(target_id),
+            json.dumps({
+                "type":            ws_type,
+                "title":           title,
+                "message":         body_text,
+                "taskId":          str(task_id),
+                "refundId":        str(refund_id),
+                "action":          body.action,
+                "duration_days":   body.duration_days,
+                "suspended_until": suspended_until.isoformat() if suspended_until else None,
+                "adminNote":       body.message or "",
+                "toast":           True,
+                "toastType":       toast_type,
+            }),
+        )
+        print(f"[ACTION] ✅ WebSocket toast sent → {target_id}")
+    except Exception as e:
+        print(f"[ACTION] WebSocket failed (non-fatal): {e}")
+
+    # ── 12. Respond ───────────────────────────────────────────
+    return {
+        "message":         f"Action '{body.action}' applied successfully.",
+        "target_id":       str(target_id),
+        "action":          body.action,
+        "suspended_until": suspended_until.isoformat() if suspended_until else None,
+        "notifications_sent": {
+            "fcm":       fcm_token is not None,
+            "email":     email is not None,
+            "websocket": True,
+        },
+    }

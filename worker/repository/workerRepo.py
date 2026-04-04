@@ -441,3 +441,26 @@ def toggleWorkerAvailability(id: str, isAvailable: bool):
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Worker not found")
     return {"message": f"Worker marked as {'available' if isAvailable else 'unavailable'}", "isAvailable": isAvailable}
+
+def updateWorkerProfile(worker_id: str, update_data: dict) -> dict:
+    allowed_fields = {
+        "firstName", "lastName", "address", "description",
+        "basePrice", "serviceAreas", "minHours", "skills",
+        "profilePhoto", "taskType",
+    }
+    filtered = {k: v for k, v in update_data.items() if k in allowed_fields and v is not None}
+
+    if not filtered:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+
+    filtered["updatedAt"] = datetime.utcnow()
+
+    result = collection_worker.update_one(
+        {"_id": worker_id},
+        {"$set": filtered},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    updated = collection_worker.find_one({"_id": worker_id}, {"password": 0})
+    return updated

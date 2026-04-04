@@ -99,7 +99,7 @@ const Toast = ({ message, type, onClose }) => {
   const colors = { success: [T.green, "#fff"], error: [T.red, "#fff"], warning: [T.amber, "#fff"] };
   const [bg, color] = colors[type] ?? colors.success;
   return (
-    <div style={{ position: "fixed", bottom: 28, right: 28, zIndex: 99999, background: bg, color, padding: "12px 20px", borderRadius: 14, fontSize: 13, fontWeight: 600, boxShadow: "0 8px 30px rgba(0,0,0,0.18)", display: "flex", alignItems: "center", gap: 8 }}>
+    <div style={{ position: "fixed", bottom: 28, right: 28, zIndex: 1, background: bg, color, padding: "12px 20px", borderRadius: 14, fontSize: 13, fontWeight: 600, boxShadow: "0 8px 30px rgba(0,0,0,0.18)", display: "flex", alignItems: "center", gap: 8 }}>
       {type === "success" && <CheckCircle size={16} />}
       {type === "error"   && <XCircle size={16} />}
       {type === "warning" && <AlertTriangle size={16} />}
@@ -112,7 +112,7 @@ const Toast = ({ message, type, onClose }) => {
 const Lightbox = ({ images, startIndex, onClose }) => {
   const [idx, setIdx] = useState(startIndex);
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(0,0,0,0.92)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 1, background: "rgba(0,0,0,0.92)", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <button onClick={e => { e.stopPropagation(); setIdx(i => Math.max(0, i - 1)); }} style={{ position: "absolute", left: 24, background: "rgba(255,255,255,0.1)", border: "none", borderRadius: "50%", width: 44, height: 44, color: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><ChevronLeft size={20} /></button>
       <img onClick={e => e.stopPropagation()} src={images[idx]} alt="" style={{ maxWidth: "85vw", maxHeight: "85vh", borderRadius: 12, objectFit: "contain", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }} />
       <button onClick={e => { e.stopPropagation(); setIdx(i => Math.min(images.length - 1, i + 1)); }} style={{ position: "absolute", right: 24, background: "rgba(255,255,255,0.1)", border: "none", borderRadius: "50%", width: 44, height: 44, color: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><ChevronRight size={20} /></button>
@@ -329,7 +329,7 @@ const WorkerModal = ({ worker, onClose, onFaceVerify, onToast }) => {
   const acceptedCount = evidence.filter(e => e.skill_verified === "accepted").length;
 
   return (
-    <div onClick={e => e.target === e.currentTarget && onClose()} style={{ position: "fixed", inset: 0, zIndex: 9000, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+    <div onClick={e => e.target === e.currentTarget && onClose()} style={{ position: "fixed", inset: 0, zIndex: 1, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div style={{ background: T.surface, borderRadius: 24, width: 600, maxHeight: "92vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 30px 80px rgba(0,0,0,0.25)", animation: "scaleIn 0.2s ease" }}>
 
         {/* Header */}
@@ -628,7 +628,7 @@ export default function WorkerVerification() {
         {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
 
         {/* Page Header */}
-        <div style={{ background: T.surface, borderBottom: `1px solid ${T.border}`, padding: "24px 40px", position: "sticky", top: 0, zIndex: 100 }}>
+        <div style={{ background: T.surface, borderBottom: `1px solid ${T.border}`, padding: "24px 40px", position: "sticky", top: 0, zIndex: 1 }}>
           <div style={{ maxWidth: 1300, margin: "0 auto" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
               <div>

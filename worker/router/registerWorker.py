@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Optional
@@ -195,7 +197,76 @@ def add_unavailable_dates(worker_id: str, body: UnavailableDatesSchema):
 def remove_unavailable_dates(worker_id: str, body: UnavailableDatesSchema):
     return workerRepo.removeUnavailableDates(worker_id, body.dates)
 
+# ══════════════════════════════════════════════════════════════════════════════
+# ADD THESE TO workerRepo.py
+# ══════════════════════════════════════════════════════════════════════════════
 
+# -----------------------------
+# ✏️ Update worker profile (PATCH)
+# -----------------------------
+
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ADD THESE TO workerRouter.py
+# ══════════════════════════════════════════════════════════════════════════════
+
+from typing import List
+
+# PATCH /worker/{id}  — partial profile update
+@router.patch("/worker/{id}")
+def update_worker_profile(id: str, body: schemas.WorkerProfileUpdateSchema):
+    update_data = body.dict(exclude_none=True)
+
+    # Normalise skills: if subSkills format → flatten to [{name, price}] for DB
+    if "skills" in update_data and update_data["skills"]:
+        flat = []
+        for sk in update_data["skills"]:
+            # Already flat format: {"name": "x", "price": 100}
+            if isinstance(sk, dict) and "price" in sk and "subSkills" not in sk:
+                flat.append(sk)
+            # New subSkills format: {"name": "x", "subSkills": [{name, price}]}
+            elif isinstance(sk, dict) and "subSkills" in sk:
+                for sub in sk.get("subSkills", []):
+                    flat.append({"name": sub["name"], "price": sub["price"]})
+        update_data["skills"] = flat
+
+    return workerRepo.updateWorkerProfile(id, update_data)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ALSO ADD: photo upload endpoint (if not already present)
+# POST /worker/upload-photo/{id}
+# ══════════════════════════════════════════════════════════════════════════════
+
+from fastapi import UploadFile, File
+import cloudinary
+import cloudinary.uploader
+
+# Configure cloudinary at the top of your router/main file:
+# cloudinary.config(cloud_name=..., api_key=..., api_secret=...)
+
+@router.post("/worker/upload-photo/{id}")
+async def upload_worker_photo(id: str, photo: UploadFile = File(...)):
+    worker = collection_worker.find_one({"_id": id})
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    contents = await photo.read()
+    result   = cloudinary.uploader.upload(
+        contents,
+        folder=f"worker_photos/{id}",
+        public_id="profile",
+        overwrite=True,
+        resource_type="image",
+    )
+    photo_url = result["secure_url"]
+
+    collection_worker.update_one(
+        {"_id": id},
+        {"$set": {"profilePhoto": photo_url, "updatedAt": datetime.utcnow()}},
+    )
+    return {"photo_url": photo_url, "message": "Photo updated successfully"}
 
 
 # GET /worker/{worker_id}/availability/check?date=2025-12-25

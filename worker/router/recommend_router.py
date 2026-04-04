@@ -4,7 +4,7 @@ from typing import Optional
 import joblib, os
 import numpy as np
 from math import radians, sin, cos, sqrt, atan2
-from ..config.database import collection_worker
+from ..config.database import collection_worker, collection_task
 
 # Fix for LinUCB pickle in FastAPI reload context
 from ..model.LinUCB import LinUCB  # <-- adjust to your actual module path
@@ -347,6 +347,35 @@ def build_feature_vector(worker, task_type, user_lat=None, user_lon=None, target
 # ═══════════════════════════════════════════════════════════════════════════════
 # SCORING
 # ═══════════════════════════════════════════════════════════════════════════════
+def cancellation_penalty(worker: dict) -> float:
+    worker_id = worker.get("_id")
+
+    completed = collection_task.count_documents({
+        "workerId": worker_id,
+        "status":   "completed"
+    })
+    cancelled = collection_task.count_documents({
+        "workerId": worker_id,
+        "status":   "cancelled"
+    })
+
+    total = completed + cancelled
+
+    if total < 5:
+        return 1.0  # not enough data to penalize
+
+    ratio = cancelled / total
+
+    if ratio >= 0.50:
+        return -1.0  # exclude entirely
+    if ratio >= 0.35:
+        return 0.40  # heavy penalty
+    if ratio >= 0.20:
+        return 0.65  # moderate penalty
+    if ratio >= 0.10:
+        return 0.85  # light penalty
+
+    return 1.0
 
 def score_worker(
     worker:        dict,
@@ -485,6 +514,9 @@ def recommend_workers(
             if score < 0:
                 continue
 
+            if not worker.get("isAvailable", True):
+                continue
+
             stars, review_count = _get_worker_scalars(worker)
             is_new = review_count <= COLD_START_REVIEWS
             match  = subcategory_match(worker, target_subcat) if target_subcat else "n/a"
@@ -544,6 +576,9 @@ def recommend_workers(
                 )
 
                 if score < 0:
+                    continue
+
+                if not worker.get("isAvailable", True):
                     continue
 
                 extra.append({

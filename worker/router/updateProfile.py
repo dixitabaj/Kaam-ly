@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Query
 from pydantic import BaseModel
 from typing import Optional
 from bson import ObjectId
-import cloudinary.uploader
+from ..config.cloudinary_config import cloudinary
 from ..config.database import collection
 
 router = APIRouter(prefix="/update/customer", tags=["Customer Profile"])
