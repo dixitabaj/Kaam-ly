@@ -1004,16 +1004,19 @@ export const checkAvailabilityOnDate = async (worker_id, date) => {
 // components/HelpSection/helpApi.js
 
 
-export async function sendChatMessage(message) {
-  const res = await fetch(BASE_URL + "/chatbot", {
+export async function sendChatMessage(message, endpoint) {
+  const url = endpoint.startsWith("http")
+    ? endpoint
+    : `http://localhost:8000${endpoint}`;
+
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message }),
   });
   const data = await res.json();
-  return data.response || "Sorry, I couldn't get a response. Please try again.";
+  return data.response;
 }
-
 
 // api/customerProfile.js
 
@@ -1144,3 +1147,45 @@ export const getRecentPayouts = async (workerId) => {
   const res = await fetch(`http://localhost:8000/api/worker/${workerId}/recent-payouts`);
   return res.json();
 };
+
+// calendarApi.js — All API calls for CalendarAvailability
+
+export const API_BASE = "http://127.0.0.1:8000";
+
+// ── Availability ──────────────────────────────────────────────────────────────
+
+export async function fetchWorkerAvailability(workerId) {
+  const res = await fetch(`${API_BASE}/worker/availability/${encodeURIComponent(workerId)}`);
+  if (!res.ok) throw new Error("Failed to fetch availability");
+  return res.json();
+}
+
+export async function fetchFreeSlotRange(workerId, startDate, endDate) {
+  const res = await fetch(
+    `${API_BASE}/api/worker/free-slots-range/${encodeURIComponent(workerId)}?start_date=${startDate}&end_date=${endDate}`
+  );
+  if (!res.ok) throw new Error("Failed to fetch free slots");
+  const data = await res.json();
+  return data.freeSlots || {};
+}
+
+
+export async function saveDateOverride(workerId, dateStr, slots) {
+  // slots: [{ start, end }], empty = unavailable
+  const body = {
+    workerId,
+    date: dateStr,
+    availableStatus: slots.length > 0 ? "free" : "unavailable",
+    available: slots.length > 0,
+    slots: slots.map(({ start, end }) => ({ start, end })),
+  };
+  const res = await fetch(`${API_BASE}/api/availability/update-day`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error("Failed to save date override");
+  return res.json();
+}
+
+

@@ -86,108 +86,124 @@ const MoreMenu = ({ onClose, onReportUser }) => {
 };
 
 // ── Info Panel ────────────────────────────────────────────────────────────────
-const InfoPanel = ({ otherUser, sharedTasks, onClose }) => {
+const InfoPanel = ({ otherUser, sharedTasks, onClose, isMobile }) => {
   const getInitials = (name) => {
     if (!name) return '?';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
   };
 
   return (
-    <div style={{
-      position: 'fixed', top: 0, right: 0, height: '100%', width: 320,
-      background: '#fff', borderLeft: '1px solid #e8e3df',
-      boxShadow: '-8px 0 32px rgba(0,0,0,0.08)', zIndex: 400,
-      display: 'flex', flexDirection: 'column', overflowY: 'auto',
-    }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '16px 20px', borderBottom: '1px solid #e8e3df',
-        position: 'sticky', top: 0, background: '#fff', zIndex: 1,
-      }}>
-        <span style={{ fontWeight: 700, fontSize: 15, color: '#1a1512' }}>Contact Info</span>
-        <button
+    <>
+      {/* Backdrop for mobile */}
+      {isMobile && (
+        <div
           onClick={onClose}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, borderRadius: 6, display: 'flex' }}
-        >
-          <X size={18} style={{ color: '#8a8179' }} />
-        </button>
-      </div>
-
-      <div style={{ padding: '28px 20px 20px', textAlign: 'center', borderBottom: '1px solid #e8e3df' }}>
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(0,0,0,0.35)',
+            zIndex: 399,
+          }}
+        />
+      )}
+      <div style={{
+        position: 'fixed', top: 0, right: 0,
+        height: '100%',
+        width: isMobile ? '85vw' : 320,
+        maxWidth: 360,
+        background: '#fff', borderLeft: '1px solid #e8e3df',
+        boxShadow: '-8px 0 32px rgba(0,0,0,0.08)', zIndex: 400,
+        display: 'flex', flexDirection: 'column', overflowY: 'auto',
+      }}>
         <div style={{
-          width: 72, height: 72, borderRadius: '50%', background: '#f6ad56',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 26, fontWeight: 700, color: '#fff', margin: '0 auto 12px',
-          overflow: 'hidden',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '16px 20px', borderBottom: '1px solid #e8e3df',
+          position: 'sticky', top: 0, background: '#fff', zIndex: 1,
         }}>
-          {otherUser?.profileImage
-            ? <img src={otherUser.profileImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            : getInitials(otherUser?.name)}
+          <span style={{ fontWeight: 700, fontSize: 15, color: '#1a1512' }}>Contact Info</span>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, borderRadius: 6, display: 'flex' }}
+          >
+            <X size={18} style={{ color: '#8a8179' }} />
+          </button>
         </div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1512', marginBottom: 4 }}>
-          {otherUser?.name || 'Unknown'}
-        </div>
-        <div style={{
-          fontSize: 12, color: '#8a8179', background: '#f8f5f2',
-          display: 'inline-block', padding: '3px 10px', borderRadius: 20,
-        }}>
-          {otherUser?.taskType || 'User'}
-        </div>
-      </div>
 
-      <div style={{ padding: '16px 20px', borderBottom: '1px solid #e8e3df' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#b0a99f', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
-          Contact
+        <div style={{ padding: '28px 20px 20px', textAlign: 'center', borderBottom: '1px solid #e8e3df' }}>
+          <div style={{
+            width: 72, height: 72, borderRadius: '50%', background: '#f6ad56',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 26, fontWeight: 700, color: '#fff', margin: '0 auto 12px',
+            overflow: 'hidden',
+          }}>
+            {otherUser?.profileImage
+              ? <img src={otherUser.profileImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : getInitials(otherUser?.name)}
+          </div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1512', marginBottom: 4 }}>
+            {otherUser?.name || 'Unknown'}
+          </div>
+          <div style={{
+            fontSize: 12, color: '#8a8179', background: '#f8f5f2',
+            display: 'inline-block', padding: '3px 10px', borderRadius: 20,
+          }}>
+            {otherUser?.taskType || 'User'}
+          </div>
         </div>
-        {otherUser?.email && (
-          <div style={{ fontSize: 13.5, color: '#1a1512', marginBottom: 8 }}>
-            <span style={{ color: '#8a8179', fontSize: 12 }}>Email · </span>
-            {otherUser.email}
-          </div>
-        )}
-        {otherUser?.phone && (
-          <div style={{ fontSize: 13.5, color: '#1a1512', marginBottom: 8 }}>
-            <span style={{ color: '#8a8179', fontSize: 12 }}>Phone · </span>
-            {otherUser.phone}
-          </div>
-        )}
-        {otherUser?.address && (
-          <div style={{ fontSize: 13.5, color: '#1a1512' }}>
-            <span style={{ color: '#8a8179', fontSize: 12 }}>Location · </span>
-            {otherUser.address}
-          </div>
-        )}
-        {!otherUser?.email && !otherUser?.phone && !otherUser?.address && (
-          <div style={{ fontSize: 13, color: '#b0a99f' }}>No contact details available</div>
-        )}
-      </div>
 
-      <div style={{ padding: '16px 20px' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#b0a99f', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
-          Shared Bookings ({sharedTasks?.length || 0})
-        </div>
-        {(sharedTasks || []).length === 0 ? (
-          <div style={{ fontSize: 13, color: '#b0a99f' }}>No shared bookings</div>
-        ) : (
-          sharedTasks.map((task, i) => (
-            <div key={i} style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '10px 0', borderBottom: i < sharedTasks.length - 1 ? '1px solid #f1f0ee' : 'none',
-            }}>
-              <div>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: '#1a1512' }}>
-                  {task.taskName || task.title || 'Task'}
-                </div>
-                <div style={{ fontSize: 11, color: '#b0a99f', marginTop: 2 }}>
-                  #{(task._id || task.id || '').slice(-6).toUpperCase()}
-                </div>
-              </div>
-              <StatusBadge status={task.status} />
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #e8e3df' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#b0a99f', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+            Contact
+          </div>
+          {otherUser?.email && (
+            <div style={{ fontSize: 13.5, color: '#1a1512', marginBottom: 8 }}>
+              <span style={{ color: '#8a8179', fontSize: 12 }}>Email · </span>
+              {otherUser.email}
             </div>
-          ))
-        )}
+          )}
+          {otherUser?.phone && (
+            <div style={{ fontSize: 13.5, color: '#1a1512', marginBottom: 8 }}>
+              <span style={{ color: '#8a8179', fontSize: 12 }}>Phone · </span>
+              {otherUser.phone}
+            </div>
+          )}
+          {otherUser?.address && (
+            <div style={{ fontSize: 13.5, color: '#1a1512' }}>
+              <span style={{ color: '#8a8179', fontSize: 12 }}>Location · </span>
+              {otherUser.address}
+            </div>
+          )}
+          {!otherUser?.email && !otherUser?.phone && !otherUser?.address && (
+            <div style={{ fontSize: 13, color: '#b0a99f' }}>No contact details available</div>
+          )}
+        </div>
+
+        <div style={{ padding: '16px 20px' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#b0a99f', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+            Shared Bookings ({sharedTasks?.length || 0})
+          </div>
+          {(sharedTasks || []).length === 0 ? (
+            <div style={{ fontSize: 13, color: '#b0a99f' }}>No shared bookings</div>
+          ) : (
+            sharedTasks.map((task, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '10px 0', borderBottom: i < sharedTasks.length - 1 ? '1px solid #f1f0ee' : 'none',
+              }}>
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: '#1a1512' }}>
+                    {task.taskName || task.title || 'Task'}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#b0a99f', marginTop: 2 }}>
+                    #{(task._id || task.id || '').slice(-6).toUpperCase()}
+                  </div>
+                </div>
+                <StatusBadge status={task.status} />
+              </div>
+            ))
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 
@@ -259,7 +275,7 @@ const MediaMessage = ({ mediaUrl, mediaType, fileName }) => {
   if (isImage) {
     return (
       <div
-        style={{ borderRadius: 12, overflow: 'hidden', maxWidth: 260, cursor: 'pointer' }}
+        style={{ borderRadius: 12, overflow: 'hidden', maxWidth: '100%', cursor: 'pointer' }}
         onClick={() => window.open(mediaUrl, '_blank')}
       >
         <img
@@ -273,7 +289,7 @@ const MediaMessage = ({ mediaUrl, mediaType, fileName }) => {
 
   if (isVideo) {
     return (
-      <div style={{ borderRadius: 12, overflow: 'hidden', maxWidth: 260, background: '#000' }}>
+      <div style={{ borderRadius: 12, overflow: 'hidden', maxWidth: '100%', background: '#000' }}>
         <video controls style={{ width: '100%', maxHeight: 280, display: 'block' }}>
           <source src={mediaUrl} type={mediaType} />
         </video>
@@ -285,7 +301,7 @@ const MediaMessage = ({ mediaUrl, mediaType, fileName }) => {
     return (
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
-        background: '#f1f5f9', borderRadius: 12, maxWidth: 260,
+        background: '#f1f5f9', borderRadius: 12, maxWidth: '100%',
       }}>
         <Mic size={16} style={{ color: '#f6ad56', flexShrink: 0 }} />
         <audio controls style={{ height: 32, flex: 1, minWidth: 0 }}>
@@ -307,7 +323,7 @@ const MediaMessage = ({ mediaUrl, mediaType, fileName }) => {
       }}
     >
       <File size={17} style={{ color: '#8a8179', flexShrink: 0 }} />
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
         {fileName || 'File'}
       </span>
     </a>
@@ -400,15 +416,33 @@ const OfferCard = ({ offer, isMyMessage, isWorker, onAccept, onReject }) => {
 // ── Message Context Menu ──────────────────────────────────────────────────────
 const MessageContextMenu = ({ x, y, message, isMyMessage, onCopy, onDelete, onClose }) => {
   const ref = useRef(null);
+
+  // Clamp position so it never goes offscreen
+  const [pos, setPos] = useState({ x, y });
+  useEffect(() => {
+    if (!ref.current) return;
+    const { width, height } = ref.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    setPos({
+      x: Math.min(x, vw - width - 8),
+      y: Math.min(y, vh - height - 8),
+    });
+  }, [x, y]);
+
   useEffect(() => {
     const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('touchstart', handler);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('touchstart', handler);
+    };
   }, [onClose]);
 
   return (
     <div ref={ref} style={{
-      position: 'fixed', top: y, left: x,
+      position: 'fixed', top: pos.y, left: pos.x,
       background: '#fff', border: '1px solid #e8e3df', borderRadius: 10,
       boxShadow: '0 6px 24px rgba(0,0,0,0.12)', zIndex: 500, minWidth: 150,
       overflow: 'hidden',
@@ -459,6 +493,8 @@ const Toast = ({ message, onDone, duration = 5000 }) => {
       boxShadow: '0 4px 16px rgba(0,0,0,0.18)', zIndex: 600,
       whiteSpace: 'nowrap', pointerEvents: 'none',
       animation: 'mp-toast-in 0.2s ease',
+      maxWidth: 'calc(100vw - 32px)',
+      textAlign: 'center',
     }}>
       {message.text}
     </div>
@@ -466,8 +502,6 @@ const Toast = ({ message, onDone, duration = 5000 }) => {
 };
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-// Derive the best display name from a raw conversation object returned by the API.
-// Tries every common field name before falling back to the raw other_user ID.
 const resolveConvoName = (c) =>
   c.name ||
   c.other_user_name ||
@@ -476,12 +510,24 @@ const resolveConvoName = (c) =>
   c.fullName ||
   c.full_name ||
   c.username ||
-  null; // will fall back to ID in the render if still null
+  null;
+
+// ── useIsMobile hook ──────────────────────────────────────────────────────────
+const useIsMobile = (breakpoint = 768) => {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < breakpoint);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < breakpoint);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, [breakpoint]);
+  return isMobile;
+};
 
 // ── Main Component ────────────────────────────────────────────────────────────
 const MessagesPage = () => {
   const { senderId, recieverId } = useParams();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
   const currentUser = storedUser ? JSON.parse(storedUser) : null;
@@ -499,7 +545,8 @@ const MessagesPage = () => {
   const [searchQuery,        setSearchQuery]       = useState('');
   const [loading,            setLoading]           = useState(true);
   const [error,              setError]             = useState(null);
-  const [showSidebar,        setShowSidebar]       = useState(true);
+  // On mobile: sidebar hidden when a chat is open; on desktop: always visible
+  const [showSidebar,        setShowSidebar]       = useState(!isMobile || !otherId);
   const [showOfferModal,     setShowOfferModal]    = useState(false);
   const [offerData,          setOfferData]         = useState({ hours: '', additionalCost: '' });
   const [selectedOfferTask,  setSelectedOfferTask] = useState(null);
@@ -524,11 +571,19 @@ const MessagesPage = () => {
   const inputBarRef         = useRef(null);
   const { addToast } = useToast();
 
-  // ref that always holds the latest otherUser so WS handler never reads stale closure
   const otherUserRef = useRef(null);
+  useEffect(() => { otherUserRef.current = otherUser; }, [otherUser]);
+
+  // ── Sync sidebar visibility with mobile/route changes ────────────────────
   useEffect(() => {
-    otherUserRef.current = otherUser;
-  }, [otherUser]);
+    // On mobile: show sidebar only when no conversation is open
+    if (isMobile) {
+      setShowSidebar(!otherId);
+    } else {
+      // On desktop: always show sidebar
+      setShowSidebar(true);
+    }
+  }, [isMobile, otherId]);
 
   // ── Voice recorder ─────────────────────────────────────────────────────────
   const { recording, duration, startRecording, stopRecording } = useVoiceRecorder({
@@ -544,8 +599,9 @@ const MessagesPage = () => {
     }
   }, []);
 
-  // ── Resize ─────────────────────────────────────────────────────────────────
+  // ── Resize (desktop only) ──────────────────────────────────────────────────
   const startResizing  = (e) => {
+    if (isMobile) return;
     e.preventDefault();
     isResizing.current = true;
     document.addEventListener('mousemove', handleMouseMove);
@@ -690,7 +746,6 @@ const MessagesPage = () => {
       .then(convos => setConversations((convos || []).map(c => ({
         id:              c.room_id || c.id,
         otherUser:       c.other_user,
-        // Try every possible name field the API might return
         name:            resolveConvoName(c),
         lastMessage:     c.last_message || c.lastMessage || '',
         lastMessageTime: c.last_time || c.lastMessageTime || '',
@@ -702,15 +757,12 @@ const MessagesPage = () => {
   }, [actualUserId]);
 
   // ── When otherUser resolves, patch matching conversation name ──────────────
-  // This ensures the currently-open conversation always shows the real name
-  // even if the API didn't return it in the conversations list.
   useEffect(() => {
     if (!otherUser?.id || !otherUser?.name) return;
     setConversations(prev => prev.map(c => {
       const parts       = (c.id || '').split('__');
       const otherInRoom = parts.find(p => p !== actualUserId) || '';
       if (otherInRoom !== otherUser.id && c.otherUser !== otherUser.id) return c;
-      // Only patch if the stored name looks like a raw ID (no spaces / too short)
       const looksLikeId = !c.name || c.name === c.otherUser || c.name === otherInRoom;
       return looksLikeId ? { ...c, name: otherUser.name, profileImage: c.profileImage || otherUser.profileImage } : c;
     }));
@@ -969,86 +1021,134 @@ const MessagesPage = () => {
     setContextMenu({ x: e.clientX, y: e.clientY, msgIndex: index });
   };
 
+  // Long-press for touch devices (context menu equivalent)
+  const longPressTimer = useRef(null);
+  const handleTouchStart = (e, index) => {
+    longPressTimer.current = setTimeout(() => {
+      const touch = e.touches[0];
+      setContextMenu({ x: touch.clientX, y: touch.clientY, msgIndex: index });
+    }, 500);
+  };
+  const handleTouchEnd = () => {
+    clearTimeout(longPressTimer.current);
+  };
+
   const filteredConversations = conversations.filter(c =>
     (c.name || c.otherUser || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // ── Mobile: navigate back to sidebar ──────────────────────────────────────
+  const handleMobileBack = () => {
+    if (isMobile) {
+      navigate(`/chat/${actualUserId}`);
+    } else {
+      navigate(-1);
+    }
+  };
+
   // ── Sidebar ────────────────────────────────────────────────────────────────
   const SidebarJSX = (
-    <div ref={sidebarRef} className="mp-sidebar" style={{ width: sidebarWidth + 'px' }}>
-      <div className="mp-sidebar-header">
-        <h2 className="mp-sidebar-title">Messages</h2>
-        {otherId && (
-          <button className="mp-icon-btn" onClick={() => setShowSidebar(false)}>
-            <X size={18} />
-          </button>
-        )}
-      </div>
-
-      <div className="mp-search-wrap">
-        <Search size={14} className="mp-search-icon" />
-        <input
-          type="text"
-          placeholder="Search conversations…"
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          className="mp-search-input"
+    <>
+      {/* Mobile overlay backdrop */}
+      {isMobile && showSidebar && otherId && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 198 }}
+          onClick={() => setShowSidebar(false)}
         />
-      </div>
+      )}
+      <div
+        ref={sidebarRef}
+        className="mp-sidebar"
+        style={{
+          width: isMobile ? '100%' : sidebarWidth + 'px',
+          // On mobile with a chat open, sidebar slides in from left as overlay
+          ...(isMobile && otherId ? {
+            position: 'fixed',
+            left: showSidebar ? 0 : '-100%',
+            top: 0,
+            bottom: 0,
+            zIndex: 199,
+            transition: 'left 0.25s ease',
+            width: '85vw',
+            maxWidth: 340,
+          } : {}),
+        }}
+      >
+        <div className="mp-sidebar-header">
+          <h2 className="mp-sidebar-title">Messages</h2>
+          {otherId && (
+            <button className="mp-icon-btn" onClick={() => setShowSidebar(false)}>
+              <X size={18} />
+            </button>
+          )}
+        </div>
 
-      <div className="mp-convo-list">
-        {convosLoading ? (
-          <div className="mp-empty">Loading…</div>
-        ) : filteredConversations.length === 0 ? (
-          <div className="mp-empty">No conversations yet</div>
-        ) : (
-          filteredConversations.map((convo, i) => {
-            const parts       = (convo.id || '').split('__');
-            const otherInRoom = parts.find(p => p !== actualUserId) || '';
-            const isActive    = otherInRoom === otherId;
+        <div className="mp-search-wrap">
+          <Search size={14} className="mp-search-icon" />
+          <input
+            type="text"
+            placeholder="Search conversations…"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="mp-search-input"
+          />
+        </div>
 
-            // For the currently-open chat, always use the freshly-resolved
-            // otherUser object so the name and avatar are never stale IDs.
-            const displayName  = isActive && otherUser?.name
-              ? otherUser.name
-              : convo.name || otherInRoom;
-            const displayImage = isActive && otherUser?.profileImage
-              ? otherUser.profileImage
-              : convo.profileImage;
+        <div className="mp-convo-list">
+          {convosLoading ? (
+            <div className="mp-empty">Loading…</div>
+          ) : filteredConversations.length === 0 ? (
+            <div className="mp-empty">No conversations yet</div>
+          ) : (
+            filteredConversations.map((convo, i) => {
+              const parts       = (convo.id || '').split('__');
+              const otherInRoom = parts.find(p => p !== actualUserId) || '';
+              const isActive    = otherInRoom === otherId;
 
-            return (
-              <div
-                key={i}
-                className={`mp-convo-item${isActive ? ' active' : ''}`}
-                onClick={() => navigate(`/chat/${actualUserId}/${otherInRoom}`)}
-              >
-                <div className="mp-conv-avatar">
-                  {displayImage
-                    ? <img src={displayImage} alt="" className="mp-avatar-img" />
-                    : <span>{getInitials(displayName)}</span>}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                    <span className="mp-conv-name">{displayName}</span>
-                    <span className="mp-conv-time">
-                      {convo.lastMessageTime
-                        ? new Date(convo.lastMessageTime * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                        : ''}
-                    </span>
+              const displayName  = isActive && otherUser?.name
+                ? otherUser.name
+                : convo.name || otherInRoom;
+              const displayImage = isActive && otherUser?.profileImage
+                ? otherUser.profileImage
+                : convo.profileImage;
+
+              return (
+                <div
+                  key={i}
+                  className={`mp-convo-item${isActive ? ' active' : ''}`}
+                  onClick={() => {
+                    navigate(`/chat/${actualUserId}/${otherInRoom}`);
+                    if (isMobile) setShowSidebar(false);
+                  }}
+                >
+                  <div className="mp-conv-avatar">
+                    {displayImage
+                      ? <img src={displayImage} alt="" className="mp-avatar-img" />
+                      : <span>{getInitials(displayName)}</span>}
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span className="mp-conv-last">{formatLastMessage(convo.lastMessage)}</span>
-                    {convo.unreadCount > 0 && <span className="mp-badge">{convo.unreadCount}</span>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                      <span className="mp-conv-name">{displayName}</span>
+                      <span className="mp-conv-time">
+                        {convo.lastMessageTime
+                          ? new Date(convo.lastMessageTime * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                          : ''}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className="mp-conv-last">{formatLastMessage(convo.lastMessage)}</span>
+                      {convo.unreadCount > 0 && <span className="mp-badge">{convo.unreadCount}</span>}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+              );
+            })
+          )}
+        </div>
 
-      <div className="mp-resize-handle" onMouseDown={startResizing} />
-    </div>
+        {!isMobile && <div className="mp-resize-handle" onMouseDown={startResizing} />}
+      </div>
+    </>
   );
 
   // ── Empty / Loading / Error states ────────────────────────────────────────
@@ -1081,7 +1181,7 @@ const MessagesPage = () => {
     <>
       <BookingNavbar />
       <div className="mp-container">
-        {SidebarJSX}
+        {!isMobile && SidebarJSX}
         <div className="mp-center">
           <div className="mp-spinner" />
           <p style={{ color: '#8a8179', margin: 0, fontSize: 14 }}>Loading…</p>
@@ -1095,7 +1195,7 @@ const MessagesPage = () => {
     <>
       <BookingNavbar />
       <div className="mp-container">
-        {SidebarJSX}
+        {!isMobile && SidebarJSX}
         <div className="mp-center">
           <h3 style={{ color: '#ef4444', marginBottom: 8 }}>{error || 'User not found'}</h3>
           <button
@@ -1122,19 +1222,37 @@ const MessagesPage = () => {
         <input ref={imageInputRef} type="file" accept="image/*,video/*" style={{ display: 'none' }} onChange={handleFileSelect} />
         <input ref={fileInputRef}  type="file" accept="*/*"             style={{ display: 'none' }} onChange={handleFileSelect} />
 
-        {showSidebar && SidebarJSX}
+        {/* Sidebar: always render; visibility controlled above */}
+        {SidebarJSX}
 
-        <div className="mp-chat-pane">
+        <div
+          className="mp-chat-pane"
+          style={{
+            // On mobile the chat pane fills the full width
+            flex: 1,
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
 
           {/* ── Header ── */}
           <div className="mp-header" style={{ position: 'relative' }}>
             <div className="mp-header-left">
-              {!showSidebar && (
-                <button className="mp-icon-btn" onClick={() => setShowSidebar(true)}>
-                  <Menu size={18} />
-                </button>
-              )}
-              <button className="mp-icon-btn" onClick={() => navigate(-1)}>
+              {/* On mobile: hamburger opens sidebar; on desktop: toggles it */}
+              <button
+                className="mp-icon-btn"
+                onClick={() => {
+                  if (isMobile) {
+                    setShowSidebar(true);
+                  } else {
+                    setShowSidebar(prev => !prev);
+                  }
+                }}
+              >
+                <Menu size={18} />
+              </button>
+              <button className="mp-icon-btn" onClick={handleMobileBack}>
                 <ArrowLeft size={18} />
               </button>
               <div className="mp-header-avatar">
@@ -1146,8 +1264,10 @@ const MessagesPage = () => {
                   style={{ backgroundColor: otherUser.status === 'online' ? '#10b981' : '#b0a99f' }}
                 />
               </div>
-              <div>
-                <h3 className="mp-header-name">{otherUser.name}</h3>
+              <div style={{ minWidth: 0 }}>
+                <h3 className="mp-header-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {otherUser.name}
+                </h3>
                 <p className="mp-header-role">{otherUser.taskType}</p>
               </div>
             </div>
@@ -1179,7 +1299,7 @@ const MessagesPage = () => {
           </div>
 
           {/* ── Tab Bar ── */}
-          <div className="mp-tab-bar">
+          <div className="mp-tab-bar" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             <button
               className={`mp-tab${activeTab === 'chat' ? ' active' : ''}`}
               onClick={() => setActiveTab('chat')}
@@ -1193,6 +1313,7 @@ const MessagesPage = () => {
                   key={taskId}
                   className={`mp-tab${activeTab === taskId ? ' active' : ''}`}
                   onClick={() => setActiveTab(taskId)}
+                  style={{ whiteSpace: 'nowrap' }}
                 >
                   <ClipboardList size={12} style={{ flexShrink: 0 }} />
                   <span>{task.taskName || task.title || `Task ${i + 1}`}</span>
@@ -1236,6 +1357,9 @@ const MessagesPage = () => {
                             <div
                               className={isMyMessage ? 'mp-my-msg' : 'mp-their-msg'}
                               onContextMenu={(e) => handleMessageContextMenu(e, index)}
+                              onTouchStart={(e) => handleTouchStart(e, index)}
+                              onTouchEnd={handleTouchEnd}
+                              onTouchMove={handleTouchEnd}
                             >
                               {!isMyMessage && (
                                 <div className="mp-msg-avatar">
@@ -1244,7 +1368,7 @@ const MessagesPage = () => {
                                     : <span>{getInitials(otherUser.name)}</span>}
                                 </div>
                               )}
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, maxWidth: '100%' }}>
                                 {!isMyMessage && (
                                   <span className="mp-msg-sender">{otherUser.name}</span>
                                 )}
@@ -1310,7 +1434,7 @@ const MessagesPage = () => {
                   <button
                     onClick={sendMedia}
                     disabled={uploading}
-                    style={{ padding: '7px 16px', background: '#f6ad56', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? 0.6 : 1 }}
+                    style={{ padding: '7px 16px', background: '#f6ad56', color: 'white', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? 0.6 : 1, flexShrink: 0 }}
                   >
                     {uploading ? 'Sending…' : 'Send'}
                   </button>
@@ -1323,8 +1447,9 @@ const MessagesPage = () => {
                   display: 'flex', alignItems: 'center', gap: 10,
                   padding: '10px 16px', background: '#fef3e2',
                   borderTop: '1px solid #fde68a', fontSize: 13.5, fontWeight: 600, color: '#92400e',
+                  flexWrap: 'wrap',
                 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', display: 'inline-block', animation: 'pulse 1s infinite' }} />
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', display: 'inline-block', animation: 'pulse 1s infinite', flexShrink: 0 }} />
                   Recording… {Math.floor(duration / 60).toString().padStart(2,'0')}:{(duration % 60).toString().padStart(2,'0')}
                   <button
                     onClick={stopRecording}
@@ -1345,7 +1470,7 @@ const MessagesPage = () => {
                 </button>
                 {isWorker && (
                   <button className="mp-offer-btn" onClick={openOfferModal}>
-                    Send Offer
+                    {isMobile ? 'Offer' : 'Send Offer'}
                   </button>
                 )}
                 <input
@@ -1355,6 +1480,8 @@ const MessagesPage = () => {
                   value={messageInput}
                   onChange={e => setMessageInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
+                  // Prevent iOS zoom on focus
+                  style={{ fontSize: 16 }}
                 />
                 <button
                   className="mp-icon-btn"
@@ -1381,17 +1508,17 @@ const MessagesPage = () => {
             <div className="mp-task-pane">
               <div className="mp-task-pane-header">
                 <ClipboardList size={15} style={{ color: '#f6ad56' }} />
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#1a1512' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#1a1512', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
                     {activeTaskObj.taskName || 'Task Details'}
                   </span>
-                  <span style={{ fontSize: 11, color: '#b0a99f', marginLeft: 8 }}>
+                  <span style={{ fontSize: 11, color: '#b0a99f', marginLeft: 0 }}>
                     #{activeTab.slice(-6).toUpperCase()}
                   </span>
                 </div>
                 <StatusBadge status={activeTaskObj.status} />
               </div>
-              <div style={{ padding: 20 }}>
+              <div style={{ padding: isMobile ? 12 : 20 }}>
                 <TaskDetails taskId={activeTab} />
               </div>
             </div>
@@ -1404,6 +1531,7 @@ const MessagesPage = () => {
             otherUser={otherUser}
             sharedTasks={sharedTasks}
             onClose={() => setShowInfoPanel(false)}
+            isMobile={isMobile}
           />
         )}
 
@@ -1426,7 +1554,14 @@ const MessagesPage = () => {
         {/* ── Offer Modal ── */}
         {showOfferModal && (
           <div className="mp-modal-overlay">
-            <div className="mp-modal">
+            <div
+              className="mp-modal"
+              style={{
+                width: isMobile ? '92vw' : undefined,
+                maxHeight: '90vh',
+                overflowY: 'auto',
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.4rem' }}>
                 <h3 className="mp-modal-title">Send a Service Offer</h3>
                 <button className="mp-modal-close" onClick={() => setShowOfferModal(false)}>✕</button>
@@ -1468,6 +1603,7 @@ const MessagesPage = () => {
                 value={offerData.hours}
                 onChange={e => setOfferData(p => ({ ...p, hours: e.target.value }))}
                 className="mp-modal-input"
+                inputMode="numeric"
               />
               {offerData.hours && myBasePrice && (
                 <div className="mp-calc-green">
@@ -1483,6 +1619,7 @@ const MessagesPage = () => {
                 value={offerData.additionalCost}
                 onChange={e => setOfferData(p => ({ ...p, additionalCost: e.target.value }))}
                 className="mp-modal-input"
+                inputMode="numeric"
               />
               {offerData.hours && myBasePrice && offerData.additionalCost && (
                 <div className="mp-calc-yellow">
@@ -1523,6 +1660,104 @@ const MessagesPage = () => {
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50%       { opacity: 0.3; }
+        }
+
+        /* ── Responsive overrides ── */
+
+        /* Tab bar: hide scrollbar but keep scrollable */
+        .mp-tab-bar {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .mp-tab-bar::-webkit-scrollbar { display: none; }
+
+        /* Mobile layout: full-width chat pane, no sidebar shown inline */
+        @media (max-width: 768px) {
+          .mp-container {
+            position: relative;
+            overflow: hidden;
+          }
+
+          /* Chat pane fills screen on mobile */
+          .mp-chat-pane {
+            width: 100% !important;
+          }
+
+          /* Tighten header on small screens */
+          .mp-header {
+            padding: 10px 12px !important;
+          }
+          .mp-header-name {
+            font-size: 14px !important;
+            max-width: 140px;
+          }
+
+          /* Wider bubbles on mobile */
+          .mp-bubble {
+            max-width: 82vw !important;
+          }
+
+          /* Offer card full-width */
+          .mp-offer-card {
+            max-width: 85vw !important;
+          }
+
+          /* Input bar compact */
+          .mp-input-bar {
+            padding: 8px 10px !important;
+            gap: 6px !important;
+          }
+
+          /* Message area: account for mobile bottom chrome */
+          .mp-messages {
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+          }
+
+          /* Input bar: account for iOS home bar */
+          .mp-input-bar {
+            padding-bottom: max(8px, env(safe-area-inset-bottom)) !important;
+          }
+
+          /* Modal full-width on mobile */
+          .mp-modal {
+            border-radius: 16px !important;
+          }
+
+          /* Media preview compact */
+          .mp-media-preview {
+            padding: 8px 12px !important;
+          }
+
+          /* No-convo screen */
+          .mp-no-convo {
+            width: 100% !important;
+          }
+
+          /* Task pane fills screen */
+          .mp-task-pane {
+            padding: 0 !important;
+          }
+        }
+
+        /* Very small screens (< 360px) */
+        @media (max-width: 360px) {
+          .mp-header-name {
+            max-width: 100px;
+          }
+          .mp-offer-btn {
+            font-size: 11px !important;
+            padding: 5px 8px !important;
+          }
+          .mp-icon-btn {
+            padding: 5px !important;
+          }
+        }
+
+        /* Tablet (769px – 1024px): slightly narrower sidebar */
+        @media (min-width: 769px) and (max-width: 1024px) {
+          .mp-sidebar {
+            min-width: 220px !important;
+          }
         }
       `}</style>
     </>

@@ -1,0 +1,193 @@
+[
+    {
+        "question": "How do I become a Kaam-ly worker?",
+        "answer": "You can sign up through the Kaam-ly worker registration page. Complete identity verification and submit proof of skills if applicable."
+    },
+    {
+        "question": "How is my skill verified?",
+        "answer": "Kaam-ly may verify your skills through documents, certifications, or test tasks depending on the service category."
+    },
+    {
+        "question": "How do I update my profile or skills?",
+        "answer": "You can edit your profile, update skills, or add new certifications anytime through the Kaam-ly worker app."
+    },
+    {
+        "question": "Can I provide special services or packages?",
+        "answer": "Yes, you can list additional services, packages, or hourly rates in your worker profile to offer more options to users."
+    },
+    {
+        "question": "Can workers set preferences for types of jobs?",
+        "answer": "Yes, workers can indicate preferred services or types of tasks in their profile, which helps match them with suitable users."
+    },
+    {
+        "question": "How can workers improve their profile visibility?",
+        "answer": "Workers can improve visibility by completing their profile, verifying skills, maintaining high ratings, and responding promptly to requests."
+    },
+
+    {
+        "question": "What are your working hours?",
+        "answer": "Kaam-ly workers are available according to their individual schedules. You can see available time slots when booking."
+    },
+    {
+        "question": "How do I set my availability?",
+        "answer": "Workers can set their available days and time slots in the Kaam-ly app. Only available slots will be shown to users when booking."
+    },
+    {
+        "question": "Can I accept or reject a booking request?",
+        "answer": "Yes, workers can review booking requests and accept or decline based on their schedule and preferences."
+    },
+    {
+        "question": "Can workers accept urgent or same-day bookings?",
+        "answer": "Yes, workers can choose to accept urgent or same-day bookings based on their availability. The app will highlight urgent requests for quick response."
+    },
+    {
+        "question": "Can workers block off certain days or hours?",
+        "answer": "Yes, workers can mark certain days or time slots as unavailable to avoid receiving booking requests during that time."
+    },
+    {
+        "question": "How do I manage multiple bookings?",
+        "answer": "Kaam-ly allows you to see all your bookings in a calendar view. You can manage, reschedule, or block times to avoid conflicts."
+    },
+    {
+        "question": "Can workers track multiple bookings at once?",
+        "answer": "Yes, workers can view all active and upcoming bookings in a calendar view to manage time efficiently."
+    },
+    {
+        "question": "Can I work for multiple locations in a day?",
+        "answer": "Yes, workers can accept bookings for multiple locations, but must ensure they can complete all assigned services on time."
+    },
+    {
+        "question": "Can workers manage multiple locations or cities?",
+        "answer": "Yes, workers who operate in multiple locations can indicate this in their profile. The app will match them with users in those areas."
+    },
+    {
+        "question": "How do workers manage recurring bookings?",
+        "answer": "Workers can see recurring bookings in their calendar and manage them just like regular bookings, including rescheduling or marking unavailable."
+    },
+    {
+        "question": "Can workers communicate with multiple users at the same time?",
+        "answer": "Yes, workers can chat with multiple users via the in-app chat feature to coordinate bookings and confirm service details."
+    },
+
+    {
+        "question": "How much notice do I need to cancel a booking?",
+        "answer": "Cancellations must be made at least 5 hours before the scheduled service. If cancelled less than 5 hours in advance, only half of the payment will be refunded, and the remaining half will go to the worker."
+    },
+    {
+        "question": "What happens if a worker cancels a booking last minute?",
+        "answer": "Cancelling a booking less than 5 hours before the scheduled time may affect your ratings, and the user receives a full refund."
+    },
+    {
+        "question": "Are workers allowed to cancel for emergencies?",
+        "answer": "Yes, workers can cancel in case of emergencies. The app encourages notifying users as soon as possible. Cancellation rules still apply for refunds."
+    },
+    {
+        "question": "Can workers decline a user request without penalty?",
+        "answer": "Yes, workers can decline requests as long as they do so reasonably in advance. Frequent last-minute declines may affect their ratings."
+    },
+    {
+        "question": "What happens if a user repeatedly cancels bookings?",
+        "answer": "Kaam-ly tracks repeated late cancellations. Frequent offenders may have limited booking privileges to protect workers' time."
+    },
+    {
+        "question": "What if a user cancels last minute?",
+        "answer": "If a user cancels less than 5 hours before the scheduled service, you receive half of the payment as compensation for your time."
+    },
+    {
+        "question": "What happens if a worker is unwell and can't complete a booking?",
+        "answer": "Workers should notify the user immediately via the app. Cancellation policies apply, and Kaam-ly support can help reassign another worker if needed."
+    },
+    {
+        "question": "What if a user reports a no-show?",
+        "answer": "If a worker does not arrive or respond to messages or calls, the user can report a 'No-Show' in the app. Kaam-ly will issue a full refund to the user and may impose penalties on the worker, including rating deductions or temporary suspension."
+    },
+
+    {
+        "question": "How do I get paid?",
+        "answer": "Payments are processed securely via Kaam-ly. Workers receive payments after completing a service. Payment schedules and methods are shown in the app."
+    },
+    {
+        "question": "How does the escrow payment system work?",
+        "answer": "Kaam-ly holds all payments in a secure escrow until the service is completed and confirmed by the user. This ensures that workers are paid and users only pay for completed services."
+    },
+    {
+        "question": "Can workers see the payment before completing the service?",
+        "answer": "Yes, workers can see that the payment is secured in escrow, but the funds are only released after the service is confirmed by the user."
+    },
+    {
+        "question": "How quickly do workers receive their payment?",
+        "answer": "Workers receive their payment immediately after service completion and user confirmation, or within a set period in case of no dispute."
+    },
+    {
+        "question": "Can workers set different rates for different services?",
+        "answer": "Yes, workers can specify custom rates for each service they provide. Rates are visible to users before booking."
+    },
+    {
+        "question": "Can workers see their earnings history?",
+        "answer": "Yes, workers can view their completed services, earnings, and payouts in the app under 'Earnings History'."
+    },
+    {
+        "question": "Who pays for extra materials or parts needed for a job?",
+        "answer": "Any additional materials or parts required for a job are usually paid by the user. The worker should provide an estimate before purchasing, and the user can approve it via the app. Kaam-ly can facilitate payment for these materials securely if processed within the app."
+    },
+
+    {
+        "question": "How do I handle disputes?",
+        "answer": "If a user reports an issue, Kaam-ly support will review the case. Workers may be asked to provide evidence or clarify the situation."
+    },
+    {
+        "question": "How are disputes handled with the escrow system?",
+        "answer": "If there is an issue with a service, Kaam-ly will review the case. Funds in escrow will only be released to the worker or refunded to the user based on the resolution."
+    },
+    {
+        "question": "What happens if a worker cannot complete the job after starting?",
+        "answer": "If a worker begins a job but cannot complete it due to lack of tools, expertise, or unforeseen circumstances, Kaam-ly will mediate. The worker will receive partial payment for the work completed, and the user can either request another worker or reschedule the remaining tasks."
+    },
+    {
+        "question": "Can workers report users for misconduct?",
+        "answer": "Yes, if a user behaves unprofessionally or violates Kaam-ly rules, workers can report them through the app. Kaam-ly will investigate."
+    },
+    {
+        "question": "What should I do if I feel unsafe during a service?",
+        "answer": "If you feel unsafe, use the 'Report Safety Incident' button in the app immediately. Kaam-ly will alert a human admin and, if necessary, local emergency services. You should also leave the location if possible and safe."
+    },
+    {
+        "question": "Are there safety measures for workers?",
+        "answer": "Yes, Kaam-ly provides guidelines for worker safety, including verified users, in-app chat, and optional emergency contacts."
+    },
+    {
+        "question": "Are there rules for night or off-hour services?",
+        "answer": "Yes, workers can choose whether to accept night or off-hour services. Safety guidelines and optional buddy features are recommended for late services."
+    },
+    {
+        "question": "Are there guidelines for handling valuable items or sensitive tasks?",
+        "answer": "Yes, Kaam-ly provides guidance and best practices for handling clients' belongings safely and professionally."
+    },
+
+    {
+        "question": "Do I need to provide tools or materials?",
+        "answer": "Most services require workers to bring their own tools. Any special requirements will be mentioned in the booking request."
+    },
+    {
+        "question": "Can workers share tools or materials with clients?",
+        "answer": "Workers may share tools only if agreed upon with the user in advance. Kaam-ly encourages bringing personal tools to avoid disputes."
+    },
+    {
+        "question": "What should I do if I am running late?",
+        "answer": "Notify the user immediately via the Kaam-ly chat."
+    },
+
+    {
+        "question": "Can I see ratings and reviews for my profile?",
+        "answer": "Yes, users can rate and leave reviews after each service. You can view your ratings and feedback in your profile."
+    },
+
+       {
+        "question": "Can I pause or deactivate my worker account?",
+        "answer": "Yes, you can temporarily pause availability or deactivate your account via the worker settings in the app."
+    },
+    {
+        "question": "Can workers pause their account temporarily for personal reasons?",
+        "answer": "Yes, workers can temporarily deactivate their account or pause availability, and reactivate it later without losing their profile data."
+    }
+]

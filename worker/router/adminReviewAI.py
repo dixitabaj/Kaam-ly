@@ -1,6 +1,7 @@
 import os
 import json
 import httpx
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
@@ -13,10 +14,23 @@ from ..config.database import (
     collection_reviews,
     collection_task,
     chat_collection,
+    db,  # <-- import db so we can create the new collection
 )
 from dotenv import load_dotenv
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 router = APIRouter(tags=["ai-review"])
+
+# ─── New collection ────────────────────────────────────────────────────────────
+# Each document shape:
+# {
+#   _id:         ObjectId  (auto)
+#   report_id:   str       (the report this review belongs to)
+#   ai_result:   dict      (full JSON returned by the LLM)
+#   context:     dict      (snapshot of all gathered context at review time)
+#   reviewed_by: str       (admin user id — pass in header or hardcode for now)
+#   created_at:  datetime
+# }
+ai_review_history = db["ai_review_history"]
 
 # Groq API config
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -194,7 +208,6 @@ def _build_review_prompt(ctx: dict) -> str:
     review_lines = "\n".join(f"  - {rv['stars']} stars: \"{rv['text']}\"" for rv in rvs) or "  No reviews."
     job_lines    = "\n".join(f"  - {j['taskType']} | {j['status']} | payment:{j['paymentStatus']} | escrow:{j['escrowStatus']}" for j in jbs) or "  No job history."
 
-    # Optional internal scoring hint
     risk_score = 0
     if rpd.get("ratings") and rpd["ratings"] < 3:
         risk_score += 0.2
@@ -262,11 +275,13 @@ Return exactly this JSON object:
   "profileInsight": ""
 }}"""
 
-# Endpoints
+
+# ─── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/reports/{report_id}/ai-context")
 def get_ai_context(report_id: str):
     return _gather_context(report_id)
+
 
 @router.post("/reports/{report_id}/ai-review")
 async def run_ai_review(report_id: str):
@@ -274,7 +289,7 @@ async def run_ai_review(report_id: str):
     prompt = _build_review_prompt(ctx)
     text   = await _call_llm(prompt)
 
-    clean = text.replace("```json","").replace("```","").strip()
+    clean = text.replace("```json", "").replace("```", "").strip()
     try:
         result = json.loads(clean)
     except json.JSONDecodeError:
@@ -283,7 +298,73 @@ async def run_ai_review(report_id: str):
         except json.JSONDecodeError:
             raise HTTPException(status_code=502, detail=f"LLM returned invalid JSON: {clean[:300]}")
 
-    return {"aiResult": result, "context": ctx}
+    # ── Save to history ────────────────────────────────────────────────────────
+    history_doc = {
+        "report_id":  report_id,
+        "ai_result":  result,
+        "context":    ctx,
+        "created_at": datetime.now(timezone.utc),
+    }
+    inserted = ai_review_history.insert_one(history_doc)
+    history_id = str(inserted.inserted_id)
+    # ──────────────────────────────────────────────────────────────────────────
+
+    return {
+        "historyId": history_id,   # frontend can store this if needed
+        "aiResult":  result,
+        "context":   ctx,
+    }
+
+
+@router.get("/reports/{report_id}/ai-review/history")
+def get_review_history(report_id: str):
+    """Return all past AI reviews for a given report, newest first."""
+    docs = list(
+        ai_review_history
+        .find({"report_id": report_id})
+        .sort("created_at", -1)
+    )
+    for d in docs:
+        d["id"] = str(d["_id"])
+        del d["_id"]
+        # serialize datetime for JSON
+        if isinstance(d.get("created_at"), datetime):
+            d["created_at"] = d["created_at"].isoformat()
+
+    return {"reportId": report_id, "total": len(docs), "reviews": docs}
+
+
+@router.get("/ai-review/history")
+def get_all_review_history(limit: int = 50, skip: int = 0):
+    """Return all AI review history across all reports (admin dashboard use)."""
+    docs = list(
+        ai_review_history
+        .find()
+        .sort("created_at", -1)
+        .skip(skip)
+        .limit(limit)
+    )
+    for d in docs:
+        d["id"] = str(d["_id"])
+        del d["_id"]
+        if isinstance(d.get("created_at"), datetime):
+            d["created_at"] = d["created_at"].isoformat()
+
+    total = ai_review_history.count_documents({})
+    return {"total": total, "limit": limit, "skip": skip, "reviews": docs}
+
+
+@router.delete("/ai-review/history/{history_id}")
+def delete_review_history(history_id: str):
+    """Delete a single history entry by its own id."""
+    oid = _safe_oid(history_id)
+    if not oid:
+        raise HTTPException(status_code=400, detail="Invalid history id")
+    result = ai_review_history.delete_one({"_id": oid})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="History entry not found")
+    return {"deleted": history_id}
+
 
 @router.post("/reports/{report_id}/ai-draft")
 async def generate_draft(report_id: str, body: DraftRequest):

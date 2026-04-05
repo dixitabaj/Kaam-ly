@@ -17,6 +17,201 @@
   justify-content: space-between;
 }
 
+/* ── Notification wrapper ── */
+.notif-wrapper {
+  position: relative;
+}
+
+/* ── Notification panel ── */
+.notif-panel {
+  position: absolute;
+  right: 0;
+  left: auto;
+  top: calc(100% + 10px);
+  width: 340px;
+  max-height: 480px;
+  overflow-y: auto;
+  z-index: 1000;
+  background: white;
+  border: 1px solid #e8dfd0;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+}
+
+/* ── Panel header ── */
+.notif-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid #f0ebe3;
+  position: sticky;
+  top: 0;
+  background: white;
+  z-index: 1;
+}
+
+.notif-panel-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.notif-panel-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: #1c1008;
+}
+
+.notif-panel-count {
+  background: #f6a623;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.notif-mark-all {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: #f6a623;
+  font-weight: 600;
+  padding: 0;
+}
+
+.notif-mark-all:hover {
+  text-decoration: underline;
+}
+
+/* ── Notification list ── */
+.notif-list {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Individual item ── */
+.notif-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid #f5f0ea;
+  transition: background 0.15s;
+}
+
+.notif-item:last-child {
+  border-bottom: none;
+}
+
+.notif-item:hover {
+  background: #fdf8f2;
+}
+
+.notif-item.unread {
+  background: #fffbf5;
+}
+
+.notif-item.read {
+  background: white;
+}
+
+.notif-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.notif-title {
+  font-weight: 600;
+  font-size: 13.5px;
+  color: #1c1008;
+  margin-bottom: 2px;
+}
+
+
+.notif-time {
+  font-size: 11px;
+  color: #a8a29e;
+  margin-top: 4px;
+}
+
+.notif-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f6a623;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+/* ── Empty / loading state ── */
+.notif-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #a8a29e;
+  font-size: 13px;
+  gap: 4px;
+}
+
+/* ── Spinner ── */
+.notif-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid #e8dfd0;
+  border-top-color: #f6a623;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  margin-bottom: 8px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Bell button ── */
+.notif-bell-btn {
+  position: relative;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  color: #57534e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+
+.notif-bell-btn:hover {
+  background: #f5f0ea;
+}
+
+/* ── Badge ── */
+.notif-badge {
+  position: absolute;
+  top: 0px;
+  right: 0px;
+  background: #f6a623;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 17px;
+  height: 17px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  line-height: 1;
+}
+
 .booking-logo {
   font-size: 1.5rem;
   font-weight: bold;
@@ -351,11 +546,10 @@
 }
 
 .notif-message {
-  font-size: 12px; color: #64748b; line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  font-size: 12.5px;
+  color: #57534e;
+  line-height: 1.4;
+  /* removed: white-space, overflow, text-overflow */
 }
 
 .notif-time {

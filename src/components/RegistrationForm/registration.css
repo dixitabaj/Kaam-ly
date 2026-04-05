@@ -121,7 +121,6 @@
   font-size: 12px; /* Smaller error text */
   color: #ef4444;
   margin-top: 4px; /* Reduced spacing */
-  margin-left: 4px; /* Reduced from 5px */
   min-height: 16px; /* Prevent layout shift */
 }
 

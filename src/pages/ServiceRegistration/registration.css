@@ -115,17 +115,20 @@
   line-height: 1.5;
 }
 
-/* ── Category pills ───────────────────────────────────────────────────────── */
+/* ── Category pills (multi-select) ───────────────────────────────────────── */
 .reg-category-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
 }
 
+.reg-category-option { position: relative; }
 .reg-category-option input { display: none; }
 
 .reg-category-pill {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 10px 20px;
   border: 2px solid #e2e8f0;
   border-radius: 99px;
@@ -137,12 +140,43 @@
   transition: all 0.2s;
   user-select: none;
 }
-.reg-category-pill:hover { border-color: #94a3b8; color: #1e293b; }
+.reg-category-pill:hover {
+  border-color: #94a3b8;
+  color: #1e293b;
+  background: #f8fafc;
+}
 .reg-category-pill.active {
   background: #1e293b;
   border-color: #1e293b;
   color: #fff;
   box-shadow: 0 4px 14px rgba(30,41,59,0.18);
+  padding-left: 12px;
+}
+
+/* checkmark bubble inside active pill */
+.reg-category-pill.active::before {
+  content: '✓';
+  font-size: 10px;
+  font-weight: 800;
+  background: rgba(255,255,255,0.22);
+  border-radius: 50%;
+  width: 17px;
+  height: 17px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* helper text shown below the grid when >1 selected */
+.reg-category-selected-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+.reg-category-selected-hint strong {
+  color: #1e293b;
 }
 
 /* ── Skill cards ──────────────────────────────────────────────────────────── */
@@ -208,6 +242,43 @@
   margin: 10px 0 8px;
 }
 
+/* sub-skill row (checkbox + optional rate input) */
+.reg-sub-rate-list  { display: flex; flex-direction: column; gap: 8px; }
+
+.reg-sub-rate-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  transition: border-color 0.15s, background 0.15s;
+}
+.reg-sub-rate-row.selected {
+  border-color: #1e293b;
+  background: #f8fafc;
+}
+
+.reg-sub-rate-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  flex: 1;
+  user-select: none;
+}
+.reg-sub-rate-check input { display: none; }
+
+.reg-sub-rate-name {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #475569;
+  transition: color 0.15s;
+}
+.reg-sub-rate-name.active { color: #1e293b; font-weight: 600; }
+
 .reg-chips {
   display: flex;
   flex-wrap: wrap;
@@ -234,6 +305,11 @@
   border-color: #3b82f6;
   color: #fff;
   box-shadow: 0 4px 12px rgba(59,130,246,0.2);
+}
+.reg-chip.active.green {
+  background: #16a34a;
+  border-color: #16a34a;
+  box-shadow: 0 4px 12px rgba(22,163,74,0.2);
 }
 
 /* ── Rates ────────────────────────────────────────────────────────────────── */
@@ -761,6 +837,42 @@
   background: #fee2e2;
 }
 
+/* ── Face verification banner ─────────────────────────────────────────────── */
+.reg-face-required-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 16px;
+  background: #fffbeb;
+  border: 1.5px solid #fde68a;
+  border-radius: 10px;
+  font-size: 13px;
+  color: #92400e;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+.reg-face-required-icon { font-size: 15px; flex-shrink: 0; }
+
+.reg-required-badge {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  background: #fee2e2;
+  color: #b91c1c;
+  border-radius: 99px;
+  padding: 2px 9px;
+  letter-spacing: 0.03em;
+  vertical-align: middle;
+}
+
+.reg-optional-tag {
+  font-size: 12px;
+  font-weight: 500;
+  color: #94a3b8;
+  margin-left: 6px;
+}
+
 /* ── Buttons ──────────────────────────────────────────────────────────────── */
 .reg-primary-btn {
   width: 100%;
@@ -878,15 +990,15 @@
 @media (max-width: 640px) {
   .reg-card           { padding: 32px 20px; }
   .reg-step-labels    { display: none; }
-  .reg-avail-header,
-  .reg-avail-row      { grid-template-columns: 72px repeat(3, 1fr); padding: 8px 10px; gap: 6px; }
-  .reg-avail-day      { font-size: 12px; }
-  .reg-avail-col-label { font-size: 11.5px; }
-  .reg-avail-block    { height: 34px; }
+  .reg-avail-day-row  { padding: 10px 12px; gap: 10px; }
+  .reg-avail-day-left { min-width: 110px; }
   .reg-nav            { flex-direction: column-reverse; }
   .reg-back-btn       { width: 100%; }
   .reg-photo-row      { flex-direction: column; align-items: flex-start; }
   .reg-verify-photos  { gap: 10px; }
   .reg-verify-thumb-lg { width: 54px; height: 54px; }
   .reg-upload-zone    { padding: 20px 14px; }
+  .reg-category-grid  { gap: 8px; }
+  .reg-category-pill  { font-size: 12.5px; padding: 8px 14px; }
+  .reg-sub-wrap       { padding-left: 16px; }
 }

@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image, ImageStat
 
 MODEL_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "../model/image_classification.pth")
+    os.path.join(os.path.dirname(__file__), "../model/ml_models/image_classification.pth")
 )
 
 CLASS_NAMES = {

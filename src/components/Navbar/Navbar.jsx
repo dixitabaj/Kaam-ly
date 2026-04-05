@@ -50,16 +50,11 @@ const BookingNavbar = () => {
     return () => clearInterval(interval);
   }, [currentUser?.id]);
 
-  // ── Fetch ALL notifications when panel opens ───────────────────────────────
-  const openNotifications = async () => {
-    const opening = !notifOpen;
-    setNotifOpen(opening);
-    setDropdownOpen(false);
-    if (!opening || !currentUser?.id) return;
-
+  // ── Fetch notifications ────────────────────────────────────────────────────
+  const fetchNotifications = async () => {
+    if (!currentUser?.id) return;
     setNotifLoading(true);
     try {
-      // Try all-notifications endpoint first, fall back to unread
       const res  = await fetch(`${BASE}/notifications/${currentUser.id}`);
       const data = await res.json();
       const all  = Array.isArray(data.notifications) ? data.notifications : [];
@@ -72,6 +67,21 @@ const BookingNavbar = () => {
     }
   };
 
+  // ── Open / toggle notification panel ──────────────────────────────────────
+  const openNotifications = async (forceOpen = false) => {
+    const opening = forceOpen ? true : !notifOpen;
+    setNotifOpen(opening);
+    setDropdownOpen(false);
+    if (opening) await fetchNotifications();
+  };
+
+  // ── Listen for toast click event ───────────────────────────────────────────
+  useEffect(() => {
+    const handler = () => openNotifications(true);
+    window.addEventListener('open-notif-panel', handler);
+    return () => window.removeEventListener('open-notif-panel', handler);
+  }, [currentUser?.id]);
+
   const markRead = async (notif) => {
     if (notif.link) { navigate(notif.link); setNotifOpen(false); }
   };
@@ -83,7 +93,7 @@ const BookingNavbar = () => {
     setUnreadCount(0);
   };
 
-  // ── Close dropdowns on outside click ──────────────────────────────────────
+  // ── Close on outside click ─────────────────────────────────────────────────
   useEffect(() => {
     const handle = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setDropdownOpen(false);
@@ -160,7 +170,6 @@ const BookingNavbar = () => {
               <div className="booking-nav-link" onClick={() => navigate('/admin/dashboard')}>Dashboard</div>
               <div className="booking-nav-link" onClick={() => navigate('/admin/payouts')}>Payouts</div>
               <div className="booking-nav-link" onClick={() => navigate('/workerVerification')}>Worker Verification</div>
-
               <div className="booking-nav-link" onClick={() => navigate('/refund')}>Refunds</div>
             </>
           )}
@@ -168,7 +177,7 @@ const BookingNavbar = () => {
           {/* ── Notification Bell ── */}
           {currentUser && (
             <div className="notif-wrapper" ref={notifRef}>
-              <button className="notif-bell-btn" onClick={openNotifications} aria-label="Notifications">
+              <button className="notif-bell-btn" onClick={() => openNotifications()} aria-label="Notifications">
                 <Bell size={22} />
                 {unreadCount > 0 && (
                   <span className="notif-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>

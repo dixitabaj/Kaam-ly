@@ -1,4 +1,4 @@
- // components/HelpSection/HelpSection.jsx
+// components/HelpSection/HelpSection.jsx
 
 import { useState, useRef, useEffect } from "react";
 import './HelpSection.css';
@@ -30,9 +30,24 @@ const LOCAL_RESPONSES = {
 };
 
 const LOCAL_LABELS = {
-  __report_user__:    "Report a User",
-  __contact_support__:"Contact Support",
+  __report_user__:     "Report a User",
+  __contact_support__: "Contact Support",
 };
+
+const CHAT_ENDPOINTS = {
+  customer: "/api/chatbot",
+  worker:   "/api/worker/chatbot",
+};
+
+function getChatEndpoint() {
+  try {
+    const stored = localStorage.getItem("user");
+    const role   = stored ? JSON.parse(stored)?.role : null;
+    return CHAT_ENDPOINTS[role] ?? CHAT_ENDPOINTS.customer;
+  } catch {
+    return CHAT_ENDPOINTS.customer;
+  }
+}
 
 function renderText(text) {
   return text.split("\n").map((line, i, arr) => {
@@ -85,7 +100,7 @@ export default function ChatWidget() {
     const msgLower        = msg.toLowerCase();
     const reportKeywords  = ["report", "report a user", "report user", "report worker", "misconduct"];
     const supportKeywords = ["contact support", "contact us", "email support", "reach support"];
-    const isReport        = msg === "__report_user__"    || reportKeywords.some(k => msgLower.includes(k));
+    const isReport        = msg === "__report_user__"     || reportKeywords.some(k => msgLower.includes(k));
     const isSupport       = msg === "__contact_support__" || (!isReport && supportKeywords.some(k => msgLower.includes(k)));
 
     if (isReport) {
@@ -112,7 +127,8 @@ export default function ChatWidget() {
     setIsTyping(true);
 
     try {
-      const response = await sendChatMessage(msg);
+      const endpoint = getChatEndpoint();
+      const response = await sendChatMessage(msg, endpoint);
       setIsTyping(false);
       addMessage(response, "bot");
     } catch {

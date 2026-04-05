@@ -5,6 +5,8 @@ import RegistrationForm from '../../components/RegistrationForm/RegistrationForm
 import LivenessCheck from '../../components/FaceVerification/LivenessCheck';
 import './registration.css';
 import { checkEmailExists, checkPhoneExists } from '../../api/api';
+import WhatsAppSupport from '../../components/WhatsApp/WhatsApp';
+
 const DAYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
 
 const DEFAULT_START = '09:00';
@@ -44,22 +46,22 @@ const ServiceRegistration = () => {
   const [fileErrors, setFileErrors] = useState({});
 
   const [formData, setFormData] = useState({
-    firstName:       '',
-    lastName:        '',
-    email:           '',
-    phone:           '',
-    password:        '',
-    confirmPassword: '',
-    serviceCategory: '',
-    skills:          [],
-    subSkills:       {},
-    hourlyRates:     {},
-    serviceAreas:    [],
-    profilePhoto:    '',
-    description:     '',
-    skillProofFiles: {},
-    availability:    makeAvailability(),
-    minHours:        1,
+    firstName:        '',
+    lastName:         '',
+    email:            '',
+    phone:            '',
+    password:         '',
+    confirmPassword:  '',
+    serviceCategories: [],   // ← now an array (was serviceCategory: '')
+    skills:           [],
+    subSkills:        {},
+    hourlyRates:      {},
+    serviceAreas:     [],
+    profilePhoto:     '',
+    description:      '',
+    skillProofFiles:  {},
+    availability:     makeAvailability(),
+    minHours:         1,
   });
 
   const [isValidating, setIsValidating] = useState(false);
@@ -102,6 +104,42 @@ const ServiceRegistration = () => {
     const { name, value, type, checked } = e.target;
     setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+  };
+
+  // ── NEW: toggle a category on/off (multi-select) ───────────────────────────
+  const handleCategoryToggle = (catId) => {
+    setFormData(prev => {
+      const already = prev.serviceCategories.includes(catId);
+
+      if (already) {
+        // Remove all skills/subSkills/rates/files that belong to this category
+        const skillsToRemove = Object.keys(categorySkillsMap[catId] || {});
+        const newSkills  = prev.skills.filter(s => !skillsToRemove.includes(s));
+        const newSub     = { ...prev.subSkills };
+        const newRates   = { ...prev.hourlyRates };
+        const newFiles   = { ...prev.skillProofFiles };
+        skillsToRemove.forEach(s => {
+          delete newSub[s];
+          delete newFiles[s];
+          Object.keys(newRates).forEach(k => {
+            if (k.startsWith(`${s}::`)) delete newRates[k];
+          });
+        });
+        return {
+          ...prev,
+          serviceCategories: prev.serviceCategories.filter(c => c !== catId),
+          skills:            newSkills,
+          subSkills:         newSub,
+          hourlyRates:       newRates,
+          skillProofFiles:   newFiles,
+        };
+      }
+
+      // Add category
+      return { ...prev, serviceCategories: [...prev.serviceCategories, catId] };
+    });
+
+    if (errors.serviceCategory) setErrors(prev => ({ ...prev, serviceCategory: '' }));
   };
 
   const handleSkillToggle = (skill) => {
@@ -227,16 +265,15 @@ const ServiceRegistration = () => {
     }
 
     if (step === 2) {
-      if (!formData.serviceCategory)     e.serviceCategory = 'Pick a category';
-      if (formData.skills.length < 1)    e.skills          = 'Select at least one skill';
+      // ← updated: check array length instead of single value
+      if (formData.serviceCategories.length === 0) e.serviceCategory = 'Pick at least one category';
+      if (formData.skills.length < 1)              e.skills          = 'Select at least one skill';
 
-      // Every selected skill must have at least one sub-skill selected
       const missingSubs = formData.skills.some(skill =>
         (formData.subSkills[skill] || []).length === 0
       );
       if (missingSubs) e.skills = 'Select at least one job type for each skill';
 
-      // Every selected sub-skill must have a rate > 0
       const missingRates = formData.skills.some(skill =>
         (formData.subSkills[skill] || []).some(sub =>
           !formData.hourlyRates[`${skill}::${sub}`] ||
@@ -274,14 +311,12 @@ const ServiceRegistration = () => {
 
   // ── nextStep blocks if validation fails ────────────────────────────────────
   const nextStep = async () => {
-    if (step === 4) setTouched(p => ({ ...p, step4: true }));
     setIsValidating(true);
     const valid = await validateStep();
     setIsValidating(false);
     if (valid) {
       setStep(p => Math.min(p + 1, 5));
     } else {
-      // Scroll to first error so user sees it
       setTimeout(() => {
         const firstError = document.querySelector('.reg-error');
         if (firstError) firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -311,7 +346,6 @@ const ServiceRegistration = () => {
       return;
     }
 
-    // Price lives only on sub-skills, not on the parent skill
     const skillsPayload = formData.skills.map(skillName => ({
       name:      skillName,
       subSkills: (formData.subSkills[skillName] || []).map(sub => ({
@@ -326,7 +360,7 @@ const ServiceRegistration = () => {
       phoneNo:        formData.phone,
       email:          formData.email,
       password:       formData.password,
-      taskType:       formData.serviceCategory,
+      taskType:       formData.serviceCategories.join(', '), // ← joined array
       skills:         skillsPayload,
       minHours:       parseInt(formData.minHours, 10) || 1,
       isAvailable:    true,
@@ -380,21 +414,30 @@ const ServiceRegistration = () => {
 
   // ── STEP 2 ─────────────────────────────────────────────────────────────────
   const renderStep2 = () => {
-    const skillMap = categorySkillsMap[formData.serviceCategory] || {};
+    // ← Merge skills from ALL selected categories
+    const skillMap = formData.serviceCategories.reduce((acc, cat) => ({
+      ...acc, ...(categorySkillsMap[cat] || {}),
+    }), {});
+
     return (
       <div className="reg-step">
         <h2 className="reg-step-title">What do you offer?</h2>
-        <p className="reg-step-sub">Pick a category, then select your skills and set rates per job type</p>
+        <p className="reg-step-sub">Pick one or more categories, then select your skills and set rates per job type</p>
 
         <div className="reg-field-group">
           <label className="reg-label">Service category</label>
           <Err field="serviceCategory" />
+          {/* ← checkboxes instead of radio buttons */}
           <div className="reg-category-grid">
             {serviceCategories.map(cat => (
               <label key={cat.id} className="reg-category-option">
-                <input type="radio" name="serviceCategory" value={cat.id}
-                  checked={formData.serviceCategory === cat.id} onChange={handleChange} />
-                <span className={`reg-category-pill ${formData.serviceCategory === cat.id ? 'active' : ''}`}>
+                <input
+                  type="checkbox"
+                  value={cat.id}
+                  checked={formData.serviceCategories.includes(cat.id)}
+                  onChange={() => handleCategoryToggle(cat.id)}
+                />
+                <span className={`reg-category-pill ${formData.serviceCategories.includes(cat.id) ? 'active' : ''}`}>
                   {cat.label}
                 </span>
               </label>
@@ -402,7 +445,7 @@ const ServiceRegistration = () => {
           </div>
         </div>
 
-        {formData.serviceCategory && (
+        {formData.serviceCategories.length > 0 && (
           <div className="reg-field-group">
             <label className="reg-label">Skills & rates</label>
             <p className="reg-hint-text">
@@ -419,7 +462,6 @@ const ServiceRegistration = () => {
 
                 return (
                   <div key={skill} className={`reg-skill-card ${isSelected ? 'active' : ''}`}>
-                    {/* ── Skill toggle ── */}
                     <label className="reg-skill-toggle">
                       <input type="checkbox" checked={isSelected} onChange={() => handleSkillToggle(skill)} />
                       <div className="reg-skill-check">
@@ -429,7 +471,6 @@ const ServiceRegistration = () => {
                       {subs.length > 0 && <span className="reg-skill-hint">{subs.length} job types</span>}
                     </label>
 
-                    {/* ── Sub-skills + inline rates ── */}
                     {isSelected && subs.length > 0 && (
                       <div className="reg-sub-wrap">
                         <p className="reg-sub-label">Select job types and set your rate for each:</p>
@@ -438,14 +479,12 @@ const ServiceRegistration = () => {
                             const isSubSelected = selSubs.includes(sub);
                             return (
                               <div key={sub} className={`reg-sub-rate-row ${isSubSelected ? 'selected' : ''}`}>
-                                {/* Checkbox + name */}
                                 <label className="reg-sub-rate-check">
                                   <input type="checkbox" checked={isSubSelected}
                                     onChange={() => handleSubSkillToggle(skill, sub)} />
                                   <span className={`reg-sub-rate-name ${isSubSelected ? 'active' : ''}`}>{sub}</span>
                                 </label>
 
-                                {/* Rate input — only shown when sub-skill is selected */}
                                 {isSubSelected && (
                                   <div className="reg-rate-input-wrap">
                                     <span className="reg-rate-prefix">NPR</span>
@@ -821,7 +860,7 @@ const ServiceRegistration = () => {
               )}
               {step < 5
                 ? <button type="button" onClick={nextStep} className="reg-next-btn" disabled={isValidating}>
-                    {isValidating ? 'Checking...' : 'Continue'}
+                    {'Continue'}
                   </button>
                 : (
                   <button type="submit" className="reg-submit-btn"
@@ -840,6 +879,7 @@ const ServiceRegistration = () => {
             onClick={() => window.location.href = '/login'}>Sign in</button>
         </p>
       </div>
+      <WhatsAppSupport/>
     </div>
   );
 };
