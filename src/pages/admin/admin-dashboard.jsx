@@ -16,7 +16,6 @@ import {
   Star, MapPin, AlertTriangle, ClipboardList, AlertCircle,
   ShieldAlert, FileWarning, Clock, Wallet, ChevronRight,
 } from "lucide-react";
-import "./AdminDashboard.css";
 import WorkerManagement from "./workerManagement";
 import AdminSidebar from "./AdminSidebar";
 import ReportManagement from "./ReportDashboard";
@@ -24,6 +23,7 @@ import TaskManagement from "./taskPage";
 import BookingNavbar from "../../components/Navbar/Navbar";
 import CustomerManagement from "./customerManagement";
 import FraudDetectionBoard from "./FraudDetectionBoard";
+import "./adminDashboard.css";
 
 // ── Stat Card ─────────────────────────────────────────────────────────────────
 const StatCard = ({ title, value, icon: Icon, color }) => (
