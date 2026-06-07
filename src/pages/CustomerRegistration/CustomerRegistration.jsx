@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import './CustomerRegistration.css';
+
 import { registerCustomer, checkEmailExists, checkPhoneExists } from '../../api/api';
 import eyeOpenIcon from "../../images/open.png";
 import eyeCloseIcon from "../../images/closed.png";
 import logo from "../../images/logo.png";
+import './CustomerRegistration.css';
 
 const CustomerRegistration = () => {
   const [step, setStep] = useState(1);
