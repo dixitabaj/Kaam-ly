@@ -335,9 +335,25 @@ body {
   gap: 8px;
   margin-bottom: 4px;
 }
+
+.profile-photo-home {
+  width: clamp(44px, 7vw, 64px);
+  height: clamp(44px, 7vw, 64px);
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(14px, 3vw, 24px);
+  font-weight: 600;
+  flex-shrink: 0;
+  overflow: hidden;
+}
 /* Profile Photo */
 .worker-header {
   margin-bottom: 12px;
+
 }
 
 .worker-header-left {

@@ -1,3 +1,4 @@
+/* ── Base navbar ────────────────────────────────────────── */
 .booking-navbar {
   background-color: white;
   border-bottom: 1px solid #e2e8f0;
@@ -10,556 +11,399 @@
 }
 
 .booking-nav-content {
-  max-width: 1200px;
+  max-width: 90vw;
   margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 2%;
+  position: relative;
 }
 
-/* ── Notification wrapper ── */
+.booking-logo {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.booking-logo img {
+  width: 12vw;
+  max-width: 180px;
+  min-width: 120px;
+  height: auto;
+  cursor: pointer;
+}
+
+.booking-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 2%;
+  flex: 1;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.booking-nav-link {
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: #57534e;
+  cursor: pointer;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.booking-nav-link:hover {
+  background-color: #f5f0ea;
+  color: #1c1917;
+}
+
+.booking-nav-link.active {
+  background-color: #fef3c7;
+  color: #f59e0b;
+}
+
+/* ── Notification bell ────────────────────────────────────── */
 .notif-wrapper {
   position: relative;
 }
 
-/* ── Notification panel ── */
-.notif-panel {
-  position: absolute;
-  right: 0;
-  left: auto;
-  top: calc(100% + 10px);
-  width: 340px;
-  max-height: 480px;
-  overflow-y: auto;
-  z-index: 1000;
-  background: white;
-  border: 1px solid #e8dfd0;
-  border-radius: 14px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
-}
-
-/* ── Panel header ── */
-.notif-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
-  border-bottom: 1px solid #f0ebe3;
-  position: sticky;
-  top: 0;
-  background: white;
-  z-index: 1;
-}
-
-.notif-panel-title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.notif-panel-title {
-  font-weight: 700;
-  font-size: 15px;
-  color: #1c1008;
-}
-
-.notif-panel-count {
-  background: #f6a623;
-  color: white;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 20px;
-}
-
-.notif-mark-all {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 12px;
-  color: #f6a623;
-  font-weight: 600;
-  padding: 0;
-}
-
-.notif-mark-all:hover {
-  text-decoration: underline;
-}
-
-/* ── Notification list ── */
-.notif-list {
-  display: flex;
-  flex-direction: column;
-}
-
-/* ── Individual item ── */
-.notif-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px 16px;
-  cursor: pointer;
-  border-bottom: 1px solid #f5f0ea;
-  transition: background 0.15s;
-}
-
-.notif-item:last-child {
-  border-bottom: none;
-}
-
-.notif-item:hover {
-  background: #fdf8f2;
-}
-
-.notif-item.unread {
-  background: #fffbf5;
-}
-
-.notif-item.read {
-  background: white;
-}
-
-.notif-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.notif-title {
-  font-weight: 600;
-  font-size: 13.5px;
-  color: #1c1008;
-  margin-bottom: 2px;
-}
-
-
-.notif-time {
-  font-size: 11px;
-  color: #a8a29e;
-  margin-top: 4px;
-}
-
-.notif-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #f6a623;
-  flex-shrink: 0;
-  margin-top: 4px;
-}
-
-/* ── Empty / loading state ── */
-.notif-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 20px;
-  color: #a8a29e;
-  font-size: 13px;
-  gap: 4px;
-}
-
-/* ── Spinner ── */
-.notif-spinner {
-  width: 22px;
-  height: 22px;
-  border: 2px solid #e8dfd0;
-  border-top-color: #f6a623;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-  margin-bottom: 8px;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* ── Bell button ── */
 .notif-bell-btn {
-  position: relative;
   background: none;
   border: none;
   cursor: pointer;
-  padding: 6px;
-  color: #57534e;
+  padding: 0.5rem;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
-  transition: background 0.15s;
+  color: #57534e;
+  transition: background 0.2s;
+  position: relative;
 }
 
 .notif-bell-btn:hover {
   background: #f5f0ea;
 }
 
-/* ── Badge ── */
 .notif-badge {
   position: absolute;
-  top: 0px;
-  right: 0px;
-  background: #f6a623;
-  color: white;
-  font-size: 10px;
-  font-weight: 700;
-  min-width: 17px;
-  height: 17px;
-  border-radius: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 3px;
-  line-height: 1;
-}
-
-.booking-logo {
-  font-size: 1.5rem;
-  font-weight: bold;
-  color: #111827;
-}
-
-.booking-logo img {
-  width: 150px;
-  height: auto;
-}
-
-.booking-nav-links {
-  display: flex;
-  align-items: center;
-  gap: 2rem;
-}
-
-.booking-nav-link {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: #64748b;
-  text-decoration: none;
-  font-weight: 500;
-  transition: color 0.3s;
-  padding: 0.5rem 0;
-  cursor: pointer;
-}
-
-.booking-nav-link:hover { color: #334155; }
-
-.booking-nav-link.active {
-  color: #111827;
-  font-weight: 600;
-  position: relative;
-}
-
-.booking-nav-link.active::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 0; right: 0;
-  height: 2px;
-  background-color: #059669;
-}
-
-/* ── Avatar button ─────────────────────────────────────────────────────────── */
-.booking-user-button {
-  width: 2.75rem;
-  height: 2.75rem;
-  border-radius: 50%;
-  border: 2px solid #1f2937;
-  background: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.booking-user-button:hover { background-color: #f3f4f6; }
-
-.booking-user-initials {
-  width: 22px; height: 22px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
-}
-
-/* ── Profile dropdown ──────────────────────────────────────────────────────── */
-.booking-profile-wrapper { position: relative; }
-
-.booking-dropdown {
-  position: absolute;
-  top: calc(100% + 10px);
+  top: 0;
   right: 0;
-  width: 220px;
-  background: #fff;
-  border: 1px solid #EDE8DF;
-  border-radius: 14px;
-  box-shadow: 0 8px 24px rgba(100, 60, 20, 0.12);
-  z-index: 9999;
-  overflow: hidden;
-  animation: dropdownIn 0.15s ease;
-}
-
-@keyframes dropdownIn {
-  from { opacity: 0; transform: translateY(-6px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.booking-dropdown-header {
-  display: flex; align-items: center; gap: 10px;
-  padding: 14px 16px;
-}
-
-.booking-dropdown-avatar {
-  width: 36px; height: 36px;
-  border-radius: 50%;
-  background: #E8843A18;
-  color: #E8843A;
-  font-size: 13px; font-weight: 700;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-  border: 1px solid #E8843A30;
-}
-
-.booking-dropdown-name {
-  font-size: 13px; font-weight: 600; color: #1C1410;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-
-.booking-dropdown-email {
-  font-size: 11px; color: #B0A89E;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-
-.booking-dropdown-divider { height: 1px; background: #FAF7F2; }
-
-.booking-dropdown-item {
-  width: 100%;
-  display: flex; align-items: center; gap: 10px;
-  padding: 11px 16px;
-  background: none; border: none; cursor: pointer;
-  font-size: 13px; font-weight: 500; color: #7A6E65;
-  text-align: left; font-family: inherit;
-}
-
-.booking-dropdown-item:hover { background: #F7F5EF; color: #1C1410; }
-
-.booking-dropdown-item--danger { color: #7A6E65; }
-.booking-dropdown-item--danger:hover { background: #D94F3D15; color: #D94F3D; }
-
-/* ── Notification bell ─────────────────────────────────────────────────────── */
-.notif-wrapper { position: relative; }
-
-.notif-bell-btn {
-  position: relative;
-  width: 2.75rem; height: 2.75rem;
-  border-radius: 50%;
-  border: none;
-  background: none;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; color: #64748b;
-  transition: background-color 0.2s, border-color 0.2s;
-}
-/* ── Notification bell ── */
-.notif-bell-btn {
-  position: relative;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #555;
-  border-radius: 50%;
-  transition: background 0.15s;
-}
-
-.notif-bell-btn:hover { background: #f5f5f5; }
-
-/* ── Badge ── */
-.notif-badge {
-  position: absolute;
-  top: -4px;
-  right: -6px;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 5px;
-  background: #7C3AED;
-  color: #fff;
-  font-size: 11px;
+  background: #ef4444;
+  color: white;
+  font-size: 0.7rem;
   font-weight: 700;
-  border-radius: 10px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  min-width: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
-  line-height: 1;
-  border: 2px solid #fff;
-  pointer-events: none;
-  z-index: 1;
 }
 
-/* ── Notification items ── */
-.notif-item.unread {
-  background: #FFFBF0;       /* warm highlight for unread */
-  border-left: 3px solid #E8800A;
+.notif-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  width: 25vw;
+  max-width: 380px;
+  min-width: 300px;
+  max-height: 60vh;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
 }
 
-.notif-item.read {
-  background: #F7F7F7;       /* muted grey for read */
-  border-left: 3px solid transparent;
-  opacity: 0.8;
-}
-
-.notif-item.read .notif-title {
-  font-weight: 400;          /* lighter weight for read */
-  color: #777;
-}
-
-.notif-item.read .notif-message {
-  color: #999;
-}
-
-.notif-item.read .notif-time {
-  color: #bbb;
+.notif-panel-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #f0ebe2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
 }
 
 .notif-panel-title-wrap {
   display: flex;
   align-items: center;
-  gap: 8px;
-}
-
-.notif-panel-count {
-  font-size: 11px;
-  font-weight: 600;
-  color: #fff;
-  background: #7C3AED;
-  padding: 2px 8px;
-  border-radius: 10px;
-  line-height: 1.6;
-}
-
-.notif-bell-btn:hover {
-  background-color: #f3f4f6;
-  border-color: #cbd5e1;
-  color: #1f2937;
-}
-
-.notif-badge {
-  position: absolute;
-  top: -4px; right: -4px;
-  min-width: 18px; height: 18px;
-  background: #ef4444;
-  color: white;
-  font-size: 10px; font-weight: 700;
-  border-radius: 999px;
-  display: flex; align-items: center; justify-content: center;
-  padding: 0 4px;
-  border: 2px solid white;
-  line-height: 1;
-}
-
-/* ── Notification panel ────────────────────────────────────────────────────── */
-.notif-panel {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
-  width: 360px;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.15);
-  z-index: 99999;
-  overflow: hidden;
-  animation: dropdownIn 0.15s ease;
-}
-
-.notif-panel-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 18px 14px;
-  border-bottom: 1px solid #f1f5f9;
-  background: #fff;
+  gap: 0.75rem;
 }
 
 .notif-panel-title {
-  font-size: 15px; font-weight: 700; color: #0f172a;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1c1917;
+}
+
+.notif-panel-count {
+  background: #fef3c7;
+  color: #f59e0b;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
 }
 
 .notif-mark-all {
-  background: none; border: none; cursor: pointer;
-  font-size: 12px; font-weight: 600; color: #E8843A;
-  font-family: inherit; padding: 0;
+  background: none;
+  border: none;
+  color: #f59e0b;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  transition: background 0.2s;
 }
 
-.notif-mark-all:hover { text-decoration: underline; }
+.notif-mark-all:hover {
+  background: #fef3c7;
+}
 
 .notif-list {
-  max-height: 400px;
+  flex: 1;
   overflow-y: auto;
-  background: #fff;
-}
-
-.notif-list::-webkit-scrollbar { width: 4px; }
-.notif-list::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 4px; }
-
-.notif-empty {
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  padding: 48px 20px;
-  gap: 8px;
-  color: #94a3b8; font-size: 13px;
-}
-
-.notif-spinner {
-  width: 22px; height: 22px;
-  border: 2.5px solid #e2e8f0;
-  border-top-color: #E8843A;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
+  max-height: 50vh;
 }
 
 .notif-item {
-  display: flex; align-items: flex-start; gap: 12px;
-  padding: 14px 18px;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #f5f0ea;
   cursor: pointer;
-  transition: background 0.12s;
-  position: relative;
-  border-bottom: 1px solid #f1f5f9;
+  transition: background 0.15s;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
 }
 
-.notif-item:last-child { border-bottom: none; }
-.notif-item:hover { background: #fafafa; }
-.notif-item.unread { background: #fffbf5; }
-.notif-item.unread:hover { background: #fff4e6; }
-
-.notif-icon {
-  width: 36px; height: 36px; flex-shrink: 0;
-  border-radius: 10px;
-  background: #f1f5f9;
-  display: flex; align-items: center; justify-content: center;
-  color: #64748b;
+.notif-item:hover {
+  background: #fafaf9;
 }
 
-.notif-body { flex: 1; min-width: 0; }
+.notif-item.unread {
+  background: #fffbf2;
+}
+
+.notif-item.unread:hover {
+  background: #fef9ee;
+}
+
+.notif-body {
+  flex: 1;
+}
 
 .notif-title {
-  font-size: 13px; font-weight: 600; color: #0f172a;
-  margin-bottom: 3px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1c1917;
+  margin-bottom: 0.25rem;
 }
 
 .notif-message {
-  font-size: 12.5px;
+  font-size: 0.85rem;
   color: #57534e;
   line-height: 1.4;
-  /* removed: white-space, overflow, text-overflow */
+  margin-bottom: 0.4rem;
 }
 
 .notif-time {
-  font-size: 11px; color: #94a3b8; margin-top: 5px;
+  font-size: 0.75rem;
+  color: #a8a29e;
 }
 
 .notif-dot {
-  width: 7px; height: 7px;
+  width: 8px;
+  height: 8px;
+  background: #f59e0b;
   border-radius: 50%;
-  background: #E8843A;
   flex-shrink: 0;
-  margin-top: 5px;
+  margin-top: 0.4rem;
+}
+
+.notif-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem;
+  color: #a8a29e;
+  font-size: 0.9rem;
+}
+
+.notif-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #f5f0ea;
+  border-top-color: #f59e0b;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 0.75rem;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Profile dropdown ────────────────────────────────────── */
+.booking-profile-wrapper {
+  position: relative;
+}
+
+.booking-user-button {
+  background: #f7f7f7;
+  border: none;
+  cursor: pointer;
+  padding: 1.5rem;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #57534e;
+  transition: all 0.2s;
+}
+
+.booking-user-button:hover {
+  background: #e8dfd0;
+  transform: scale(1.05);
+}
+
+.booking-user-initials {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #78716c;
+}
+
+.booking-dropdown {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  width: 16vw;
+  max-width: 260px;
+  min-width: 220px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  z-index: 100;
+}
+
+.booking-dropdown-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #f0ebe2;
+}
+
+.booking-dropdown-avatar {
+  width: 40px;
+  height: 40px;
+  background: #f5f0ea;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #78716c;
+  font-weight: 700;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.booking-dropdown-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1c1917;
+}
+
+.booking-dropdown-email {
+  font-size: 0.8rem;
+  color: #78716c;
+  margin-top: 0.15rem;
+}
+
+.booking-dropdown-divider {
+  height: 1px;
+  background: #f0ebe2;
+}
+
+.booking-dropdown-item {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0.875rem 1.25rem;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #57534e;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.booking-dropdown-item:hover {
+  background: #fafaf9;
+  color: #1c1917;
+}
+
+.booking-dropdown-item--danger {
+  color: #dc2626;
+}
+
+.booking-dropdown-item--danger:hover {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+/* ── Responsive adjustments ────────────────────────────── */
+@media (max-width: 1200px) {
+  .booking-nav-content {
+    max-width: 95vw;
+  }
+  
+  .booking-logo img {
+    width: 15vw;
+  }
+}
+
+@media (max-width: 900px) {
+  .booking-navbar {
+    padding: 0.875rem 1.5rem;
+  }
+
+  .notif-panel,
+  .booking-dropdown {
+    width: 40vw;
+  }
+}
+
+@media (max-width: 600px) {
+  .booking-navbar {
+    padding: 0.75rem 1rem;
+    height: auto;
+  }
+
+  .booking-nav-links {
+    gap: 1%;
+  }
+
+  .notif-panel,
+  .booking-dropdown {
+    width: 85vw;
+  }
+  
+  .booking-logo img {
+    width: 25vw;
+  }
 }

@@ -178,7 +178,7 @@ const BookingNavbar = () => {
           {currentUser && (
             <div className="notif-wrapper" ref={notifRef}>
               <button className="notif-bell-btn" onClick={() => openNotifications()} aria-label="Notifications">
-                <Bell size={22} />
+                <Bell size={26} />
                 {unreadCount > 0 && (
                   <span className="notif-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
                 )}

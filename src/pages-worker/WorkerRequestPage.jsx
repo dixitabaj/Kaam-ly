@@ -2,14 +2,16 @@ import React, { useEffect, useState, useRef } from "react";
 import {
   Search, Calendar, MapPin, DollarSign, Clock, ChevronRight,
   Phone, Mail, MessageCircle, XCircle, CheckCircle, AlertCircle,
-  Loader, User, Check, X, Home, Briefcase, ThumbsUp, ThumbsDown,
+  Loader, User, Check, X, Home, Briefcase, ThumbsUp, ThumbsDown, Flag
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import BookingNavbar from "../components/Navbar/Navbar";
 import {
   updateTaskStatus, getTasksByWorker, fetchCustomerById,
-  fetchWorkerById, getPaymentStatus,
+  fetchWorkerById, getPaymentStatus, cancelWorkerTask
 } from "../api/api";
+import ReportModal from "../components/Report/ReportSection";
+import ChatWidget from "../components/HelpSection/HelpSection";
 
 // ── Global responsive styles ──────────────────────────────────────────────────
 const GlobalStyles = () => (
@@ -19,7 +21,6 @@ const GlobalStyles = () => (
     @keyframes spin { to { transform: rotate(360deg); } }
     * { box-sizing: border-box; }
 
-    /* ── Request card grid ── */
     .request-card-grid {
       display: grid;
       grid-template-columns: 200px 1fr 160px;
@@ -30,98 +31,57 @@ const GlobalStyles = () => (
     .card-middle { padding: 0 24px;     border-right: 1px solid #f0ebe2; }
     .card-right  { padding-left: 24px;  display: flex; flex-direction: column; }
 
-    /* ── Header summary pills ── */
-    .summary-pills {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
+    .summary-pills { display: flex; gap: 10px; flex-wrap: wrap; }
+    .tabs-row { display: flex; gap: 6px; margin-bottom: 1.5rem; flex-wrap: wrap; }
 
-    /* ── Tabs ── */
-    .tabs-row {
-      display: flex;
-      gap: 6px;
-      margin-bottom: 1.5rem;
-      flex-wrap: wrap;
-    }
-
-    /* ── Tablet (≤ 900px) ── */
     @media (max-width: 900px) {
-      .request-card-grid {
-        grid-template-columns: 1fr;
-      }
-      .card-left {
-        padding-right: 0;
-        border-right: none;
-        border-bottom: 1px solid #f0ebe2;
-        padding-bottom: 14px;
-        margin-bottom: 14px;
-      }
-      .card-middle {
-        padding: 0;
-        border-right: none;
-        border-bottom: 1px solid #f0ebe2;
-        padding-bottom: 14px;
-        margin-bottom: 14px;
-      }
+      .request-card-grid { grid-template-columns: 1fr; }
+      .card-left { padding-right: 0; border-right: none; border-bottom: 1px solid #f0ebe2; padding-bottom: 14px; margin-bottom: 14px; }
+      .card-middle { padding: 0; border-right: none; border-bottom: 1px solid #f0ebe2; padding-bottom: 14px; margin-bottom: 14px; }
       .card-right { padding-left: 0; }
     }
 
-    /* ── Mobile (≤ 600px) ── */
     @media (max-width: 600px) {
       .tv-main    { padding: 1rem !important; }
       .page-title { font-size: 20px !important; }
       .summary-pills { display: grid; grid-template-columns: 1fr 1fr; }
     }
 
-    /* ── TV / large display (≥ 1600px) ── */
     @media (min-width: 1600px) {
       .tv-main { max-width: 1800px !important; padding: 3rem 4rem !important; }
-
       .page-title    { font-size: 38px !important; }
       .page-subtitle { font-size: 1rem !important; }
-
       .summary-pill        { padding: 14px 24px !important; min-width: 100px !important; border-radius: 18px !important; }
       .summary-pill-value  { font-size: 26px !important; }
       .summary-pill-label  { font-size: 12px !important; }
-
       .search-box    { max-width: 460px !important; }
       .search-input  { font-size: 1rem !important; height: 46px !important; padding-left: 42px !important; }
       .search-icon   { left: 16px !important; }
-
       .tab-btn       { font-size: 15px !important; padding: 9px 20px !important; }
-
       .request-card  { padding: 28px 32px !important; border-radius: 22px !important; }
       .request-card-grid { grid-template-columns: 260px 1fr 200px !important; }
       .card-left     { padding-right: 32px !important; }
       .card-middle   { padding: 0 32px !important; }
       .card-right    { padding-left: 32px !important; }
-
       .customer-avatar     { width: 60px !important; height: 60px !important; font-size: 24px !important; }
       .customer-name       { font-size: 17px !important; }
       .customer-task-label { font-size: 13px !important; }
       .hourly-rate         { font-size: 13px !important; }
-
       .detail-icon    { width: 16px !important; height: 16px !important; }
       .detail-text    { font-size: 15px !important; }
       .task-desc      { font-size: 16px !important; margin-bottom: 16px !important; }
-
       .action-btn     { font-size: 14px !important; padding: 8px 18px !important; }
-
       .price-label    { font-size: 12px !important; }
       .price-value    { font-size: 18px !important; }
       .total-value    { font-size: 22px !important; }
-
       .modal-inner    { max-width: 720px !important; padding: 2.5rem !important; }
       .modal-title    { font-size: 22px !important; }
       .modal-details  { gap: 1.5rem !important; }
       .modal-det-label { font-size: 12px !important; }
       .modal-det-value { font-size: 17px !important; }
-
       .decline-modal  { max-width: 560px !important; padding: 2.5rem !important; }
       .decline-chip   { font-size: 14px !important; padding: 7px 16px !important; }
       .decline-area   { font-size: 15px !important; min-height: 100px !important; }
-
       .toast-container { top: 100px !important; right: 28px !important; }
       .toast-item      { min-width: 320px !important; max-width: 420px !important; font-size: 15px !important; padding: 16px 20px !important; }
     }
@@ -195,7 +155,7 @@ const showNativePush = (title, body, onClick) => {
 const isOfferReady = (request) =>
   request?.estimatedHours && request?.totalCost && Number(request.totalCost) > 0;
 
-const Btn = ({ onClick, variant = "default", children, disabled, title, padding="15px 40px" }) => {
+const Btn = ({ onClick, variant = "default", children, disabled, title, style: extraStyle }) => {
   const V = {
     default: { color: "#78716c", bg: "white",   border: "#e2d9cc" },
     primary: { color: "#f6a623", bg: "#fffbf2", border: "#fde68a" },
@@ -204,22 +164,27 @@ const Btn = ({ onClick, variant = "default", children, disabled, title, padding=
     red:     { color: "#991b1b", bg: "#fef2f2", border: "#fecaca" },
     amber:   { color: "#b45309", bg: "#fffbf2", border: "#fde68a" },
     gray:    { color: "#9ca3af", bg: "#f3f4f6", border: "#e5e7eb" },
+    cyan:    { color: "#f6a623", bg: "#fffbf2", border: "#fde68a" },
   };
   const v = V[variant] || V.default;
   return (
     <button
       onClick={onClick} disabled={disabled} title={title}
-      className="action-btn"
       style={{
-        display: "inline-flex", alignItems: "center", gap: "5px",
-        padding: padding, borderRadius: "9999px",
-        fontSize: "12px", fontWeight: "600",
-        color: disabled ? v.color : v.color,
+        display: "inline-flex", alignItems: "center", gap: "6px",
+        padding: "9px 18px",
+        minHeight: "38px",
+        borderRadius: "9999px",
+        fontSize: "13px",
+        fontWeight: "600",
+        color: v.color,
         background: disabled ? "#f3f4f6" : v.bg,
         border: `1.5px solid ${disabled ? "#e5e7eb" : v.border}`,
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.6 : 1,
-        transition: "opacity 0.15s", whiteSpace: "nowrap",
+        transition: "opacity 0.15s",
+        whiteSpace: "nowrap",
+        ...extraStyle,
       }}
       onMouseEnter={e => { if (!disabled) e.currentTarget.style.opacity = "0.75"; }}
       onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}
@@ -251,20 +216,80 @@ const StatusPill = ({ status }) => {
   );
 };
 
+// ── Cancel Reason Modal ───────────────────────────────────────────────────────
+const CancelReasonModal = ({ onConfirm, onClose }) => {
+  const [reason, setReason] = useState("");
+  const QUICK_REASONS = [
+    "Personal emergency",
+    "Schedule conflict",
+    "Customer unresponsive",
+    "Safety concern",
+    "Incorrect task details",
+    "Equipment unavailable",
+  ];
+
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1020, backdropFilter: "blur(4px)" }}
+    >
+      <div onClick={e => e.stopPropagation()} style={{ background: "white", borderRadius: "20px", padding: "1.8rem", maxWidth: "460px", width: "90%", boxShadow: "0 24px 60px rgba(0,0,0,0.18)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "#fef2f2", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <XCircle size={18} color="#ef4444" />
+            </div>
+            <h3 style={{ fontSize: "17px", fontWeight: "800", color: "#1c1008", margin: 0 }}>Cancel Task</h3>
+          </div>
+          <button onClick={onClose} style={{ background: "#f5efe6", border: "none", cursor: "pointer", color: "#78716c", width: "30px", height: "30px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>×</button>
+        </div>
+        <p style={{ fontSize: "13px", color: "#a8a29e", margin: "0 0 16px 46px", fontWeight: "500", lineHeight: "1.5" }}>
+          Please let the customer know why you're cancelling. This cannot be undone.
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "14px" }}>
+          {QUICK_REASONS.map(r => (
+            <button key={r} onClick={() => setReason(r)} style={{ padding: "5px 13px", borderRadius: "9999px", fontSize: "12px", fontWeight: "600", border: reason === r ? "none" : "1.5px solid #e8dfd0", background: reason === r ? "#ef4444" : "white", color: reason === r ? "white" : "#78716c", cursor: "pointer", transition: "all 0.15s" }}>
+              {r}
+            </button>
+          ))}
+        </div>
+        <textarea placeholder="Or write a custom reason…" value={reason} onChange={e => setReason(e.target.value)}
+          style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #e8dfd0", borderRadius: "10px", fontSize: "13px", minHeight: "80px", resize: "vertical", outline: "none", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "16px", transition: "border-color 0.2s", color: "#1c1008" }}
+          onFocus={e => e.target.style.borderColor = "#ef4444"} onBlur={e => e.target.style.borderColor = "#e8dfd0"}
+        />
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", padding: "10px 12px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "10px", marginBottom: "16px", fontSize: "12px", color: "#92400e" }}>
+          <AlertCircle size={14} color="#f59e0b" style={{ flexShrink: 0, marginTop: "1px" }} />
+          Cancelling may affect your reliability rating. Only cancel when absolutely necessary.
+        </div>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "11px", borderRadius: "10px", border: "1.5px solid #e8dfd0", background: "white", fontSize: "13px", fontWeight: "700", cursor: "pointer", color: "#78716c" }}>Go Back</button>
+          <button onClick={() => { if (reason.trim()) onConfirm(reason.trim()); }} disabled={!reason.trim()}
+            style={{ flex: 2, padding: "11px", borderRadius: "10px", border: "none", background: !reason.trim() ? "#e5e7eb" : "#ef4444", fontSize: "13px", fontWeight: "700", cursor: !reason.trim() ? "not-allowed" : "pointer", color: !reason.trim() ? "#9ca3af" : "white", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+            <XCircle size={14} /> Confirm Cancellation
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── Main Component ────────────────────────────────────────────────────────────
 const WorkerTaskRequestsPage = () => {
   const navigate = useNavigate();
-  const [requests,           setRequests]           = useState([]);
-  const [loading,            setLoading]            = useState(true);
-  const [error,              setError]              = useState(null);
-  const [searchQuery,        setSearchQuery]        = useState("");
-  const [activeTab,          setActiveTab]          = useState("pending");
-  const [selectedRequest,    setSelectedRequest]    = useState(null);
-  const [showDetailsModal,   setShowDetailsModal]   = useState(false);
-  const [processingAction,   setProcessingAction]   = useState(null);
-  const [showDeclineModal,   setShowDeclineModal]   = useState(false);
-  const [declineReason,      setDeclineReason]      = useState("");
-  const [decliningRequestId, setDecliningRequestId] = useState(null);
+  const [requests,             setRequests]             = useState([]);
+  const [loading,              setLoading]              = useState(true);
+  const [error,                setError]                = useState(null);
+  const [searchQuery,          setSearchQuery]          = useState("");
+  const [activeTab,            setActiveTab]            = useState("pending");
+  const [selectedRequest,      setSelectedRequest]      = useState(null);
+  const [showDetailsModal,     setShowDetailsModal]     = useState(false);
+  const [processingAction,     setProcessingAction]     = useState(null);
+  const [showDeclineModal,     setShowDeclineModal]     = useState(false);
+  const [declineReason,        setDeclineReason]        = useState("");
+  const [decliningRequestId,   setDecliningRequestId]   = useState(null);
+  const [reportTask,           setReportTask]           = useState(null);
+  const [showCancelModal,      setShowCancelModal]      = useState(false);
+  const [cancellingRequestId,  setCancellingRequestId]  = useState(null);
 
   const { toasts, add: addToast, remove: removeToast } = useToast();
 
@@ -273,10 +298,8 @@ const WorkerTaskRequestsPage = () => {
   const wsRef      = useRef(null);
 
   const getTaskPaymentStatus = async (taskId) => {
-    try {
-      const data = await getPaymentStatus(taskId);
-      return data?.task_status || "pending";
-    } catch { return "error"; }
+    try { const data = await getPaymentStatus(taskId); return data?.task_status || "pending"; }
+    catch { return "error"; }
   };
 
   const enrichTask = async (task) => {
@@ -298,8 +321,11 @@ const WorkerTaskRequestsPage = () => {
       workerEarnings: workerEarnings || task.totalCost || 0,
       hourlyRate:     workerData?.basePrice,
       preferredDate:  task.serviceDate    || "None shown",
-      preferredTime:  task.serviceTime    || "Flexible",
+      preferredTime:  task.serviceTime || task.serviceTIme || "Flexible",
       estimatedHours: task.estimatedHours || task.completionTime || null,
+      declineReason:  task.declineReason  || task.decline_reason  || null,
+      cancelReason:   task.cancelReason   || task.cancel_reason   || null,
+      profile: customerData?.profile_picture || null,
     };
   };
 
@@ -357,7 +383,22 @@ const WorkerTaskRequestsPage = () => {
           setRequests(prev => prev.map(r => String(r._id || r.id) === String(data.taskId)
             ? { ...r, estimatedHours: data.estimatedHours, totalCost: data.totalCost, offerStatus: data.offerStatus } : r));
         }
-      } catch (err) { console.error("[WorkerWS] parse error:", err); }
+
+        if (data.type === "payment_updated" || data.type === "payment_status") {
+          const newPaymentStatus = data.paymentStatus || data.status;
+          setRequests(prev => prev.map(r =>
+            String(r._id || r.id) === String(data.taskId) ? { ...r, paymentStatus: newPaymentStatus } : r
+          ));
+          setSelectedRequest(prev =>
+            prev && String(prev._id || prev.id) === String(data.taskId)
+              ? { ...prev, paymentStatus: newPaymentStatus } : prev
+          );
+          if (newPaymentStatus === "paid") {
+            const task = requests.find(r => String(r._id || r.id) === String(data.taskId));
+            addToast({ color: "#059669", message: `Payment received for "${task?.taskName || "a task"}" — you can now start work!` });
+          }
+        }
+      } catch (err) { console.error("[WorkerWS] message handling failed:", err); }
     };
 
     const flushPending = async () => {
@@ -422,7 +463,7 @@ const WorkerTaskRequestsPage = () => {
     let unsubscribe = () => {};
     const setup = async () => {
       try {
-        const { initMessaging } = await import("../api/notification");
+        const { initMessaging } = await import("../api/firebase");
         const { onMessage }     = await import("firebase/messaging");
         const messaging = await initMessaging();
         if (!messaging) return;
@@ -444,6 +485,7 @@ const WorkerTaskRequestsPage = () => {
       try {
         const data     = await getTasksByWorker(workerId);
         const enriched = await Promise.all((data.tasks || []).map(enrichTask));
+        enriched.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         setRequests(enriched);
       } catch (err) {
         setError(err.message);
@@ -458,10 +500,6 @@ const WorkerTaskRequestsPage = () => {
   const handleViewDetails = (request) => { setSelectedRequest(request); setShowDetailsModal(true); };
   const handleViewCustomerProfile = (customerId, customerName) =>
     navigate(`/customer-profile/${customerId}`, { state: { customerId, customerName } });
-  const handleContact = (type, customerName) => {
-    const map = { call: `Calling ${customerName}…`, email: `Emailing ${customerName}…`, message: `Opening chat with ${customerName}…` };
-    alert(map[type] || "");
-  };
 
   const handleAcceptRequest = async (requestId) => {
     const task = requests.find(r => String(r._id || r.id) === String(requestId));
@@ -498,6 +536,22 @@ const WorkerTaskRequestsPage = () => {
     } finally { setProcessingAction(null); setDecliningRequestId(null); }
   };
 
+  const handleCancelRequest = (requestId) => { setCancellingRequestId(requestId); setShowCancelModal(true); };
+
+  const confirmCancel = async (reason) => {
+    setShowCancelModal(false);
+    setProcessingAction(cancellingRequestId);
+    try {
+      await cancelWorkerTask(cancellingRequestId, "worker", reason);
+      const apply = (r) => String(r._id || r.id) === String(cancellingRequestId)
+        ? { ...r, status: "cancelled", cancelReason: reason, cancelledBy: "tasker" } : r;
+      setRequests(prev => prev.map(apply));
+      setSelectedRequest(prev => prev ? apply(prev) : prev);
+    } catch (err) {
+      addToast({ color: "#dc2626", message: err?.message || "Failed to cancel task. Please try again." });
+    } finally { setProcessingAction(null); setCancellingRequestId(null); }
+  };
+
   const handleStartWork = async (requestId) => {
     const task = requests.find(r => String(r._id || r.id) === String(requestId));
     if ((task?.paymentStatus || "").toLowerCase() !== "paid") {
@@ -532,11 +586,15 @@ const WorkerTaskRequestsPage = () => {
 
   const sendChatMessage      = (userId) => navigate(`/chat/${workerId}/${userId}`);
   const handleContactSupport = ()       => navigate("/helpSection");
+  const handleReport         = (request) => setReportTask(request);
 
   const formatDate = (d) => {
     if (!d) return "Not set";
-    try { return new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }); }
-    catch { return d; }
+    try {
+      return new Date(d).toLocaleDateString("en-US", {
+        year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Kathmandu",
+      });
+    } catch { return d; }
   };
   const formatCurrency = (amount) => !amount ? "NPR 0" : `NPR ${Number(amount).toLocaleString("en-IN")}`;
 
@@ -564,17 +622,24 @@ const WorkerTaskRequestsPage = () => {
         <XCircle size={40} color="#ef4444"/>
         <h3 style={{ marginTop: "1rem", fontWeight: "800", color: "#1c1008" }}>Error Loading Requests</h3>
         <p style={{ color: "#78716c", fontSize: "13px" }}>{error}</p>
-        <button onClick={() => window.location.reload()} style={{ marginTop: "1rem", padding: "9px 18px", background: "#f6a623", color: "white", border: "none", borderRadius: "8px", fontWeight: "700", cursor: "pointer", fontSize: "13px" }}>
-          Try Again
-        </button>
+        <button onClick={() => window.location.reload()} style={{ marginTop: "1rem", padding: "9px 18px", background: "#f6a623", color: "white", border: "none", borderRadius: "8px", fontWeight: "700", cursor: "pointer", fontSize: "13px" }}>Try Again</button>
       </div>
     </div>
   );
+
+  // ── Dispute helpers (used in modal + card) ────────────────────────────────
+  const getDisputeState = (request) => {
+    const d = request?.dispute;
+    if (d === true || d === "true")   return "open";
+    if (d === "rejected")              return "rejected";
+    return null;
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: "#f9f6ef", fontFamily: '"DM Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', color: "#1c1008" }}>
       <GlobalStyles />
       <BookingNavbar/>
+      <ChatWidget/>
       <ToastContainer toasts={toasts} removeToast={removeToast}/>
 
       <main className="tv-main" style={{ maxWidth: "1280px", margin: "0 auto", padding: "2rem 1.5rem" }}>
@@ -606,13 +671,10 @@ const WorkerTaskRequestsPage = () => {
         {/* Search */}
         <div className="search-box" style={{ position: "relative", maxWidth: "320px", marginBottom: "1.25rem" }}>
           <Search size={13} className="search-icon" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#a8a29e" }}/>
-          <input
-            type="text" placeholder="Search by task or customer name…"
-            value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+          <input type="text" placeholder="Search by task or customer name…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
             className="search-input"
             style={{ width: "100%", padding: "9px 14px 9px 34px", borderRadius: "9999px", border: "1.5px solid #e8dfd0", fontSize: "13px", outline: "none", background: "white", boxSizing: "border-box", color: "#1c1008", transition: "border-color 0.2s" }}
-            onFocus={e => e.target.style.borderColor = "#f6a623"}
-            onBlur={e  => e.target.style.borderColor = "#e8dfd0"}
+            onFocus={e => e.target.style.borderColor = "#f6a623"} onBlur={e => e.target.style.borderColor = "#e8dfd0"}
           />
         </div>
 
@@ -629,9 +691,7 @@ const WorkerTaskRequestsPage = () => {
               >
                 {tab.charAt(0).toUpperCase() + tab.slice(1).replace("_", " ")}
                 {count > 0 && (
-                  <span style={{ background: active ? "rgba(255,255,255,0.2)" : "#f5efe6", borderRadius: "9999px", padding: "1px 7px", fontSize: "11px", fontWeight: "800", color: active ? "white" : "#b45309" }}>
-                    {count}
-                  </span>
+                  <span style={{ background: active ? "rgba(255,255,255,0.2)" : "#f5efe6", borderRadius: "9999px", padding: "1px 7px", fontSize: "11px", fontWeight: "800", color: active ? "white" : "#b45309" }}>{count}</span>
                 )}
               </button>
             );
@@ -671,137 +731,283 @@ const WorkerTaskRequestsPage = () => {
                 handleDeclineRequest={handleDeclineRequest}
                 handleStartWork={handleStartWork}
                 handleCompleteTask={handleCompleteTask}
+                onReport={handleReport}
+                onCancel={handleCancelRequest}
+                getDisputeState={getDisputeState}
               />
             );
           })}
         </div>
       </main>
 
-      {/* Details Modal */}
+      {/* ── Details Modal ── */}
       {showDetailsModal && selectedRequest && (() => {
-        const offerReady = isOfferReady(selectedRequest);
-        const isPending  = selectedRequest.status === "pending";
+        const offerReady    = isOfferReady(selectedRequest);
+        const isPending     = selectedRequest.status === "pending";
+        const rid           = String(selectedRequest._id || selectedRequest.id);
+        const disputeState  = getDisputeState(selectedRequest);
+
+        // Full timeline — all timestamp fields matching your DB
+        const timelineSteps = [
+          { label: "Created",   field: "createdAt",   color: "#a8a29e" },
+          { label: "Confirmed", field: "confirmedAt", color: "#6d28d9" },
+          { label: "Paid",      field: "paid_at",     color: "#059669" },
+          { label: "Started",   field: "startedAt",   color: "#1e40af" },
+          { label: "Completed", field: "completedAt", color: "#065f46" },
+          { label: "Released",  field: "released_at", color: "#0891b2" },
+          { label: "Disputed",  field: "disputedAt",  color: "#dc2626" },
+
+    { label:"Dispute Resolved",  field:"disputeResolvedAt",  color:"#059669" },
+          { label: "Declined",  field: "declinedAt",  color: "#991b1b" },
+          { label: "Cancelled", field: "cancelledAt", color: "#991b1b" },
+        ].filter(s => {
+          const val = selectedRequest[s.field];
+          return val && val !== "null" && val !== "undefined" && val !== "";
+        });
+
         return (
           <div onClick={() => setShowDetailsModal(false)}
             style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(4px)" }}
           >
-            <div onClick={e => e.stopPropagation()} className="modal-inner"
-              style={{ background: "white", borderRadius: "20px", padding: "2rem", maxWidth: 560, width: "90%", maxHeight: "88vh", overflow: "auto", boxShadow: "0 24px 60px rgba(0,0,0,0.15)" }}
+            <div onClick={e => e.stopPropagation()}
+              style={{ background: "white", borderRadius: "20px", padding: "2rem", maxWidth: 560, width: "90%", maxHeight: "90vh", overflow: "auto", boxShadow: "0 24px 60px rgba(0,0,0,0.15)" }}
             >
+              {/* Header */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
-                <h2 className="modal-title" style={{ fontSize: "17px", fontWeight: "800", color: "#1c1008", margin: 0 }}>Request Details</h2>
+                <h2 style={{ fontSize: "17px", fontWeight: "800", color: "#1c1008", margin: 0 }}>Request Details</h2>
                 <button onClick={() => setShowDetailsModal(false)} style={{ background: "#f5efe6", border: "none", width: "32px", height: "32px", borderRadius: "50%", cursor: "pointer", color: "#78716c", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>×</button>
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1.25rem", padding: "1rem", background: "#faf7f2", borderRadius: "12px" }}>
-                <div style={{ width: "52px", height: "52px", borderRadius: "50%", background: "linear-gradient(135deg,#f6a623,#e8890c)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px", fontWeight: "800", color: "white", flexShrink: 0, boxShadow: "0 2px 8px rgba(246,166,35,0.3)" }}>
-                  {selectedRequest.customerName?.charAt(0) || <User size={20}/>}
+              {/* Customer profile row */}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", marginBottom: "1.25rem" }}>
+                <div style={{ width: "48px", height: "48px", background: "linear-gradient(135deg,#f6a623,#e8890c)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", color: "white", fontWeight: "800", flexShrink: 0 }}>
+                  {selectedRequest.customerName?.charAt(0) || <User size={18} />}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: "800", fontSize: "16px", color: "#1c1008", marginBottom: "3px" }}>{selectedRequest.customerName || "Customer"}</div>
-                  <div style={{ display: "flex", gap: "14px", flexWrap: "wrap" }}>
-                    <span style={{ fontSize: "12px", color: "#78716c", display: "flex", alignItems: "center", gap: "4px" }}><Phone size={11} color="#f6a623"/> {selectedRequest.customerPhone || "N/A"}</span>
-                    <span style={{ fontSize: "12px", color: "#78716c", display: "flex", alignItems: "center", gap: "4px" }}><Mail size={11} color="#f6a623"/> {selectedRequest.customerEmail || "N/A"}</span>
+                  <div style={{ fontWeight: "800", fontSize: "16px", color: "#1c1008" }}>{selectedRequest.customerName || "Customer"}</div>
+                  <div style={{ display: "flex", gap: "14px", flexWrap: "wrap", marginTop: "3px" }}>
+                    <span style={{ fontSize: "12px", color: "#78716c", display: "flex", alignItems: "center", gap: "4px" }}>
+                      <Phone size={11} color="#f6a623" /> {selectedRequest.customerPhone || "N/A"}
+                    </span>
+                    <span style={{ fontSize: "12px", color: "#78716c", display: "flex", alignItems: "center", gap: "4px" }}>
+                      <Mail size={11} color="#f6a623" /> {selectedRequest.customerEmail || "N/A"}
+                    </span>
                   </div>
+                  <button onClick={() => handleViewCustomerProfile(selectedRequest.customerId, selectedRequest.customerName)}
+                    style={{ marginTop: "4px", fontSize: "11px", color: "#f6a623", background: "none", border: "none", cursor: "pointer", fontWeight: "700", padding: 0, textDecoration: "underline" }}>
+                    View Profile
+                  </button>
                 </div>
-                <StatusPill status={selectedRequest.status}/>
+                <StatusPill status={selectedRequest.status} />
               </div>
 
+              {/* Task name + description */}
+              <div style={{ fontSize: "14px", color: "#1c1008", fontWeight: "600", marginBottom: "10px" }}>
+                <span style={{ color: "#a8a29e", fontWeight: "500" }}>Task: </span>
+                {selectedRequest.taskName || "General Task"}
+              </div>
+              <div style={{ fontSize: "14px", color: "#1c1008", fontWeight: "600", marginBottom: "1.25rem" }}>
+                <span style={{ color: "#a8a29e", fontWeight: "500" }}>Notes: </span>
+                {selectedRequest.taskDescrip || "No description provided"}
+              </div>
+
+              {/* ── Dispute banners ── */}
+              {disputeState === "open" && (
+                <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", padding: "10px 14px", marginBottom: "1.25rem", fontSize: "12px", color: "#991b1b" }}>
+                  <Flag size={14} color="#ef4444" style={{ flexShrink: 0, marginTop: "1px" }}/>
+                  <div>
+                    <span style={{ fontWeight: "700", display: "block", marginBottom: "2px" }}>Dispute Open 🔍</span>
+                    <span style={{ color: "#7f1d1d" }}>A dispute has been filed for this task. Payment is blocked until admin resolves it.</span>
+                  </div>
+                </div>
+              )}
+              {disputeState === "rejected" && (
+                <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", background: "#f0fdf4", border: "1px solid #a7f3d0", borderRadius: "10px", padding: "10px 14px", marginBottom: "1.25rem", fontSize: "12px", color: "#065f46" }}>
+                  <CheckCircle size={14} color="#10b981" style={{ flexShrink: 0, marginTop: "1px" }}/>
+                  <div>
+                    <span style={{ fontWeight: "700", display: "block", marginBottom: "2px" }}>Dispute Resolved</span>
+                    <span>The dispute was reviewed and declined by admin. Payment will proceed normally.</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Offer not ready alert */}
               {isPending && !offerReady && (
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 14px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "10px", fontSize: "12px", color: "#92400e", marginBottom: "1.25rem" }}>
-                  <AlertCircle size={14} color="#f59e0b" style={{ flexShrink: 0 }}/>
-                  <span>Waiting for offer — <strong>estimated hours</strong> and <strong>total cost</strong> must be set before accepting.</span>
+                  <AlertCircle size={14} color="#f59e0b" style={{ flexShrink: 0 }} />
+                  Waiting for offer — <strong>estimated hours</strong> and <strong>total cost</strong> must be set before accepting.
                 </div>
               )}
 
+              {/* Decline reason banner */}
               {selectedRequest.status === "declined" && selectedRequest.declineReason && (
-                <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", padding: "10px 14px", marginBottom: "1.25rem", fontSize: "12px", color: "#dc2626" }}>
-                  <strong>Decline reason:</strong> {selectedRequest.declineReason}
+                <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", padding: "10px 14px", marginBottom: "1.25rem", fontSize: "12px", color: "#991b1b" }}>
+                  <XCircle size={14} color="#ef4444" style={{ flexShrink: 0, marginTop: "1px" }} />
+                  <div>
+                    <span style={{ fontWeight: "700", display: "block", marginBottom: "2px" }}>Decline reason</span>
+                    <span style={{ color: "#7f1d1d" }}>{selectedRequest.declineReason}</span>
+                  </div>
                 </div>
               )}
 
-              <div className="modal-details" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.25rem" }}>
+              {/* Cancel reason banner */}
+              {selectedRequest.status === "cancelled" && (selectedRequest.cancelReason || selectedRequest.cancel_reason) && (
+                <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", padding: "10px 14px", marginBottom: "1.25rem", fontSize: "12px", color: "#991b1b" }}>
+                  <XCircle size={14} color="#ef4444" style={{ flexShrink: 0, marginTop: "1px" }} />
+                  <div>
+                    <span style={{ fontWeight: "700", display: "block", marginBottom: "2px" }}>Cancellation reason</span>
+                    <span style={{ color: "#7f1d1d" }}>{selectedRequest.cancelReason || selectedRequest.cancel_reason}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Info grid */}
+              <div style={{ display: "flex", flexDirection: "column", marginBottom: "1.25rem", background: "#faf7f2", borderRadius: "12px", overflow: "hidden" }}>
                 {[
-                  ["Task Name",       selectedRequest.taskName      || "General Task"],
-                  ["Location",        selectedRequest.address       || "Not specified"],
-                  ["Scheduled Date",  formatDate(selectedRequest.preferredDate)],
-                  ["Preferred Time",  selectedRequest.preferredTime || "Flexible"],
-                  ["Estimated Hours", selectedRequest.estimatedHours || "Not set yet"],
-                  ["Hourly Rate",     `${formatCurrency(selectedRequest.hourlyRate || 0)}/hr`],
-                  ["Payment Status",  selectedRequest.paymentStatus || "Pending"],
-                ].map(([label, value]) => (
-                  <div key={label}>
-                    <div className="modal-det-label" style={{ fontSize: "10px", color: "#a8a29e", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "4px", fontWeight: "700" }}>{label}</div>
-                    <div className="modal-det-value" style={{ fontSize: "14px", color: "#1c1008", fontWeight: "600" }}>{value}</div>
+                  { icon: <Calendar size={13} color="#f6a623" />, label: "Date",       value: formatDate(selectedRequest.preferredDate) + (selectedRequest.preferredTime ? ` at ${selectedRequest.preferredTime}` : "") },
+                  { icon: <Clock    size={13} color="#f6a623" />, label: "Est. Hours", value: selectedRequest.estimatedHours ? `${selectedRequest.estimatedHours} hrs` : "Not set yet" },
+                  { icon: <MapPin   size={13} color="#f6a623" />, label: "Location",   value: selectedRequest.address || "Not specified" },
+                  { icon: <DollarSign size={13} color="#f6a623" />, label: "Hourly Rate", value: selectedRequest.hourlyRate ? `NPR ${selectedRequest.hourlyRate}/hr` : "Not set" },
+                  { icon: <CheckCircle size={13} color="#f6a623" />, label: "Payment",   value: selectedRequest.paymentStatus || "Pending" },
+                ].map(({ icon, label, value }, i, arr) => (
+                  <div key={label} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 14px", borderBottom: i < arr.length - 1 ? "1px solid #f0ebe2" : "none" }}>
+                    <div style={{ width: "18px", display: "flex", justifyContent: "center" }}>{icon}</div>
+                    <span style={{ fontSize: "11px", fontWeight: "700", color: "#a8a29e", width: "90px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</span>
+                    <span style={{ fontSize: "13px", color: "#1c1008", fontWeight: "600" }}>{value}</span>
                   </div>
                 ))}
               </div>
 
-              <div style={{ marginBottom: "1.25rem" }}>
-                <div style={{ fontSize: "10px", color: "#a8a29e", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "8px", fontWeight: "700" }}>Description</div>
-                <p style={{ fontSize: "13px", color: "#57534e", lineHeight: 1.7, background: "#faf7f2", padding: "12px 14px", borderRadius: "10px", border: "1px solid #f0ebe2", margin: 0 }}>
-                  {selectedRequest.taskDescrip || selectedRequest.taskName || "No description provided"}
-                </p>
+              {/* Total amount */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "#fffbf2", borderRadius: "10px", border: "1px solid #fde68a", marginBottom: "1.25rem" }}>
+                <span style={{ fontSize: "12px", fontWeight: "700", color: "#a8601a" }}>Total Amount</span>
+                <span style={{ fontSize: "20px", fontWeight: "900", color: "#f6a623" }}>
+                  {selectedRequest.totalCost ? formatCurrency(selectedRequest.totalCost) : "NPR —"}
+                </span>
               </div>
 
-              <div style={{ background: "#faf7f2", padding: "1.25rem", borderRadius: "12px", border: "1px solid #f0ebe2", marginBottom: "1.25rem" }}>
-                <div style={{ fontSize: "12px", fontWeight: "800", color: "#1c1008", marginBottom: "12px" }}>Payment Breakdown</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "#78716c" }}>
-                    <span>Subtotal ({selectedRequest.estimatedHours || "?"} hrs × {formatCurrency(selectedRequest.hourlyRate || 0)}/hr)</span>
-                    <span style={{ fontWeight: "600", color: "#1c1008" }}>{formatCurrency(selectedRequest.workerEarnings)}</span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "#78716c" }}>
-                    <span>Platform Fee (5%)</span>
-                    <span style={{ fontWeight: "600", color: "#1c1008" }}>{formatCurrency((selectedRequest.workerEarnings || 0) * 0.05)}</span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "10px", borderTop: "1px dashed #e8dfd0" }}>
-                    <span style={{ fontWeight: "700", color: "#1c1008", fontSize: "13px" }}>Total Customer Pays</span>
-                    <span style={{ fontSize: "17px", fontWeight: "900", color: "#f6a623" }}>{formatCurrency((selectedRequest.workerEarnings || 0) * 1.05)}</span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", background: "#f0fdf4", padding: "10px 12px", borderRadius: "8px", border: "1px solid #a7f3d0" }}>
-                    <span style={{ fontWeight: "700", color: "#065f46", fontSize: "12px" }}>Your Earnings (after fees)</span>
-                    <span style={{ fontSize: "15px", fontWeight: "800", color: "#059669" }}>{formatCurrency(selectedRequest.workerEarnings)}</span>
+              {/* Worker earnings */}
+              {selectedRequest.workerEarnings > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f0fdf4", padding: "10px 14px", borderRadius: "10px", border: "1px solid #a7f3d0", marginBottom: "1.25rem" }}>
+                  <span style={{ fontWeight: "700", color: "#065f46", fontSize: "12px" }}>Your Earnings (after 5% fee)</span>
+                  <span style={{ fontSize: "16px", fontWeight: "800", color: "#059669" }}>{formatCurrency(selectedRequest.totalCost - selectedRequest.platformFee)}</span>
+                </div>
+              )}
+
+              {/* ── Full Timeline ── */}
+              {timelineSteps.length > 0 && (
+                <div style={{ marginBottom: "1.5rem" }}>
+                  <p style={{ fontSize: "10px", fontWeight: "700", color: "#a8a29e", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 12px" }}>Timeline</p>
+                  <div style={{ position: "relative" }}>
+                    {timelineSteps.length > 1 && (
+                      <div style={{ position: "absolute", left: "5px", top: "10px", bottom: "10px", width: "2px", background: "#f5efe6", borderRadius: "2px" }} />
+                    )}
+                    {timelineSteps.map((step, i) => (
+                      <div key={i} style={{ position: "relative", display: "flex", alignItems: "flex-start", gap: "14px", paddingLeft: "22px", marginBottom: i < timelineSteps.length - 1 ? "12px" : 0 }}>
+                        <div style={{ position: "absolute", left: 0, top: "4px", width: "12px", height: "12px", borderRadius: "50%", background: step.color, border: "2px solid white", boxShadow: `0 0 0 2px ${step.color}` }} />
+                        <div>
+                          <div style={{ display: "flex", alignItems: "baseline", gap: "8px", flexWrap: "wrap" }}>
+                            <span style={{ fontSize: "12px", fontWeight: "700", color: step.color }}>{step.label}</span>
+                            <span style={{ fontSize: "11px", color: "#a8a29e" }}>
+                              {(() => {
+  const raw = selectedRequest[step.field];
+  const utc = raw.endsWith("Z") || raw.includes("+") ? raw : raw + "Z";
+  return new Date(utc).toLocaleString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+    hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kathmandu",
+  });
+})()}
+                            </span>
+                          </div>
+                          {/* Inline sub-label for special steps */}
+                          {step.field === "declinedAt" && selectedRequest.declineReason && (
+                            <span style={{ fontSize: "11px", color: "#991b1b", background: "#fef2f2", padding: "3px 8px", borderRadius: "6px", border: "1px solid #fecaca", fontStyle: "italic", display: "block", marginTop: "4px" }}>
+                              {selectedRequest.declineReason}
+                            </span>
+                          )}
+                          {step.field === "cancelledAt" && (selectedRequest.cancelReason || selectedRequest.cancel_reason) && (
+                            <span style={{ fontSize: "11px", color: "#991b1b", background: "#fef2f2", padding: "3px 8px", borderRadius: "6px", border: "1px solid #fecaca", fontStyle: "italic", display: "block", marginTop: "4px" }}>
+                              {selectedRequest.cancelReason || selectedRequest.cancel_reason}
+                            </span>
+                          )}
+                          {step.field === "disputedAt" && (
+                            <span style={{ fontSize: "11px", color: "#dc2626", background: "#fef2f2", padding: "3px 8px", borderRadius: "6px", border: "1px solid #fecaca", display: "block", marginTop: "4px" }}>
+                              {disputeState === "rejected" ? "Dispute rejected by admin" : "Dispute under review"}
+                            </span>
+                          )}
+                          {step.field === "resolvedAt" && (
+  <span style={{ fontSize: "11px", color: "#0891b2", background: "#e0f2fe", padding: "3px 8px", borderRadius: "6px", border: "1px solid #bae6fd", display: "block", marginTop: "4px" }}>
+    Dispute resolved — payment released
+  </span>
+)}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              </div>
+              )}
 
-              <div style={{ display: "flex", gap: "8px", marginBottom: "1rem" }}>
-                {[["call","Call",Phone],["email","Email",Mail],["message","Message",MessageCircle]].map(([type,label,Icon]) => (
-                  <button key={type} onClick={() => handleContact(type, selectedRequest.customerName)}
-                    style={{ flex: 1, padding: "9px", borderRadius: "10px", border: "1px solid #e8dfd0", background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "12px", fontWeight: "600", color: "#78716c", transition: "background 0.15s" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "#faf7f2"}
-                    onMouseLeave={e => e.currentTarget.style.background = "white"}
-                  >
-                    <Icon size={13} color="#f6a623"/> {label}
-                  </button>
-                ))}
-              </div>
-
+              {/* PENDING actions */}
               {isPending && (
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button onClick={() => handleAcceptRequest(selectedRequest._id || selectedRequest.id)}
-                    disabled={processingAction === (selectedRequest._id || selectedRequest.id) || !offerReady}
-                    style={{ flex: 1, padding: "30px 20px", background: offerReady ? "linear-gradient(135deg,#059669,#047857)" : "#e5e7eb", color: "white", border: "none", borderRadius: "10px", fontWeight: "700", cursor: !offerReady ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "13px" }}>
-                    <ThumbsUp size={14}/> Accept Request
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button onClick={() => handleAcceptRequest(rid)} disabled={processingAction === rid || !offerReady}
+                    style={{ flex: 1, padding: "11px 20px", background: offerReady ? "linear-gradient(135deg,#059669,#047857)" : "#e5e7eb", color: offerReady ? "white" : "#9ca3af", border: "none", borderRadius: "10px", fontWeight: "700", cursor: !offerReady ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "13px" }}>
+                    <ThumbsUp size={14} /> Accept
                   </button>
-                  <button onClick={() => handleDeclineRequest(selectedRequest._id || selectedRequest.id)}
-                    disabled={processingAction === (selectedRequest._id || selectedRequest.id)}
+                  <button onClick={() => handleDeclineRequest(rid)} disabled={processingAction === rid}
                     style={{ flex: 1, padding: "11px", background: "white", color: "#78716c", border: "1.5px solid #e8dfd0", borderRadius: "10px", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "13px" }}>
-                    <ThumbsDown size={14}/> Decline
+                    <ThumbsDown size={14} /> Decline
+                  </button>
+                  <button onClick={() => handleCancelRequest(rid)} disabled={processingAction === rid}
+                    style={{ flex: 1, padding: "11px", background: "#fef2f2", color: "#991b1b", border: "1.5px solid #fecaca", borderRadius: "10px", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "13px" }}>
+                    <XCircle size={14} /> Cancel
                   </button>
                 </div>
               )}
 
+              {/* CONFIRMED actions */}
               {selectedRequest.status === "confirmed" && (
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button onClick={() => handleCompleteTask(selectedRequest._id || selectedRequest.id)}
-                    style={{ flex: 1, padding: "11px", background: "linear-gradient(135deg,#2563eb,#1d4ed8)", color: "white", border: "none", borderRadius: "10px", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "13px" }}>
-                    <CheckCircle size={14}/> Mark as Completed
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button onClick={() => handleStartWork(rid)} disabled={selectedRequest.paymentStatus !== "paid"}
+                    style={{ flex: 1, padding: "11px", background: selectedRequest.paymentStatus === "paid" ? "linear-gradient(135deg,#2563eb,#1d4ed8)" : "#e5e7eb", color: selectedRequest.paymentStatus === "paid" ? "white" : "#9ca3af", border: "none", borderRadius: "10px", fontWeight: "700", cursor: selectedRequest.paymentStatus !== "paid" ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "13px" }}>
+                    <CheckCircle size={14} />
+                    {selectedRequest.paymentStatus === "paid" ? "Start Work" : "Awaiting Payment"}
                   </button>
+                  <button onClick={() => sendChatMessage(selectedRequest.customerId)}
+                    style={{ flex: 1, padding: "11px", background: "white", color: "#78716c", border: "1.5px solid #e8dfd0", borderRadius: "10px", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "13px" }}>
+                    <MessageCircle size={14} /> Chat
+                  </button>
+                  <button onClick={() => handleCancelRequest(rid)}
+                    style={{ flex: 1, padding: "11px", background: "#fef2f2", color: "#991b1b", border: "1.5px solid #fecaca", borderRadius: "10px", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "13px" }}>
+                    <XCircle size={14} /> Cancel
+                  </button>
+                </div>
+              )}
+
+              {/* IN PROGRESS actions */}
+              {selectedRequest.status === "in_progress" && (
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button onClick={() => handleCompleteTask(rid)} disabled={processingAction === rid}
+                    style={{ flex: 1, padding: "11px", background: "linear-gradient(135deg,#059669,#047857)", color: "white", border: "none", borderRadius: "10px", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "13px" }}>
+                    <CheckCircle size={14} /> Mark as Completed
+                  </button>
+                  <button onClick={() => sendChatMessage(selectedRequest.customerId)}
+                    style={{ flex: 1, padding: "11px", background: "white", color: "#78716c", border: "1.5px solid #e8dfd0", borderRadius: "10px", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "13px" }}>
+                    <MessageCircle size={14} /> Chat
+                  </button>
+                  <button onClick={() => handleCancelRequest(rid)}
+                    style={{ flex: 1, padding: "11px", background: "#fef2f2", color: "#991b1b", border: "1.5px solid #fecaca", borderRadius: "10px", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "13px" }}>
+                    <XCircle size={14} /> Cancel
+                  </button>
+                </div>
+              )}
+
+              {/* COMPLETED actions */}
+              {selectedRequest.status === "completed" && (
+                <div style={{ display: "flex", gap: "8px" }}>
                   <button onClick={handleContactSupport}
                     style={{ flex: 1, padding: "11px", background: "white", color: "#78716c", border: "1.5px solid #e8dfd0", borderRadius: "10px", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "13px" }}>
-                    <MessageCircle size={14}/> Need Help?
+                    <MessageCircle size={14} /> Need Help?
                   </button>
                 </div>
               )}
@@ -810,7 +1016,7 @@ const WorkerTaskRequestsPage = () => {
         );
       })()}
 
-      {/* Decline Modal */}
+      {/* ── Decline Modal ── */}
       {showDeclineModal && (
         <div onClick={() => setShowDeclineModal(false)}
           style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1010, backdropFilter: "blur(4px)" }}
@@ -822,9 +1028,7 @@ const WorkerTaskRequestsPage = () => {
               <h3 style={{ fontSize: "17px", fontWeight: "800", color: "#1c1008", margin: 0 }}>Decline Request</h3>
               <button onClick={() => setShowDeclineModal(false)} style={{ background: "#f5efe6", border: "none", cursor: "pointer", color: "#78716c", width: "30px", height: "30px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>×</button>
             </div>
-            <p style={{ fontSize: "13px", color: "#a8a29e", margin: "0 0 14px", fontWeight: "500" }}>
-              Let the customer know why you're unable to take this task.
-            </p>
+            <p style={{ fontSize: "13px", color: "#a8a29e", margin: "0 0 14px", fontWeight: "500" }}>Let the customer know why you're unable to take this task.</p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "12px" }}>
               {["Not available on that date","Outside my service area","Task outside my expertise","Already fully booked","Equipment unavailable"].map(r => (
                 <button key={r} onClick={() => setDeclineReason(r)} className="decline-chip"
@@ -833,12 +1037,10 @@ const WorkerTaskRequestsPage = () => {
                 </button>
               ))}
             </div>
-            <textarea placeholder="Or write a custom reason…"
-              value={declineReason} onChange={e => setDeclineReason(e.target.value)}
+            <textarea placeholder="Or write a custom reason…" value={declineReason} onChange={e => setDeclineReason(e.target.value)}
               className="decline-area"
               style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #e8dfd0", borderRadius: "10px", fontSize: "13px", minHeight: "80px", resize: "vertical", outline: "none", fontFamily: "inherit", boxSizing: "border-box", marginBottom: "14px", transition: "border-color 0.2s" }}
-              onFocus={e => e.target.style.borderColor = "#f6a623"}
-              onBlur={e  => e.target.style.borderColor = "#e8dfd0"}
+              onFocus={e => e.target.style.borderColor = "#f6a623"} onBlur={e => e.target.style.borderColor = "#e8dfd0"}
             />
             <div style={{ display: "flex", gap: "8px" }}>
               <button onClick={() => setShowDeclineModal(false)} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1.5px solid #e8dfd0", background: "white", fontSize: "13px", fontWeight: "700", cursor: "pointer", color: "#78716c" }}>Cancel</button>
@@ -846,6 +1048,26 @@ const WorkerTaskRequestsPage = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Cancel Reason Modal ── */}
+      {showCancelModal && (
+        <CancelReasonModal
+          onConfirm={confirmCancel}
+          onClose={() => { setShowCancelModal(false); setCancellingRequestId(null); }}
+        />
+      )}
+
+      {/* ── Report Modal ── */}
+      {reportTask && (
+        <ReportModal
+          taskId={reportTask._id || reportTask.id}
+          task={reportTask}
+          reporterType="worker"
+          reporterId={workerId}
+          onClose={() => setReportTask(null)}
+          onSubmitted={() => { addToast({ color: "#059669", message: "Report submitted. We'll review it." }); }}
+        />
       )}
     </div>
   );
@@ -857,33 +1079,36 @@ const RequestCard = ({
   formatDate, formatCurrency,
   handleViewDetails, handleViewCustomerProfile, sendChatMessage,
   handleAcceptRequest, handleDeclineRequest, handleStartWork, handleCompleteTask,
+  onReport, onCancel, getDisputeState,
 }) => {
   const [hovered, setHovered] = useState(false);
+  const disputeState = getDisputeState(request);
+
   return (
     <div
       onClick={() => handleViewDetails(request)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       className="request-card"
-      style={{
-        background: "white", borderRadius: "16px",
-        border: `1px solid ${hovered ? "#f6a623" : "#ede8df"}`,
-        padding: "20px 24px", transition: "all 0.18s ease", cursor: "pointer",
-        boxShadow: hovered ? "0 6px 20px rgba(246,166,35,0.12)" : "0 1px 4px rgba(0,0,0,0.04)",
-        transform: hovered ? "translateY(-1px)" : "none",
-      }}
+      style={{ background: "white", borderRadius: "16px", border: `1px solid ${hovered ? "#f6a623" : "#ede8df"}`, padding: "20px 24px", transition: "all 0.18s ease", cursor: "pointer", boxShadow: hovered ? "0 6px 20px rgba(246,166,35,0.12)" : "0 1px 4px rgba(0,0,0,0.04)", transform: hovered ? "translateY(-1px)" : "none" }}
     >
       <div className="request-card-grid">
 
         {/* LEFT */}
         <div className="card-left">
           <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-            <div className="customer-avatar" style={{ width: "46px", height: "46px", borderRadius: "50%", background: "linear-gradient(135deg,#f6a623,#e8890c)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", fontWeight: "800", color: "white", flexShrink: 0, boxShadow: "0 2px 8px rgba(246,166,35,0.3)" }}>
-              {request.customerName?.charAt(0) || <User size={16} color="white"/>}
+            <div className="customer-avatar" style={{ width: "46px", height: "46px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", fontWeight: "800", color: "white", flexShrink: 0 }}>
+              {request.profile ? (
+                <img src={request.profile} alt="customer" style={{ width: "46px", height: "46px", borderRadius: "50%", objectFit: "cover" }}/>
+              ) : (
+                <div style={{ width: "46px", height: "46px", borderRadius: "50%", background: "linear-gradient(135deg,#f6a623,#e8890c)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", fontWeight: "800", color: "white" }}>
+                  {request.customerName?.charAt(0) || "U"}
+                </div>
+              )}
             </div>
             <div style={{ minWidth: 0 }}>
               <div className="customer-name" style={{ fontWeight: "700", fontSize: "14px", color: "#1c1008", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{request.customerName || "Customer"}</div>
-              <div className="customer-task-label" style={{ fontSize: "11px", color: "#a8a29e", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{request.taskName || "General Task"}</div>
+              <div className="customer-task-label" style={{ fontSize: "11px", color: "#a8a29e", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{request.taskType || "General Task"}</div>
             </div>
           </div>
           {request.hourlyRate && (
@@ -896,12 +1121,6 @@ const RequestCard = ({
               style={{ fontSize: "11px", color: "#f6a623", background: "none", border: "none", cursor: "pointer", fontWeight: "700", textAlign: "left", padding: 0, textDecoration: "underline" }}>
               View profile
             </button>
-            <button onClick={e => { e.stopPropagation(); sendChatMessage(request.customerId); }}
-              style={{ fontSize: "11px", color: "#78716c", background: "white", border: "1.5px solid #e8dfd0", borderRadius: "9999px", cursor: "pointer", padding: "4px 10px", fontWeight: "600", width: "fit-content", transition: "border-color 0.15s" }}
-              onMouseEnter={e => e.currentTarget.style.borderColor = "#f6a623"}
-              onMouseLeave={e => e.currentTarget.style.borderColor = "#e8dfd0"}>
-              Chat
-            </button>
           </div>
         </div>
 
@@ -909,7 +1128,7 @@ const RequestCard = ({
         <div className="card-middle">
           <div className="task-desc" style={{ fontSize: "14px", color: "#1c1008", marginBottom: "12px", fontWeight: "600" }}>
             <span style={{ color: "#a8a29e", fontWeight: "500" }}>Task details: </span>
-            {request.taskDescrip || request.taskName || "No description"}
+            {request.taskName || request.taskDescrip || "No description"}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "7px", marginBottom: "12px" }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: "7px" }}>
@@ -928,17 +1147,54 @@ const RequestCard = ({
             </div>
           </div>
 
-          {request.status === "declined" && request.declineReason && (
-            <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "8px 12px", fontSize: "12px", color: "#dc2626", marginBottom: "10px" }}>
-              <strong>Declined:</strong> {request.declineReason}
+          {/* ── Dispute banner on card ── */}
+          {disputeState === "open" && (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", marginBottom: "10px" }}>
+              <Flag size={12} color="#991b1b"/>
+              <span style={{ fontSize: "12px", fontWeight: "700", color: "#991b1b" }}>Disputed — payment blocked until admin resolves</span>
             </div>
           )}
+          {disputeState === "rejected" && (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "#f0fdf4", border: "1px solid #a7f3d0", borderRadius: "8px", marginBottom: "10px" }}>
+              <CheckCircle size={12} color="#065f46"/>
+              <span style={{ fontSize: "12px", fontWeight: "700", color: "#065f46" }}>Dispute rejected — payment proceeds normally</span>
+            </div>
+          )}
+
+          {/* Declined reason */}
+          {request.status === "declined" && (
+            <>
+              <div style={{ fontSize: "12px", color: "#991b1b", marginBottom: "10px" }}>
+                <span style={{ fontWeight: "700", display: "block", marginBottom: "2px" }}>Decline reason</span>
+                <span style={{ color: "#7f1d1d" }}>{request.declineReason || request.decline_reason || "No reason provided"}</span>
+              </div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <Btn onClick={e => { e.stopPropagation(); handleViewDetails(request); }} variant="default">View more <ChevronRight size={12}/></Btn>
+                <Btn variant="red" onClick={e => { e.stopPropagation(); onReport(request); }}><Flag size={11}/> Report</Btn>
+              </div>
+            </>
+          )}
+
+          {/* Cancelled reason */}
+          {request.status === "cancelled" && (request.cancelReason || request.cancel_reason) && (
+            <>
+              <div style={{ fontSize: "13px", color: "#991b1b", marginBottom: "8px", marginTop: "4px" }}>
+                <span style={{ color: "#a8a29e" }}>Cancelled: </span>
+                <span style={{ fontWeight: "600", color: "#991b1b" }}>{request.cancelReason || request.cancel_reason || "No reason provided"}</span>
+              </div>
+              <Btn variant="red" onClick={e => { e.stopPropagation(); onReport(request); }}><Flag size={11}/> Report</Btn>
+            </>
+          )}
+
+          {/* Offer not ready */}
           {isPending && !offerReady && (
             <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 12px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", fontSize: "12px", color: "#92400e", marginBottom: "10px" }}>
               <AlertCircle size={13} color="#f59e0b" style={{ flexShrink: 0 }}/>
               Offer not discussed yet — hours & price required before accepting
             </div>
           )}
+
+          {/* Payment status for confirmed/completed */}
           {(request.status === "confirmed" || request.status === "completed") && (
             <div style={{ fontSize: "12px", color: "#78716c", marginBottom: "10px" }}>
               Payment status:{" "}
@@ -948,50 +1204,55 @@ const RequestCard = ({
             </div>
           )}
 
+          {/* Action buttons */}
           <div style={{ display: "flex", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}>
+
+            {/* PENDING */}
             {isPending && (
               <>
-                <Btn onClick={e => { e.stopPropagation(); handleAcceptRequest(rid); }}
-                  disabled={processingAction === rid || !offerReady}
-                  variant={offerReady ? "green" : "gray"}
-                  title={!offerReady ? "Estimated hours and total cost must be set first" : ""}>
+                <Btn onClick={e => { e.stopPropagation(); handleAcceptRequest(rid); }} disabled={processingAction === rid || !offerReady} variant={offerReady ? "green" : "gray"} title={!offerReady ? "Estimated hours and total cost must be set first" : ""}>
                   {processingAction === rid ? <><Loader size={12}/> Processing…</> : <><Check size={12}/> Accept</>}
                 </Btn>
-                <Btn onClick={e => { e.stopPropagation(); handleDeclineRequest(rid); }}
-                  disabled={processingAction === rid} variant="red">
-                  <X size={12}/> Decline
-                </Btn>
+                <Btn onClick={e => { e.stopPropagation(); handleDeclineRequest(rid); }} disabled={processingAction === rid} variant="default"><X size={12}/> Decline</Btn>
+                <Btn onClick={e => { e.stopPropagation(); sendChatMessage(request.customerId); }} variant="cyan"><MessageCircle size={12}/> Chat</Btn>
+                <Btn variant="red" onClick={e => { e.stopPropagation(); onCancel(rid); }}><XCircle size={11}/> Cancel</Btn>
+                <Btn variant="red" onClick={e => { e.stopPropagation(); onReport(request); }}><Flag size={11}/> Report</Btn>
               </>
             )}
+
+            {/* CONFIRMED */}
             {request.status === "confirmed" && (
               <>
-                <Btn onClick={e => { e.stopPropagation(); handleStartWork(rid); }}
-                  variant={request.paymentStatus === "paid" ? "blue" : "gray"}
-                  disabled={request.paymentStatus !== "paid"}
-                  title={request.paymentStatus !== "paid" ? "Waiting for customer payment" : ""}
-                  padding="15px 74px" >
-                  <CheckCircle size={12}/>
-                  {request.paymentStatus === "paid" ? "Start Work" : "Awaiting Payment"}
+                <Btn onClick={e => { e.stopPropagation(); handleStartWork(rid); }} variant={request.paymentStatus === "paid" ? "blue" : "gray"} disabled={request.paymentStatus !== "paid"} title={request.paymentStatus !== "paid" ? "Waiting for customer payment" : ""}>
+                  <CheckCircle size={12}/>{request.paymentStatus === "paid" ? "Start Work" : "Awaiting Payment"}
                 </Btn>
-                <Btn onClick={e => { e.stopPropagation(); handleViewDetails(request); }} variant="default">
-                  View more <ChevronRight size={12}/>
-                </Btn>
+                <Btn onClick={e => { e.stopPropagation(); handleViewDetails(request); }} variant="default">View more <ChevronRight size={12}/></Btn>
+                <Btn onClick={e => { e.stopPropagation(); sendChatMessage(request.customerId); }} variant="cyan"><MessageCircle size={12}/> Chat</Btn>
+                <Btn variant="red" onClick={e => { e.stopPropagation(); onCancel(rid); }}><XCircle size={11}/> Cancel</Btn>
+                <Btn variant="red" onClick={e => { e.stopPropagation(); onReport(request); }}><Flag size={11}/> Report</Btn>
               </>
             )}
+
+            {/* IN PROGRESS */}
             {request.status === "in_progress" && (
               <>
-                <Btn onClick={e => { e.stopPropagation(); handleCompleteTask(rid); }} disabled={processingAction === rid} variant="blue" padding="15px 64px" >
+                <Btn onClick={e => { e.stopPropagation(); handleCompleteTask(rid); }} disabled={processingAction === rid} variant="blue">
                   <CheckCircle size={12}/> Mark Completed
                 </Btn>
-                <Btn onClick={e => { e.stopPropagation(); handleViewDetails(request); }} variant="default">
-                  View more <ChevronRight size={12}/>
-                </Btn>
+                <Btn onClick={e => { e.stopPropagation(); handleViewDetails(request); }} variant="default">View more <ChevronRight size={12}/></Btn>
+                <Btn onClick={e => { e.stopPropagation(); sendChatMessage(request.customerId); }} variant="cyan"><MessageCircle size={12}/> Chat</Btn>
+                <Btn variant="red" onClick={e => { e.stopPropagation(); onCancel(rid); }}><XCircle size={11}/> Cancel</Btn>
+                <Btn variant="red" onClick={e => { e.stopPropagation(); onReport(request); }}><Flag size={11}/> Report</Btn>
               </>
             )}
+
+            {/* COMPLETED */}
             {request.status === "completed" && (
-              <Btn onClick={e => { e.stopPropagation(); handleViewDetails(request); }} variant="default">
-                View more <ChevronRight size={12}/>
-              </Btn>
+              <>
+                <Btn onClick={e => { e.stopPropagation(); handleViewDetails(request); }} variant="default">View more <ChevronRight size={12}/></Btn>
+                <Btn onClick={e => { e.stopPropagation(); sendChatMessage(request.customerId); }} variant="cyan"><MessageCircle size={12}/> Chat</Btn>
+                <Btn variant="red" onClick={e => { e.stopPropagation(); onReport(request); }}><Flag size={11}/> Report</Btn>
+              </>
             )}
           </div>
         </div>

@@ -4,6 +4,23 @@ import camera from "../../images/camera.png";
 import { useNavigate } from "react-router-dom";
 import FeedbackNudge from "../FeedbackNudge/FeedbackNudge";
 
+// ── Gibberish detection helper ─────────────────────────────────────────────
+const isGibberish = (text) => {
+  const trimmed = text.trim();
+  if (!trimmed) return false; // handled separately as "empty"
+
+  const hasLetter = /[a-zA-Z]/.test(trimmed);
+  const hasVowel = /[aeiouAEIOU]/.test(trimmed);
+  const consonantClusters = trimmed.match(/[^aeiou\s]{5,}/gi) || [];
+  const clusterRatio = consonantClusters.join("").length / trimmed.length;
+
+  if (!hasLetter) return true;                              // e.g. "12345", "!!!"
+  if (!hasVowel && trimmed.length > 3) return true;        // e.g. "xzqwrt", "asdfgh"
+  if (clusterRatio > 0.6 && trimmed.length > 4) return true; // heavy consonant clusters
+  return false;
+};
+// ──────────────────────────────────────────────────────────────────────────
+
 export default function SearchBar({ onItemSelect, onImageClassified }) {
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState([]);
@@ -11,7 +28,9 @@ export default function SearchBar({ onItemSelect, onImageClassified }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [showCameraMenu, setShowCameraMenu] = useState(false);
-  const [classifiedLabel, setClassifiedLabel] = useState(null); // ← new
+  const [classifiedLabel, setClassifiedLabel] = useState(null);
+  const [inputError, setInputError] = useState(null); // ← new error state
+
   const searchRef = useRef(null);
   const dropdownRef = useRef(null);
   const cameraMenuRef = useRef(null);
@@ -41,7 +60,8 @@ export default function SearchBar({ onItemSelect, onImageClassified }) {
     const value = e.target.value;
     setQuery(value);
     setSelectedIndex(-1);
-    setClassifiedLabel(null); // ← clear nudge when user types again
+    setClassifiedLabel(null);
+    setInputError(null); // ← clear error whenever user types
 
     if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
 
@@ -76,40 +96,39 @@ export default function SearchBar({ onItemSelect, onImageClassified }) {
 
   // Select search suggestion
   const handleItemClick = async (item) => {
-  const displayValue = item.label || item.name || query;
+    const displayValue = item.label || item.name || query;
 
-  setQuery(displayValue);
-  setIsDropdownOpen(false);
-  setSelectedIndex(-1);
-  setClassifiedLabel(null);
+    setQuery(displayValue);
+    setIsDropdownOpen(false);
+    setSelectedIndex(-1);
+    setClassifiedLabel(null);
+    setInputError(null); // ← clear error on item select
 
-  try {
-    // ← run prediction on the selected label to get the real category
-    const prediction = await predictTask(displayValue);
+    try {
+      const prediction = await predictTask(displayValue);
 
-    localStorage.setItem(
-      "predictedCategory",
-      JSON.stringify({
-        predicted_label: prediction?.predicted_label || displayValue,
-        text: displayValue,
-        all_predictions: prediction?.all_predictions || [{ label: displayValue, confidence: "manual" }]
-      })
-    );
-  } catch (err) {
-    console.error("predictTask failed on item click:", err);
-    // fallback if prediction fails
-    localStorage.setItem(
-      "predictedCategory",
-      JSON.stringify({
-        predicted_label: displayValue,
-        text: displayValue,
-        all_predictions: [{ label: displayValue, confidence: "manual" }]
-      })
-    );
-  }
+      localStorage.setItem(
+        "predictedCategory",
+        JSON.stringify({
+          predicted_label: prediction?.predicted_label || displayValue,
+          text: displayValue,
+          all_predictions: prediction?.all_predictions || [{ label: displayValue, confidence: "manual" }]
+        })
+      );
+    } catch (err) {
+      console.error("predictTask failed on item click:", err);
+      localStorage.setItem(
+        "predictedCategory",
+        JSON.stringify({
+          predicted_label: displayValue,
+          text: displayValue,
+          all_predictions: [{ label: displayValue, confidence: "manual" }]
+        })
+      );
+    }
 
-  if (onItemSelect) onItemSelect(item);
-};
+    if (onItemSelect) onItemSelect(item);
+  };
 
   // Keyboard navigation
   const handleKeyDown = async (e) => {
@@ -130,6 +149,18 @@ export default function SearchBar({ onItemSelect, onImageClassified }) {
     }
     if (e.key !== "Enter") return;
     e.preventDefault();
+
+    // ── Validation ────────────────────────────────────────
+    if (!query.trim()) {
+      setInputError("Please enter a search term.");
+      return;
+    }
+    if (isGibberish(query)) {
+      setInputError("Please enter a valid product or service name.");
+      return;
+    }
+    setInputError(null);
+    // ──────────────────────────────────────────────────────
 
     try {
       setLoading(true);
@@ -191,69 +222,127 @@ export default function SearchBar({ onItemSelect, onImageClassified }) {
   };
 
   // Handle file selection
-  const handleFileSelect = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Handle file selection - FIXED VERSION (without axios)
+const handleFileSelect = async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
 
-    try {
-      setLoading(true);
-      setIsDropdownOpen(false);
-      setClassifiedLabel(null); // ← reset before new classification
+  try {
+    setLoading(true);
+    setIsDropdownOpen(false);
+    setClassifiedLabel(null);
+    setInputError(null);
 
-      const result = await classifyImage(file);
-      if (
-        result.rejected === true ||
-        result.rejected === 'true' ||
-        (result.message && result.message.includes("Rejected - Not a Valid Service Image"))
-      ) {
-        alert("Image doesn't match any service category");
-        return;
-      }
+    const result = await classifyImage(file);
+    console.log("Raw classification result:", result);
 
-      let className = '';
-      if (result.class_name) {
-        className = result.class_name;
-      } else if (result.label) {
-        if (typeof result.label === 'string') {
-          try {
-            const parsed = JSON.parse(result.label.replace(/'/g, '"').replace(/False/g, 'false').replace(/True/g, 'true'));
-            className = parsed.class_name;
-          } catch {
-            const match = result.label.match(/'class_name':\s*'([^']+)'/);
-            if (match) className = match[1];
-          }
-        } else if (typeof result.label === 'object' && result.label.class_name) {
-          className = result.label.class_name;
+    // ── Parse the result correctly ─────────────────────────────────────────
+    let parsedResult = result;
+    
+    // If result has a 'label' field that's a string, parse it
+    if (result.label && typeof result.label === 'string') {
+      try {
+        // Replace Python-style quotes with JSON quotes
+        const jsonStr = result.label
+          .replace(/'/g, '"')
+          .replace(/False/g, 'false')
+          .replace(/True/g, 'true');
+        parsedResult = JSON.parse(jsonStr);
+        console.log("Parsed result:", parsedResult);
+      } catch (parseError) {
+        console.error("Failed to parse result:", parseError);
+        // Try regex extraction as fallback
+        const classMatch = result.label.match(/'class_name':\s*'([^']+)'/);
+        const rejectedMatch = result.label.match(/'rejected':\s*(True|False)/i);
+        const confMatch = result.label.match(/'confidence':\s*([0-9.]+)/);
+        if (classMatch) {
+          parsedResult = {
+            class_name: classMatch[1],
+            rejected: rejectedMatch ? rejectedMatch[1] === 'True' : false,
+            confidence: confMatch ? parseFloat(confMatch[1]) : 0
+          };
         }
       }
-
-      if (!className) {
-        alert("Failed to classify image. Please try again.");
-        return;
-      }
-
-      setQuery(className);
-      setClassifiedLabel(className);   // ← show nudge
-      onImageClassified?.(className);  // ← lift up to parent if needed
-
-      const searchResults = await getSearchRecommendations(className);
-      const transformedResults = searchResults.map(item => ({
-        id: item.id,
-        label: item.name,
-        category: item.category,
-        keywords: item.keywords
-      }));
-      setSuggestions(transformedResults);
-      setIsDropdownOpen(true);
-
-    } catch (error) {
-      console.error('Image classification failed:', error);
-      alert('Failed to classify image. Please try again.');
-    } finally {
-      setLoading(false);
-      e.target.value = '';
     }
-  };
+
+    // ── CHECK REJECTION PROPERLY ──────────────────────────────────────────
+    const isRejected = parsedResult.rejected === true || 
+                       parsedResult.rejected === 'true' ||
+                       parsedResult.class_name === "Couldn't Classify" ||
+                       parsedResult.class_index === -1;
+
+    if (isRejected) {
+      let errorMessage = "Couldn't classify this image. Please use the search bar.";
+      
+      // Check for specific rejection reasons
+      if (parsedResult.rejection_reason === "image_quality_check") {
+        errorMessage = "Image quality too low. Please upload a clearer photo of the service issue.";
+      } else if (parsedResult.rejection_reason === "low_confidence") {
+        errorMessage = "Could not identify the service with confidence. Please use the search bar or upload a clearer photo.";
+      } else if (parsedResult.message) {
+        errorMessage = parsedResult.message;
+      }
+      
+      setQuery("");
+      setInputError(errorMessage);
+      setClassifiedLabel(null);
+      setSuggestions([]);
+      setIsDropdownOpen(false);
+      return;
+    }
+
+    // ── Get the classified service name ────────────────────────────────────
+    let className = parsedResult.class_name;
+    
+    // Also check top_predictions if available
+    if (!className && parsedResult.top_predictions && parsedResult.top_predictions.length > 0) {
+      className = parsedResult.top_predictions[0].class_name;
+    }
+
+    if (!className || className === "Couldn't Classify") {
+      setQuery("");
+      setInputError("Could not identify the service. Please use the search bar.");
+      return;
+    }
+
+    // ── SUCCESS - Set the classified service ───────────────────────────────
+    setQuery(className);
+    setClassifiedLabel(className);
+    setInputError(null);
+    
+    // Notify parent component
+    if (onImageClassified) {
+      onImageClassified(className);
+    }
+
+    // Get search recommendations for the classified service
+    const searchResults = await getSearchRecommendations(className);
+    const transformedResults = searchResults.map(item => ({
+      id: item.id,
+      label: item.name,
+      category: item.category,
+      keywords: item.keywords
+    }));
+    setSuggestions(transformedResults);
+    setIsDropdownOpen(true);
+
+    // Optional: Show success feedback
+    const confidence = parsedResult.confidence ? Math.round(parsedResult.confidence * 100) : null;
+    if (confidence) {
+      console.log(`✅ Classified as: ${className} (${confidence}% confidence)`);
+    }
+
+  } catch (error) {
+    console.error('Image classification failed:', error);
+    setQuery("");
+    setInputError("Failed to analyze image. Please use the search bar or try again.");
+    setSuggestions([]);
+    setIsDropdownOpen(false);
+  } finally {
+    setLoading(false);
+    e.target.value = '';
+  }
+};
 
   return (
     <div className="search-container" ref={searchRef}>
@@ -267,10 +356,11 @@ export default function SearchBar({ onItemSelect, onImageClassified }) {
             onFocus={handleInputFocus}
             onClick={handleInputFocus}
             onKeyDown={handleKeyDown}
-            placeholder="Search products..."
-            className="search-input"
+            placeholder="Search services..."
+            className={`search-input${inputError ? " search-input--error" : ""}`}
             aria-expanded={isDropdownOpen}
             aria-controls="suggestions-dropdown"
+            aria-describedby={inputError ? "search-error" : undefined}
           />
 
           <input
@@ -297,10 +387,18 @@ export default function SearchBar({ onItemSelect, onImageClassified }) {
           {showCameraMenu && !loading && (
             <div className="camera-menu" ref={cameraMenuRef}>
               <button onClick={handleTakePhoto}>Take a Photo</button>
-              <button onClick={handleUpload}>Upload from device</button>
             </div>
           )}
         </div>
+
+        {/* ── Error message ─────────────────────────────── */}
+        {inputError && (
+          <div id="search-error" className="input-error" role="alert">
+            <span className="input-error__icon">!</span>
+            {inputError}
+          </div>
+        )}
+        {/* ─────────────────────────────────────────────── */}
 
         {isDropdownOpen && (
           <div id="suggestions-dropdown" className="dropdown" ref={dropdownRef} role="listbox">
@@ -330,19 +428,6 @@ export default function SearchBar({ onItemSelect, onImageClassified }) {
               <div className="dropdown-empty">No products found for "{query}"</div>
             ) : null}
           </div>
-        )}
-
-        {/* ← FeedbackNudge appears here, below dropdown, only after image classification */}
-        {classifiedLabel && (
-          <FeedbackNudge
-            message={`We detected "${classifiedLabel}" — does that look right?`}
-            onCorrect={() => setClassifiedLabel(null)}
-            onWrong={(correction) => {
-              console.log('User says it should be:', correction);
-              // swap console.log for an API call to log feedback if you want
-              setClassifiedLabel(null);
-            }}
-          />
         )}
       </div>
 
@@ -389,6 +474,43 @@ export default function SearchBar({ onItemSelect, onImageClassified }) {
         }
         .search-input::placeholder {
           color: #aaa;
+        }
+        /* Error state for input border */
+        .search-input--error {
+          border-color: #e53935 !important;
+          box-shadow: 0 4px 20px rgba(229, 57, 53, 0.12) !important;
+        }
+        /* Error message box */
+        .input-error {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-top: 8px;
+          padding: 10px 14px;
+          background: #fff5f5;
+          border: 1px solid #fcc;
+          border-radius: 8px;
+          color: #c0392b;
+          font-size: 14px;
+          animation: errorSlideIn 0.2s ease-out;
+        }
+        .input-error__icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 18px;
+          height: 18px;
+          min-width: 18px;
+          background: #e53935;
+          color: white;
+          border-radius: 50%;
+          font-size: 12px;
+          font-weight: 700;
+          line-height: 1;
+        }
+        @keyframes errorSlideIn {
+          from { opacity: 0; transform: translateY(-4px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
         .clear-button {
           position: absolute;

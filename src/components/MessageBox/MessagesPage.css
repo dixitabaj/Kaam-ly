@@ -14,7 +14,10 @@
 /* ── Layout ──────────────────────────────────────────────────────────────── */
 .mp-container {
   display: flex;
-  height: 720px;
+  /* Fill whatever space is left below the navbar.
+     If your navbar height changes, update --navbar-height or override inline. */
+  height: calc(97.5vh - var(--navbar-height, 64px));
+  min-height: 0;
   font-family: 'DM Sans', sans-serif;
   background: #f5f4f0;
   overflow: hidden;

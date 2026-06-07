@@ -22,6 +22,7 @@ export default function WorkerDescription() {
   const [filteredReviews,    setFilteredReviews]    = useState([]);
   const [expandedReviews,    setExpandedReviews]    = useState({});
   const [selectedSkillIndex, setSelectedSkillIndex] = useState(0);
+  
 
   const navigate    = useNavigate();
   const storedUser  = localStorage.getItem('user');
@@ -44,9 +45,9 @@ export default function WorkerDescription() {
       reviews:      worker.reviews.length,
       hourlyRate:   displayPrice !== '-' ? Number(displayPrice) : 0,
       minHours:     worker.minHours || 1,
-      taskType:     worker.taskType,
+      taskType:     displaySkillName || null, 
       description:  worker.description,
-      profileImage: worker.profileImage,
+      profilePhoto: worker.profilePhoto,
       avatar:       getInitials(worker.name),
     };
     localStorage.setItem('selectedWorker', JSON.stringify(workerData));
@@ -91,6 +92,11 @@ export default function WorkerDescription() {
             price: taskPrices?.price ?? data.basePrice ?? '-',
           };
         });
+        const formattedDate = new Date(data.registeredAt).toLocaleString('en-US', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric'
+});
 
         setWorker({
           name:          `${data.firstName || ''} ${data.lastName || ''}`.trim() || 'Unknown',
@@ -111,8 +117,8 @@ export default function WorkerDescription() {
           responseTime:  data.responseTime  || '-',
           repeatClients: data.repeatClients || 0,
           reviews:       enrichedReviews,
-          profileImage:  data.profileImage  || null,
-          joinedOn:      data.joinedOn      || '-',
+          profilePhoto:  data.profilePhoto  || null,
+          joinedOn:      formattedDate      || '-',
         });
         setFilteredReviews(enrichedReviews);
       } catch {
@@ -199,8 +205,8 @@ export default function WorkerDescription() {
                 <div className="worker-profile-header">
                   <div className="worker-avatar-wrapper">
                     <div className="worker-avatar-cus">
-                      {worker.profileImage
-                        ? <img src={worker.profileImage} alt={worker.name} />
+                      {worker.profilePhoto
+                        ? <img src={worker.profilePhoto} alt={worker.name}  style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover' }}/>
                         : <span className="worker-avatar-initials">{getInitials(worker.name)}</span>
                       }
                     </div>

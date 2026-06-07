@@ -37,7 +37,7 @@ const apiCall = async (url, options = {}) => {
 
 const getId = (obj) => obj?._id ?? obj?.id;
 
-const deleteWorker         = (id)              => apiCall(`${BASE}/worker/${id}`,               { method: "DELETE" });
+const deleteWorker         = (id)              => apiCall(`${BASE}/worker/delete/${id}`,               { method: "DELETE" });
 const updateWorkerStatus   = (id, status)      => apiCall(`${BASE}/worker/status/${id}`,         { method: "PATCH",  headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
 const toggleAvailability   = (id, isAvailable) => apiCall(`${BASE}/worker/${id}/availability`,   { method: "PATCH",  headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isAvailable }) });
 const resetWorkerPassword  = (id)              => apiCall(`${BASE}/worker/${id}/reset-password`, { method: "PATCH",  headers: { "Content-Type": "application/json" } });
@@ -47,10 +47,25 @@ const fetchReviewsByWorker = (id)              => fetch(`${BASE}/reviews/worker/
 
 // ── Avatar ────────────────────────────────────────────────────────────────────
 const Avatar = ({ worker, size = 38, fontSize = 14 }) => {
+  const [imgError, setImgError] = useState(false);
   const initials = worker.firstName?.[0] ?? "W";
-  const color    = "#F7BE88";
-  if (worker.profilePhoto && !worker.profilePhoto.includes("string") && worker.profilePhoto.startsWith("http"))
-    return <img src={worker.profilePhoto} alt={initials} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "2px solid white", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }} />;
+  const color = "#F7BE88";
+
+  const hasValidPhoto = worker.profilePhoto &&
+    !worker.profilePhoto.includes("string") &&
+    worker.profilePhoto !== "" &&
+    worker.profilePhoto !== "null" &&
+    worker.profilePhoto !== "undefined" &&
+    !imgError;
+
+  if (hasValidPhoto)
+    return <img
+      src={worker.profilePhoto}
+      alt={initials}
+      onError={() => setImgError(true)}
+      style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "2px solid white", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}
+    />;
+
   return (
     <div style={{ width: size, height: size, borderRadius: "50%", background: `linear-gradient(135deg, ${color}, ${color}dd)`, color: "white", fontWeight: "700", fontSize, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: "2px solid white", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
       {initials}
@@ -84,17 +99,17 @@ const AvailBadge = ({ isAvailable }) => (
 );
 
 // ── Rating Stars ──────────────────────────────────────────────────────────────
-const RatingStars = ({ rating = 0, count }) => {
+const RatingStars = ({ rating = 0, count, onWhite = false }) => {
   const full = Math.floor(rating);
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
       <div style={{ display: "flex", gap: "1px" }}>
         {[...Array(5)].map((_, i) => (
-          <Star key={i} size={12} fill={i < full ? O[500] : "none"} color={i < full ? O[500] : "#d1d5db"} />
+          <Star key={i} size={12} fill={i < full ? (onWhite ? "#facc15" : O[500]) : "none"} color={i < full ? (onWhite ? "white" : O[500]) : (onWhite ? "#facc15" : "#d1d5db")} />
         ))}
       </div>
-      <span style={{ fontSize: "12px", fontWeight: "600", color: "#111827" }}>{(rating || 0).toFixed(1)}</span>
-      {count > 0 && <span style={{ fontSize: "11px", color: "#6b7280" }}>({count})</span>}
+      <span style={{ fontSize: "12px", fontWeight: "600", color: onWhite ? "white" : "#111827" }}>{(rating || 0).toFixed(1)}</span>
+      {count > 0 && <span style={{ fontSize: "11px", color: onWhite ? "rgba(255,255,255,0.8)" : "#6b7280" }}>({count})</span>}
     </div>
   );
 };
@@ -131,7 +146,7 @@ const ConfirmDialog = ({ message, onConfirm, onCancel, danger = false }) => (
 
 // ── Stat Card ─────────────────────────────────────────────────────────────────
 const StatCard = ({ label, value, suffix = "" }) => (
-  <div style={{ background: "white", borderRadius: "16px", padding: "20px", border: "1px solid #e5e7eb" }}>
+  <div style={{ background: "white", borderRadius: "16px", padding: "20px", border: "1px solid #fed7aa", borderLeft: "4px solid rgb(215, 125, 67)", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
     <div style={{ fontSize: "13px", color: "#080808", fontWeight: "500", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
     <div style={{ fontSize: "32px", fontWeight: "600", color: "#080808", lineHeight: 1 }}>{value}<span style={{ fontSize: "20px" }}>{suffix}</span></div>
   </div>
@@ -152,8 +167,7 @@ const ContextMenu = ({ worker, onAction, onClose }) => {
         { label: "View Details",        icon: Eye,                                 action: "view",         color: "#3b82f6" },
         { label: "Activate",            icon: UserCheck,                           action: "activate",     color: "#059669" },
         { label: "Suspend",             icon: UserX,                               action: "suspend",      color: "#dc2626" },
-        { label: "Toggle Availability", icon: worker.isAvailable ? Lock : Unlock,  action: "availability", color: worker.isAvailable ? "#dc2626" : "#059669" },
-        { label: "Reset Password",      icon: KeyRound,                            action: "reset",        color: O[600] },
+     
         { label: "Delete",              icon: Trash2,                              action: "delete",       color: "#dc2626" },
       ].map(({ label, icon: Icon, action, color }) => (
         <button key={action} onClick={() => { onAction(action); onClose(); }}
@@ -191,7 +205,6 @@ const WorkerDetailModal = ({ worker, onClose, onDelete, onStatusUpdate, onToggle
       delete:      `Delete ${fullName}? This cannot be undone.`,
       suspend:     `Suspend ${fullName}? They won't be able to accept new jobs.`,
       activate:    `Activate ${fullName}?`,
-      reset:       `Reset password for ${fullName}?`,
       verifySkill: `Mark skills as verified for ${fullName}?`,
       verifyFace:  `Mark face verification complete for ${fullName}?`,
     };
@@ -222,11 +235,7 @@ const WorkerDetailModal = ({ worker, onClose, onDelete, onStatusUpdate, onToggle
         <div style={{ fontSize: "13px", fontWeight: "600", color: "#111827" }}>{label}</div>
         <div style={{ fontSize: "12px", color: verified ? "#059669" : O[600], fontWeight: "500" }}>{verified ? "Verified ✓" : "Not Verified"}</div>
       </div>
-      {!verified && (
-        <button onClick={onVerify} style={{ padding: "6px 14px", borderRadius: "8px", border: "none", background: "#059669", color: "white", fontSize: "12px", fontWeight: "600", cursor: "pointer" }}>
-          Verify Now
-        </button>
-      )}
+     
     </div>
   );
 
@@ -249,7 +258,7 @@ const WorkerDetailModal = ({ worker, onClose, onDelete, onStatusUpdate, onToggle
                   <StatusBadge status={worker.status || "active"} />
                   <AvailBadge isAvailable={worker.isAvailable} />
                 </div>
-                <RatingStars rating={worker.ratings || 0} count={worker.reviewCount || 0} />
+                <RatingStars rating={worker.ratings || 0} count={worker.reviewCount || 0} onWhite />
               </div>
             </div>
             <div style={{ display: "flex", gap: "4px", marginTop: "24px", borderBottom: "1px solid rgba(255,255,255,0.2)" }}>
@@ -277,10 +286,9 @@ const WorkerDetailModal = ({ worker, onClose, onDelete, onStatusUpdate, onToggle
                 )}
 
                 {/* Stats row */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", marginBottom: "16px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "10px", marginBottom: "16px" }}>
                   {[
                     {   label: "Completed",     value: worker.noOfCompletedTask || 0 },
-                    {  label: "Response Time", value: `${worker.responseTime || 0}m` },
                     {  label: "Base Price",    value: `Rs. ${worker.basePrice || 0}` },
                   ].map(({ label, value }) => (
                     <div key={label} style={{ background: "white", borderRadius: "14px", padding: "24px", border: `1px solid ${O.border}`, textAlign: "center", }}>
@@ -348,10 +356,8 @@ const WorkerDetailModal = ({ worker, onClose, onDelete, onStatusUpdate, onToggle
                       ? <ActionBtn label="Suspend"  onClick={() => handleAction("suspend")}  danger />
                       : <ActionBtn label="Activate" onClick={() => handleAction("activate")} />}
                       </>
-                      <> <ActionBtn label={worker.isAvailable ? "Mark Unavailable" : "Mark Available"} onClick={() => onToggleAvailability(wId, !worker.isAvailable)} />
+                      <> 
                         </>
-                        
-                        <> <ActionBtn label="Reset Password" onClick={() => handleAction("reset")} /></>
                         
                         <>
 
@@ -423,7 +429,6 @@ const WorkerRow = ({ worker, onSelect, onStatusUpdate, onToggleAvailability, onD
     const msgs = {
       activate: `Activate ${fullName}?`,
       suspend:  `Suspend ${fullName}? They won't be able to accept new jobs.`,
-      reset:    `Reset password for ${fullName}?`,
       delete:   `Permanently delete ${fullName}? This cannot be undone.`,
     };
     onConfirmRequest({ type: action, message: msgs[action], workerId: wId });
@@ -595,7 +600,7 @@ export default function WorkerManagement() {
       <div style={{ marginBottom: "28px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
           <div>
-            <h1 style={{ margin: "0 0 8px", fontSize: "28px", fontWeight: "600", color: "#111827" }}>Worker Management</h1>
+           <h1 style={{ margin: "0 0 8px", fontSize: "28px", fontWeight: "600", color: "rgb(215, 125, 67)" }}>Worker Management</h1>
             <p style={{ margin: 0, fontSize: "14px", color: "#6b7280" }}>Manage service providers, verify credentials, and monitor performance</p>
           </div>
           <button onClick={() => setShowF(v => !v)}

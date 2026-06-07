@@ -16,7 +16,7 @@ from worker.config.database import (
     collection_worker,
     collection_task,
     collection_reports,
-    collection_payment,   # ← add this to your database.py
+    collection_payment,
 )
 from ..services.OAuth2 import get_current_user
 
@@ -26,8 +26,8 @@ router = APIRouter()
 
 # ── Config ────────────────────────────────────────────────────────────────────
 BASE_URL          = os.getenv("BASE_URL", "http://localhost:5173")
-KHALTI_SECRET_KEY = os.getenv("KHALTI_SECRET_KEY", "39a74e06a31f4c99abf2bcaf061c190d")
-KHALTI_BASE_URL   = "https://dev.khalti.com"   # swap to https://khalti.com in production
+KHALTI_SECRET_KEY = "ebfd3f0f11fb481097ef8bec307a6b32"
+KHALTI_BASE_URL   = "https://dev.khalti.com"
 
 
 # ── Pydantic Models ───────────────────────────────────────────────────────────
@@ -64,13 +64,6 @@ class CompleteTask(BaseModel):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-def get_khalti_headers() -> dict:
-    return {
-        "Authorization": f"Key {KHALTI_SECRET_KEY}",
-        "Content-Type":  "application/json",
-    }
-
-
 def get_task_or_404(task_id: str) -> dict:
     try:
         task = collection_task.find_one({"_id": ObjectId(task_id)})
@@ -83,13 +76,13 @@ def get_task_or_404(task_id: str) -> dict:
 
 def save_payment(
     task_id:          str,
-    payment_type:     str,    # "customer_payment" | "escrow_release" | "worker_payout" | "refund"
-    direction:        str,    # "inbound" | "outbound" | "internal"
+    payment_type:     str,
+    direction:        str,
     amount:           float,
-    method:           str,    # "khalti" | "esewa" | "manual"
-    status:           str,    # "pending" | "success" | "failed"
+    method:           str,
+    status:           str,
     transaction_uuid: str = "",
-    gateway_ref:      str = "",   # khalti_txn_id or esewa_ref_id
+    gateway_ref:      str = "",
     raw_response:     dict = None,
 ) -> str:
     """Insert a payment record, return its _id as string."""
@@ -109,8 +102,26 @@ def save_payment(
     return str(result.inserted_id)
 
 
+def get_payment_ref_for_task(task_id: str) -> str:
+    """
+    Look up the gateway_ref (pidx / txn_id) for a task from collection_payment.
+    Returns the first successful or pending inbound payment's gateway_ref.
+    """
+    payment = collection_payment.find_one(
+        {
+            "task_id":  task_id,
+            "direction": "inbound",
+            "status":   {"$in": ["success", "pending"]},
+        },
+        sort=[("created_at", 1)],
+    )
+    if not payment:
+        return None
+    return payment.get("gateway_ref") or payment.get("transaction_uuid")
+
+
 # ══════════════════════════════════════════════════════════════════════════════
-# RELEASE — Customer releases escrow (no money moves, just a DB flag)
+# RELEASE — Customer releases escrow
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.patch("/customer/release/{task_id}", tags=["payment"])
@@ -118,27 +129,17 @@ def release_to_worker(
     task_id:      str,
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    Customer confirms they are happy with the work.
-    Flips escrow_status: 'held' → 'released'.
-    No money moves here — admin payout (payment_service.py) handles the actual transfer.
-    """
-
     task = get_task_or_404(task_id)
 
-    # ── Auth ──────────────────────────────────────────────────────────────────
     if current_user["user_id"] != task.get("userId"):
         raise HTTPException(status_code=403, detail="Not authorized to release this payment")
 
-    # ── Task must be completed ────────────────────────────────────────────────
     if task.get("status") != "completed":
         raise HTTPException(status_code=400, detail="Task must be completed before releasing payment")
 
-    # ── Payment must be paid ──────────────────────────────────────────────────
     if task.get("payment_status") != "paid":
         raise HTTPException(status_code=400, detail="Payment has not been completed")
 
-    # ── Escrow must still be held ─────────────────────────────────────────────
     if task.get("escrow_status") == "released":
         raise HTTPException(status_code=400, detail="Payment already released")
     if task.get("escrow_status") == "refunded":
@@ -146,25 +147,18 @@ def release_to_worker(
     if task.get("escrow_status") != "held":
         raise HTTPException(status_code=400, detail="Escrow is not in held state")
 
-    # ── Validate payment reference — accepts Khalti OR eSewa ─────────────────
-    payment_ref = (
-        task.get("khalti_pidx") or
-        task.get("khalti_txn_id") or
-        task.get("esewa_ref_id") or
-        task.get("esewa_transaction_uuid")
-    )
+    # Resolve payment reference from collection_payment, not the task document
+    payment_ref = get_payment_ref_for_task(task_id)
     if not payment_ref:
-        raise HTTPException(status_code=400, detail="No payment reference found on this task")
+        raise HTTPException(status_code=400, detail="No payment reference found for this task")
 
-    # ── Calculate split ───────────────────────────────────────────────────────
     final_price = float(task.get("totalCost") or task.get("basePrice") or 0)
     if final_price <= 0:
         raise HTTPException(status_code=400, detail="Invalid task amount")
 
-    platform_fee  = round(final_price * 0.05, 2)   # 5% platform cut
+    platform_fee  = round(final_price * 0.05, 2)
     worker_payout = round(final_price - platform_fee, 2)
 
-    # ── Find worker ───────────────────────────────────────────────────────────
     worker_id = task.get("assignedWorkerId")
     if not worker_id:
         raise HTTPException(status_code=400, detail="No worker assigned to this task")
@@ -175,7 +169,7 @@ def release_to_worker(
 
     now = datetime.utcnow()
 
-    # ── Update task ───────────────────────────────────────────────────────────
+    # Task only stores escrow lifecycle status and financial summary
     collection_task.update_one(
         {"_id": ObjectId(task_id)},
         {"$set": {
@@ -186,13 +180,13 @@ def release_to_worker(
         }}
     )
 
-    # ── Save release event to payments collection ─────────────────────────────
+    # Full payment record goes to collection_payment
     save_payment(
         task_id=task_id,
         payment_type="escrow_release",
         direction="internal",
         amount=worker_payout,
-        method=task.get("payment_method", "unknown"),
+        method=_get_payment_method(task_id),
         status="success",
         transaction_uuid=payment_ref,
         gateway_ref=payment_ref,
@@ -209,86 +203,100 @@ def release_to_worker(
     }
 
 
+def _get_payment_method(task_id: str) -> str:
+    """Retrieve the payment method used for a task from collection_payment."""
+    payment = collection_payment.find_one(
+        {"task_id": task_id, "direction": "inbound"},
+        sort=[("created_at", 1)],
+    )
+    return payment.get("method", "unknown") if payment else "unknown"
+
+
 # ══════════════════════════════════════════════════════════════════════════════
-# 1. INITIATE — Khalti
+# INITIATE — Khalti
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.post("/task/{task_id}/pay/khalti", tags=["payment"])
 def pay_via_khalti(task_id: str):
-    """
-    Initiates a Khalti payment for the given task.
-    Returns payment_url — redirect user to this URL (no HTML form needed).
-    """
     task = get_task_or_404(task_id)
 
     if task.get("payment_status") == "paid":
         raise HTTPException(status_code=400, detail="Task already paid")
 
-    total_amount       = int(task["totalCost"])
-    total_amount_paisa = total_amount * 100   # Khalti uses paisa
+    total_amount_paisa = int(float(task["totalCost"])) * 100
+    task_name          = task.get("taskName") or task.get("taskDescrip", "Task Payment")
+    transaction_uuid   = str(uuid.uuid4())
+
+    phone = str(task.get("userPhone") or "9800000000")
+    if phone.startswith("+977"):
+        phone = phone.replace("+977", "")
+    phone = phone[:10]
 
     payload = {
         "return_url":          f"http://localhost:8000/payment/verify/khalti/{task_id}",
         "website_url":         BASE_URL,
         "amount":              total_amount_paisa,
-        "purchase_order_id":   str(task_id),
-        "purchase_order_name": f"Task Payment - {task_id}",
+        "purchase_order_id":   transaction_uuid,
+        "purchase_order_name": task_name,
         "customer_info": {
             "name":  task.get("userName", "Customer"),
-            "email": task.get("userEmail", ""),
-            "phone": task.get("userPhone", "9800000000"),
+            "email": task.get("userEmail", "test@gmail.com"),
+            "phone": phone,
         }
     }
 
-    response = requests.post(
+    print("KHALTI KEY BEING USED:", KHALTI_SECRET_KEY)
+    print("KHALTI URL BEING USED:", KHALTI_BASE_URL)
+    print("KHALTI PAYLOAD:", payload)
+
+    resp = requests.post(
         f"{KHALTI_BASE_URL}/api/v2/epayment/initiate/",
         json=payload,
-        headers=get_khalti_headers(),
+        headers={
+            "Authorization": f"Key {KHALTI_SECRET_KEY}",
+            "Content-Type":  "application/json",
+        }
     )
 
-    if response.status_code != 200:
-        print("Khalti initiation error:", response.text)
-        raise HTTPException(status_code=502, detail=f"Khalti initiation failed: {response.text}")
+    print("KHALTI INITIATE RESPONSE:", resp.text)
 
-    data        = response.json()
-    pidx        = data.get("pidx")
-    payment_url = data.get("payment_url")
+    data = resp.json()
 
-    print("Khalti pidx:", pidx)
-    print("Khalti payment_url:", payment_url)
+    if resp.status_code != 200 or not data.get("pidx"):
+        raise HTTPException(status_code=400, detail=f"Khalti initiation failed: {data}")
 
-    # ── Save pending payment record ───────────────────────────────────────────
+    pidx = data["pidx"]
+
+    # All payment details go to collection_payment only
     save_payment(
         task_id=task_id,
         payment_type="customer_payment",
         direction="inbound",
-        amount=total_amount,
+        amount=float(task["totalCost"]),
         method="khalti",
         status="pending",
-        transaction_uuid=pidx,   # pidx acts as transaction UUID for Khalti
+        transaction_uuid=transaction_uuid,
         gateway_ref=pidx,
         raw_response=data,
     )
 
-    # ── Update task ───────────────────────────────────────────────────────────
+    # Task only gets minimal status flags — no payment gateway fields
     collection_task.update_one(
         {"_id": ObjectId(task_id)},
         {"$set": {
-            "khalti_pidx":    pidx,
-            "payment_method": "khalti",
             "payment_status": "unpaid",
             "escrow_status":  "pending",
         }}
     )
 
     return {
-        "payment_url": payment_url,
+        "payment_url": data.get("payment_url"),
         "pidx":        pidx,
     }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 2a. VERIFY — Khalti redirect (GET callback from Khalti)
+# VERIFY REDIRECT — Khalti GET callback
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/payment/verify/khalti/{task_id}", tags=["payment"])
@@ -303,31 +311,28 @@ def verify_khalti_redirect(
     purchase_order_id:   Optional[str] = Query(None),
     purchase_order_name: Optional[str] = Query(None),
 ):
-    """
-    Khalti redirects here after payment with query params.
-    Always verify with Khalti lookup API — never trust redirect params alone.
-    """
     if not pidx:
         return RedirectResponse(url=f"{BASE_URL}/payment/failed")
 
-    # ── Verify with Khalti lookup ─────────────────────────────────────────────
-    response = requests.post(
+    resp = requests.post(
         f"{KHALTI_BASE_URL}/api/v2/epayment/lookup/",
         json={"pidx": pidx},
-        headers=get_khalti_headers(),
+        headers={
+            "Authorization": f"Key {KHALTI_SECRET_KEY}",
+            "Content-Type":  "application/json",
+        }
     )
 
-    if response.status_code != 200:
-        print("Khalti lookup failed:", response.text)
-        # Update pending record to failed
+    print("KHALTI LOOKUP RESPONSE:", resp.text)
+
+    if resp.status_code != 200:
         collection_payment.update_one(
             {"task_id": task_id, "method": "khalti", "status": "pending"},
-            {"$set": {"status": "failed", "raw_response": response.json()}}
+            {"$set": {"status": "failed", "raw_response": resp.json()}}
         )
         return RedirectResponse(url=f"{BASE_URL}/payment/failed")
 
-    data = response.json()
-    print("Khalti lookup response:", data)
+    data = resp.json()
 
     if data.get("status") != "Completed":
         collection_payment.update_one(
@@ -336,11 +341,10 @@ def verify_khalti_redirect(
         )
         return RedirectResponse(url=f"{BASE_URL}/payment/failed")
 
-    # ── Payment confirmed ─────────────────────────────────────────────────────
     khalti_txn_id = data.get("transaction_id")
-    paid_amount   = (data.get("total_amount") or 0) / 100   # paisa → NPR
+    paid_amount   = (data.get("total_amount") or 0) / 100
 
-    # Update payment record pending → success
+    # Update payment record in collection_payment with confirmed details
     collection_payment.update_one(
         {"task_id": task_id, "method": "khalti", "status": "pending"},
         {"$set": {
@@ -352,22 +356,18 @@ def verify_khalti_redirect(
         }}
     )
 
-    # Update task — status flags only
+    # Task only stores escrow lifecycle status — no gateway-specific fields
     collection_task.update_one(
         {"_id": ObjectId(task_id)},
         {"$set": {
             "payment_status": "paid",
             "escrow_status":  "held",
-            "khalti_pidx":    pidx,
-            "khalti_txn_id":  khalti_txn_id,
-            "payment_method": "khalti",
             "paid_at":        datetime.utcnow(),
         }}
     )
 
-    task       = collection_task.find_one({"_id": ObjectId(task_id)})
-    user_email = task.get("userEmail", "")
-    user_id    = str(task.get("userId", "unknown"))
+    task    = collection_task.find_one({"_id": ObjectId(task_id)})
+    user_id = str(task.get("userId", "unknown"))
 
     return RedirectResponse(
         url=f"{BASE_URL}/customer/pay/{task_id}/{user_id}/customer?payment=success"
@@ -375,31 +375,33 @@ def verify_khalti_redirect(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 2b. VERIFY — Khalti manual (POST for Swagger/Postman testing)
+# VERIFY MANUAL — Khalti POST for Swagger/Postman
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.post("/payment/verify/khalti", tags=["payment"])
 def verify_khalti_manual(body: VerifyKhalti):
-    """Manual Khalti verification for Swagger/Postman testing."""
-    response = requests.post(
+    resp = requests.post(
         f"{KHALTI_BASE_URL}/api/v2/epayment/lookup/",
         json={"pidx": body.pidx},
-        headers=get_khalti_headers(),
+        headers={
+            "Authorization": f"Key {KHALTI_SECRET_KEY}",
+            "Content-Type":  "application/json",
+        }
     )
 
-    if response.status_code != 200:
-        raise HTTPException(status_code=502, detail=f"Khalti lookup failed: {response.text}")
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"Khalti lookup failed: {resp.text}")
 
-    data = response.json()
-    print("Khalti manual verify response:", data)
+    data = resp.json()
+    print("KHALTI MANUAL VERIFY RESPONSE:", data)
 
     if data.get("status") != "Completed":
         return {"message": "Payment not completed", "status": data.get("status")}
 
     khalti_txn_id = data.get("transaction_id")
-    paid_amount   = (data.get("total_amount") or 0) / 100   # paisa → NPR
+    paid_amount   = (data.get("total_amount") or 0) / 100
 
-    # ── Save payment record ───────────────────────────────────────────────────
+    # All payment details go to collection_payment only
     save_payment(
         task_id=body.task_id,
         payment_type="customer_payment",
@@ -412,15 +414,12 @@ def verify_khalti_manual(body: VerifyKhalti):
         raw_response=data,
     )
 
-    # ── Update task ───────────────────────────────────────────────────────────
+    # Task only stores escrow lifecycle status — no gateway-specific fields
     collection_task.update_one(
         {"_id": ObjectId(body.task_id)},
         {"$set": {
             "payment_status": "paid",
             "escrow_status":  "held",
-            "khalti_pidx":    body.pidx,
-            "khalti_txn_id":  khalti_txn_id,
-            "payment_method": "khalti",
             "paid_at":        datetime.utcnow(),
         }}
     )
@@ -434,12 +433,11 @@ def verify_khalti_manual(body: VerifyKhalti):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PAYMENT HISTORY — query by task
+# PAYMENT HISTORY
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/payments/task/{task_id}", tags=["payment"])
 def get_task_payments(task_id: str):
-    """Get all payment records for a specific task."""
     payments = list(collection_payment.find({"task_id": task_id}).sort("created_at", 1))
     result   = []
     for p in payments:

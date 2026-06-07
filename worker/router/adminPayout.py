@@ -1,8 +1,8 @@
 """
 Admin Bulk Payout & Refund
 - Smart disburse: tries eSewa first, falls back to Khalti, flags manual if both fail
-- All money movements saved to payments collection
-- Sandbox credentials pre-configured — swap for production when ready
+- All money movements saved to payments collection ONLY
+- Task collection gets status flags ONLY
 """
 
 import uuid
@@ -16,12 +16,11 @@ from fastapi import APIRouter, HTTPException, Form
 from bson import ObjectId, errors as bson_errors
 
 from worker.config.database import (
-    collection, 
+    collection,
     collection_task,
     collection_worker,
-    collection_payment,   # ← add to database.py: collection_payment = db["payments"]
-    refund_collection, 
-    
+    collection_payment,
+    refund_collection,
 )
 from worker.router import notifications
 from worker.manager import websocket_manager
@@ -51,14 +50,14 @@ def _esewa_signature(message: str) -> str:
     return base64.b64encode(digest).decode("utf-8")
 
 
-async def _call_esewa(phone: str, amount: float, transaction_uuid: str) -> dict:
+async def _call_esewa(account_id: str, amount: float, transaction_uuid: str) -> dict:
     message   = f"total_amount={amount},transaction_uuid={transaction_uuid},product_code={ESEWA_MERCHANT_CODE}"
     signature = _esewa_signature(message)
     payload   = {
         "product_code":     ESEWA_MERCHANT_CODE,
         "transaction_uuid": transaction_uuid,
         "total_amount":     str(amount),
-        "esewa_id":         phone,
+        "esewa_id":         account_id,
         "signature":        signature,
     }
     async with httpx.AsyncClient(timeout=30) as client:
@@ -70,10 +69,10 @@ async def _call_esewa(phone: str, amount: float, transaction_uuid: str) -> dict:
     return {"status_code": resp.status_code, "body": resp.json() if resp.content else {}}
 
 
-async def _call_khalti(phone: str, amount: float, transaction_uuid: str) -> dict:
+async def _call_khalti(account_id: str, amount: float, transaction_uuid: str) -> dict:
     payload = {
         "token":             KHALTI_SECRET_KEY,
-        "identity":          phone,
+        "identity":          account_id,
         "amount":            int(amount * 100),   # paisa
         "remarks":           f"Payout {transaction_uuid}",
         "purchase_order_id": transaction_uuid,
@@ -91,76 +90,58 @@ async def _call_khalti(phone: str, amount: float, transaction_uuid: str) -> dict
 
 
 async def smart_disburse(
-    phone:            str,
+    account_id:       str,
     amount:           float,
     transaction_uuid: str,
     sandbox:          bool = True,
+    preferred_method: str  = None,
 ) -> dict:
     """
-    Try eSewa first → fallback to Khalti → flag manual if both fail.
+    Try preferred method first → fallback to other → flag manual if both fail.
     Returns: { method, status, transaction_uuid, gateway_ref, attempts }
     """
     if sandbox:
         return {
-            "method":           "esewa",
+            "method":           preferred_method or "esewa",
             "status":           "success",
             "transaction_uuid": transaction_uuid,
             "gateway_ref":      f"SANDBOX-{transaction_uuid[:8]}",
-            "attempts":         [{"method": "esewa", "status": "success", "at": datetime.utcnow().isoformat()}],
+            "attempts":         [{"method": preferred_method or "esewa", "status": "success", "at": datetime.utcnow().isoformat()}],
         }
 
-    attempts = []
+    attempts      = []
+    methods       = ["khalti", "esewa"] if (preferred_method or "").lower() == "khalti" else ["esewa", "khalti"]
+    current_uuid  = transaction_uuid
 
-    # ── Try eSewa ─────────────────────────────────────────────────────────────
-    try:
-        result = await _call_esewa(phone, amount, transaction_uuid)
-        attempt = {
-            "method":      "esewa",
-            "status_code": result["status_code"],
-            "body":        result["body"],
-            "at":          datetime.utcnow().isoformat(),
-        }
-        if result["status_code"] == 200 and result["body"].get("status") == "SUCCESS":
-            attempt["status"] = "success"
-            attempts.append(attempt)
-            return {
-                "method":           "esewa",
-                "status":           "success",
-                "transaction_uuid": transaction_uuid,
-                "gateway_ref":      result["body"].get("ref_id", ""),
-                "attempts":         attempts,
+    for i, method in enumerate(methods):
+        if i == 1:
+            current_uuid = str(uuid.uuid4())  # fresh uuid for fallback
+        try:
+            result = await (_call_esewa if method == "esewa" else _call_khalti)(account_id, amount, current_uuid)
+            attempt = {
+                "method":      method,
+                "status_code": result["status_code"],
+                "body":        result["body"],
+                "at":          datetime.utcnow().isoformat(),
             }
-        attempt["status"] = "failed"
-        attempts.append(attempt)
-    except Exception as e:
-        attempts.append({"method": "esewa", "status": "error", "error": str(e), "at": datetime.utcnow().isoformat()})
-
-    # ── Try Khalti ────────────────────────────────────────────────────────────
-    try:
-        khalti_uuid = str(uuid.uuid4())
-        result      = await _call_khalti(phone, amount, khalti_uuid)
-        attempt     = {
-            "method":      "khalti",
-            "status_code": result["status_code"],
-            "body":        result["body"],
-            "at":          datetime.utcnow().isoformat(),
-        }
-        if result["status_code"] == 200:
-            attempt["status"] = "success"
+            success = (
+                result["status_code"] == 200 and
+                (result["body"].get("status") == "SUCCESS" if method == "esewa" else True)
+            )
+            attempt["status"] = "success" if success else "failed"
             attempts.append(attempt)
-            return {
-                "method":           "khalti",
-                "status":           "success",
-                "transaction_uuid": khalti_uuid,
-                "gateway_ref":      result["body"].get("idx", ""),
-                "attempts":         attempts,
-            }
-        attempt["status"] = "failed"
-        attempts.append(attempt)
-    except Exception as e:
-        attempts.append({"method": "khalti", "status": "error", "error": str(e), "at": datetime.utcnow().isoformat()})
+            if success:
+                ref_key = "ref_id" if method == "esewa" else "idx"
+                return {
+                    "method":           method,
+                    "status":           "success",
+                    "transaction_uuid": current_uuid,
+                    "gateway_ref":      result["body"].get(ref_key, ""),
+                    "attempts":         attempts,
+                }
+        except Exception as e:
+            attempts.append({"method": method, "status": "error", "error": str(e), "at": datetime.utcnow().isoformat()})
 
-    # ── Both failed ───────────────────────────────────────────────────────────
     return {
         "method":           "none",
         "status":           "manual_required",
@@ -177,12 +158,13 @@ def save_payment(
     amount:           float,
     method:           str,
     status:           str,
-    phone:            str  = "",
+    account_id:       str  = "",
     transaction_uuid: str  = "",
     gateway_ref:      str  = "",
     attempts:         list = None,
     note:             str  = "",
     resolved_by:      str  = "",
+    extra:            dict = None,
 ) -> str:
     doc = {
         "task_id":          task_id,
@@ -191,7 +173,7 @@ def save_payment(
         "amount":           amount,
         "method":           method,
         "status":           status,
-        "phone":            phone,
+        "account_id":       account_id,
         "transaction_uuid": transaction_uuid,
         "gateway_ref":      gateway_ref,
         "attempts":         attempts or [],
@@ -200,11 +182,13 @@ def save_payment(
         "created_at":       datetime.utcnow(),
         "resolved_at":      datetime.utcnow() if status in ("success", "manual_required") else None,
     }
+    if extra:
+        doc.update(extra)
     result = collection_payment.insert_one(doc)
     return str(result.inserted_id)
 
 
-async def _notify(user_id: str, title: str, body: str, token: str, email: str, is_worker: bool, data: dict, ws_payload: dict):
+async def _notify(user_id, title, body, token, email, is_worker, data, ws_payload):
     try:
         await notifications.notify_with_fallback(
             userId=user_id, title=title, body=body,
@@ -222,13 +206,9 @@ async def _notify(user_id: str, title: str, body: str, token: str, email: str, i
 # PAYOUT ENDPOINTS
 # ══════════════════════════════════════════════════════════════════════════════
 
-
 @router.post("/payouts/{task_id}/pay")
 async def pay_worker(task_id: str, sandbox: bool = True):
-    """
-    Pay a single worker after escrow is released.
-    Tries eSewa first → Khalti fallback → manual flag if both fail.
-    """
+    """Pay a single worker after escrow is released."""
     task = collection_task.find_one({"_id": ObjectId(task_id)})
     if not task:
         raise HTTPException(404, "Task not found")
@@ -236,8 +216,18 @@ async def pay_worker(task_id: str, sandbox: bool = True):
         raise HTTPException(400, "Escrow not released yet")
     if task.get("payout_status") == "paid":
         raise HTTPException(400, "Already paid")
+    if task.get("dispute") == True or task.get("dispute") == "true":
+        raise HTTPException(400, "Payment blocked — task has an open dispute.")
 
-    amount    = task.get("worker_payout", 0)
+    # Pull worker_payout from payments collection, not task
+    release_record = collection_payment.find_one(
+        {"task_id": task_id, "type": "escrow_release", "status": "success"},
+        sort=[("created_at", -1)]
+    )
+    if not release_record:
+        raise HTTPException(400, "No escrow release record found")
+
+    amount    = release_record.get("worker_payout") or release_record.get("amount", 0)
     worker_id = task.get("assignedWorkerId")
     task_name = task.get("taskName") or task.get("taskDescrip", "your task")
 
@@ -248,45 +238,39 @@ async def pay_worker(task_id: str, sandbox: bool = True):
     if not worker:
         raise HTTPException(404, "Worker not found")
 
-    phone = worker.get("esewa_id") or worker.get("khalti_id") or worker.get("phoneNo")
-    if not phone:
-        raise HTTPException(400, "Worker has no eSewa/Khalti phone number registered")
+    payment_method = worker.get("paymentMethod")
+    payment_id     = worker.get("paymentId")
+    if not payment_method or not payment_id:
+        raise HTTPException(400, "Worker has no payment information registered")
 
     transaction_uuid = str(uuid.uuid4())
-    disburse_result  = await smart_disburse(phone, amount, transaction_uuid, sandbox=sandbox)
+    disburse_result  = await smart_disburse(payment_id, amount, transaction_uuid, sandbox=sandbox, preferred_method=payment_method.lower())
 
     now           = datetime.utcnow()
     payout_status = "paid" if disburse_result["status"] == "success" else "manual_required"
 
-    # ── Update task ───────────────────────────────────────────────────────────
+    # Task gets status flag ONLY
     collection_task.update_one(
         {"_id": ObjectId(task_id)},
-        {"$set": {
-            "payout_status":      payout_status,
-            "payout_method":      disburse_result["method"],
-            "payout_transaction": disburse_result["transaction_uuid"],
-            "payout_gateway_ref": disburse_result["gateway_ref"],
-            "payout_at":          now,
-            "sandbox_mode":       sandbox,
-        }}
+        {"$set": {"payout_status": payout_status}}
     )
 
-    # ── Save payment record ───────────────────────────────────────────────────
-    payment_id = save_payment(
+    # All payout details go to payments collection
+    payment_record_id = save_payment(
         task_id=task_id,
         payment_type="worker_payout",
         direction="outbound",
         amount=amount,
         method=disburse_result["method"],
         status=disburse_result["status"],
-        phone=phone,
+        account_id=payment_id,
         transaction_uuid=disburse_result["transaction_uuid"],
         gateway_ref=disburse_result["gateway_ref"],
         attempts=disburse_result["attempts"],
         resolved_by="auto" if disburse_result["status"] == "success" else "",
+        extra={"paid_at": now, "sandbox_mode": sandbox},
     )
 
-    # ── Update worker earnings + notify if success ────────────────────────────
     if disburse_result["status"] == "success":
         collection_worker.update_one({"email": worker_id}, {"$inc": {"total_earnings": amount}})
         await _notify(
@@ -306,7 +290,7 @@ async def pay_worker(task_id: str, sandbox: bool = True):
         "method":           disburse_result["method"],
         "amount":           amount,
         "transaction_uuid": disburse_result["transaction_uuid"],
-        "payment_id":       payment_id,
+        "payment_id":       payment_record_id,
         "attempts":         disburse_result["attempts"],
         "manual_required":  disburse_result["status"] == "manual_required",
     }
@@ -314,7 +298,7 @@ async def pay_worker(task_id: str, sandbox: bool = True):
 
 @router.post("/payouts/{task_id}/mark-paid")
 async def mark_payout_paid(task_id: str):
-    """Legacy endpoint — marks a payout as manually paid without disbursement."""
+    """Admin manually marks a payout as paid without disbursement."""
     task = collection_task.find_one({"_id": ObjectId(task_id)})
     if not task:
         raise HTTPException(404, "Task not found")
@@ -322,23 +306,30 @@ async def mark_payout_paid(task_id: str):
         raise HTTPException(400, "Escrow not released yet")
     if task.get("payout_status") == "paid":
         raise HTTPException(400, "Already marked as paid")
+    if task.get("dispute") == True or task.get("dispute") == "true":
+        raise HTTPException(400, "Payment blocked — task has an open dispute.")
 
-    now       = datetime.utcnow()
-    amount    = task.get("worker_payout", 0)
+    # Pull amount from payments collection
+    release_record = collection_payment.find_one(
+        {"task_id": task_id, "type": "escrow_release", "status": "success"},
+        sort=[("created_at", -1)]
+    )
+    amount    = (release_record.get("worker_payout") or release_record.get("amount", 0)) if release_record else 0
     worker_id = task.get("assignedWorkerId")
     task_name = task.get("taskName") or task.get("taskDescrip", "your task")
+    now       = datetime.utcnow()
 
+    # Task gets status flag ONLY
     collection_task.update_one(
         {"_id": ObjectId(task_id)},
-        {"$set": {"payout_status": "paid", "payout_method": "manual", "payout_at": now}}
+        {"$set": {"payout_status": "paid"}}
     )
 
-    worker = None
+    worker = collection_worker.find_one({"email": worker_id}) if worker_id else None
     if worker_id:
         collection_worker.update_one({"email": worker_id}, {"$inc": {"total_earnings": amount}})
-        worker = collection_worker.find_one({"email": worker_id})
 
-    # ── Save payment record ───────────────────────────────────────────────────
+    # All payout details go to payments collection
     save_payment(
         task_id=task_id,
         payment_type="worker_payout",
@@ -346,8 +337,9 @@ async def mark_payout_paid(task_id: str):
         amount=amount,
         method="manual",
         status="success",
-        phone=worker.get("phoneNo", "") if worker else "",
+        account_id=worker.get("paymentId", "") if worker else "",
         resolved_by="admin",
+        extra={"paid_at": now},
     )
 
     if worker:
@@ -374,17 +366,28 @@ async def mark_manual_payout_done(payment_id: str, admin_note: str = Form("")):
     if p.get("status") != "manual_required":
         raise HTTPException(400, "Payment is not in manual_required state")
 
-    now = datetime.utcnow()
+    now     = datetime.utcnow()
+    task_id = p.get("task_id")
+
+    # Update payment record to success
     collection_payment.update_one(
         {"_id": ObjectId(payment_id)},
-        {"$set": {"status": "success", "method": "manual", "resolved_at": now, "resolved_by": "admin", "note": admin_note}}
+        {"$set": {
+            "status":      "success",
+            "method":      "manual",
+            "resolved_at": now,
+            "resolved_by": "admin",
+            "note":        admin_note,
+        }}
     )
-    task_id = p.get("task_id")
+
+    # Task gets status flag ONLY
     if task_id:
         collection_task.update_one(
             {"_id": ObjectId(task_id)},
-            {"$set": {"payout_status": "paid", "payout_method": "manual", "payout_at": now}}
+            {"$set": {"payout_status": "paid"}}
         )
+
     return {"success": True, "message": "Manual payout marked as done", "payment_id": payment_id}
 
 
@@ -394,6 +397,7 @@ async def bulk_payout(sandbox: bool = True):
     tasks = list(collection_task.find({
         "escrow_status": "released",
         "payout_status": {"$nin": ["paid"]},
+        "dispute":       {"$nin": [True, "true"]},
     }))
     if not tasks:
         return {"message": "No pending payouts found", "processed": 0}
@@ -405,8 +409,14 @@ async def bulk_payout(sandbox: bool = True):
     for task in tasks:
         task_id   = str(task["_id"])
         worker_id = task.get("assignedWorkerId")
-        amount    = task.get("worker_payout", 0)
         task_name = task.get("taskName") or task.get("taskDescrip", "your task")
+
+        # Pull amount from payments collection
+        release_record = collection_payment.find_one(
+            {"task_id": task_id, "type": "escrow_release", "status": "success"},
+            sort=[("created_at", -1)]
+        )
+        amount = (release_record.get("worker_payout") or release_record.get("amount", 0)) if release_record else 0
 
         if not worker_id or amount <= 0:
             results.append({"task_id": task_id, "status": "skipped", "reason": "Missing worker or invalid amount"})
@@ -419,30 +429,26 @@ async def bulk_payout(sandbox: bool = True):
             failed += 1
             continue
 
-        phone = worker.get("esewa_id") or worker.get("khalti_id") or worker.get("phoneNo")
-        if not phone:
-            results.append({"task_id": task_id, "status": "skipped", "reason": "Worker has no phone/eSewa/Khalti ID"})
+        payment_method = worker.get("paymentMethod")
+        payment_id     = worker.get("paymentId")
+        if not payment_method or not payment_id:
+            results.append({"task_id": task_id, "status": "skipped", "reason": "Worker has no payment information registered"})
             failed += 1
             continue
 
         transaction_uuid = str(uuid.uuid4())
         try:
-            disburse_result = await smart_disburse(phone, amount, transaction_uuid, sandbox=sandbox)
+            disburse_result = await smart_disburse(payment_id, amount, transaction_uuid, sandbox=sandbox, preferred_method=payment_method.lower())
             now             = datetime.utcnow()
             payout_status   = "paid" if disburse_result["status"] == "success" else "manual_required"
 
+            # Task gets status flag ONLY
             collection_task.update_one(
                 {"_id": ObjectId(task_id)},
-                {"$set": {
-                    "payout_status":      payout_status,
-                    "payout_method":      disburse_result["method"],
-                    "payout_transaction": disburse_result["transaction_uuid"],
-                    "payout_gateway_ref": disburse_result["gateway_ref"],
-                    "payout_at":          now,
-                    "sandbox_mode":       sandbox,
-                }}
+                {"$set": {"payout_status": payout_status}}
             )
 
+            # All payout details to payments collection
             save_payment(
                 task_id=task_id,
                 payment_type="worker_payout",
@@ -450,11 +456,12 @@ async def bulk_payout(sandbox: bool = True):
                 amount=amount,
                 method=disburse_result["method"],
                 status=disburse_result["status"],
-                phone=phone,
+                account_id=payment_id,
                 transaction_uuid=disburse_result["transaction_uuid"],
                 gateway_ref=disburse_result["gateway_ref"],
                 attempts=disburse_result["attempts"],
                 resolved_by="auto" if disburse_result["status"] == "success" else "",
+                extra={"paid_at": now, "sandbox_mode": sandbox},
             )
 
             if disburse_result["status"] == "success":
@@ -474,13 +481,12 @@ async def bulk_payout(sandbox: bool = True):
                 failed += 1
 
             results.append({
-                "task_id":        task_id,
-                "worker_email":   worker_id,
-                "amount":         amount,
-                "status":         payout_status,
-                "method":         disburse_result["method"],
-                "attempts":       disburse_result["attempts"],
-                "sandbox_mode":   sandbox,
+                "task_id":      task_id,
+                "worker_email": worker_id,
+                "amount":       amount,
+                "status":       payout_status,
+                "method":       disburse_result["method"],
+                "attempts":     disburse_result["attempts"],
             })
 
         except Exception as e:
@@ -499,121 +505,6 @@ async def bulk_payout(sandbox: bool = True):
 # REFUND ENDPOINTS
 # ══════════════════════════════════════════════════════════════════════════════
 
-# @router.get("/refunds/pending")
-# def get_pending_refunds():
-#     refunds       = list(refund_collection.find({"status": "pending"}))
-#     result        = []
-#     total_approved = 0
-#     for refund in refunds:
-#         task_id      = refund.get("task_id")
-#         task         = collection_task.find_one({"_id": ObjectId(task_id)}) if task_id else None
-#         worker_email = task.get("assignedWorkerId") if task else None
-#         worker       = collection_worker.find_one({"email": worker_email}) if worker_email else None
-#         refund_amount = refund.get("amount_customer") or 0
-#         result.append({
-#             "refund_id":      str(refund["_id"]),
-#             "task_id":        task_id,
-#             "task_name":      task.get("taskName", "Unnamed Task") if task else "Unknown",
-#             "customer_id":    refund.get("requester_id", ""),
-#             "refund_amount":  refund_amount,
-#             "penalty_amount": refund.get("amount_worker") or 0,
-#             "refund_status":  refund.get("status", "pending"),
-#             "reason":         refund.get("reason", ""),
-#             "created_at":     str(refund.get("created_at", "")),
-#             "worker_email":   worker_email,
-#             "worker_name":    f"{worker.get('firstName',''')} {worker.get('lastName','')}".strip() if worker else None,
-#         })
-#         total_pending += refund_amount
-#     return {"count": len(result), "total_pending_amount": total_pending, "refunds": result}
-
-
-# @router.get("/refunds/approved")
-# def get_approved_refunds():
-#     refunds        = list(refund_collection.find({"status": "approved"}))
-#     result         = []
-#     total_approved = 0
-#     for refund in refunds:
-#         task_id      = refund.get("task_id")
-#         task         = collection_task.find_one({"_id": ObjectId(task_id)}) if task_id else None
-#         worker_email = task.get("assignedWorkerId") if task else None
-#         worker       = collection_worker.find_one({"email": worker_email}) if worker_email else None
-#         refund_amount = refund.get("amount_customer") or 0
-#         result.append({
-#             "refund_id":      str(refund["_id"]),
-#             "task_id":        task_id,
-#             "task_name":      task.get("taskName", "Unnamed Task") if task else "Unknown",
-#             "customer_id":    refund.get("requester_id", ""),
-#             "refund_amount":  refund_amount,
-#             "penalty_amount": refund.get("amount_worker") or 0,
-#             "refund_status":  refund.get("status", "approved"),
-#             "reason":         refund.get("reason", ""),
-#             "created_at":     str(refund.get("created_at", "")),
-#             "worker_email":   worker_email,
-#             "worker_name":    f"{worker.get('firstName',''')} {worker.get('lastName','')}".strip() if worker else None,
-#         })
-#         total_approved += refund_amount
-#     return {"count": len(result), "total_approved_amount": total_approved, "refunds": result}
-
-
-# @router.get("/refunds/rejected")
-# def get_rejected_refunds():
-#     refunds        = list(refund_collection.find({"status": "rejected"}))
-#     result         = []
-#     total_rejected = 0
-#     for refund in refunds:
-#         task_id      = refund.get("task_id")
-#         task         = collection_task.find_one({"_id": ObjectId(task_id)}) if task_id else None
-#         worker_email = task.get("assignedWorkerId") if task else None
-#         worker       = collection_worker.find_one({"email": worker_email}) if worker_email else None
-#         refund_amount = refund.get("amount_customer") or 0
-#         result.append({
-#             "refund_id":      str(refund["_id"]),
-#             "task_id":        task_id,
-#             "task_name":      task.get("taskName", "Unnamed Task") if task else "Unknown",
-#             "customer_id":    refund.get("requester_id", ""),
-#             "refund_amount":  refund_amount,
-#             "penalty_amount": refund.get("amount_worker") or 0,
-#             "refund_status":  refund.get("status", "rejected"),
-#             "reason":         refund.get("reason", ""),
-#             "created_at":     str(refund.get("created_at", "")),
-#             "worker_email":   worker_email,
-#             "worker_name":    f"{worker.get('firstName',''')} {worker.get('lastName','')}".strip() if worker else None,
-#         })
-#         total_rejected += refund_amount
-#     return {"count": len(result), "total_rejected_amount": total_rejected, "refunds": result}
-
-
-# @router.get("/refunds/history")
-# def get_refund_history():
-#     refunds        = list(refund_collection.find({"status": "refunded"}))
-#     result         = []
-#     total_refunded = 0
-#     total_penalty  = 0
-#     for refund in refunds:
-#         task_id      = refund.get("task_id")
-#         task         = collection_task.find_one({"_id": ObjectId(task_id)}) if task_id else None
-#         worker_email = task.get("assignedWorkerId") if task else None
-#         worker       = collection_worker.find_one({"email": worker_email}) if worker_email else None
-#         refund_amount  = refund.get("amount_customer") or 0
-#         penalty_amount = refund.get("amount_worker") or 0
-#         result.append({
-#             "refund_id":      str(refund["_id"]),
-#             "task_id":        task_id,
-#             "task_name":      task.get("taskName", "Unnamed Task") if task else "Unknown",
-#             "customer_id":    refund.get("requester_id", ""),
-#             "refund_amount":  refund_amount,
-#             "penalty_amount": penalty_amount,
-#             "reason":         refund.get("reason", ""),
-#             "refunded_at":    str(refund.get("updated_at", "")),
-#             "refunded_by":    refund.get("resolved_by", ""),
-#             "worker_email":   worker_email,
-#             "worker_name":    f"{worker.get('firstName',''')} {worker.get('lastName','')}".strip() if worker else None,
-#         })
-#         total_refunded += refund_amount
-#         total_penalty  += penalty_amount
-#     return {"count": len(result), "total_refunded": total_refunded, "total_penalty": total_penalty, "refunds": result}
-
-
 @router.get("/refunds/manual-required")
 def get_manual_required_refunds():
     """Refunds where both eSewa and Khalti failed — need manual bank transfer."""
@@ -627,267 +518,215 @@ def get_manual_required_refunds():
             "task_id":    task_id,
             "task_name":  task.get("taskName", "Unknown") if task else "Unknown",
             "amount":     p.get("amount"),
-            "phone":      p.get("phone"),
+            "account_id": p.get("account_id"),
             "attempts":   p.get("attempts", []),
             "created_at": str(p.get("created_at", "")),
         })
     return {"count": len(result), "refunds": result}
 
 
-@router.post("/refunds/bulk")
-async def bulk_refund():
-    """Process all pending refunds with smart fallback."""
-    tasks = list(collection_task.find({
-        "paymentStatus": "paid",
-        "refundAmount":  {"$gt": 0},
-        "$or": [
-            {"refund_status": "pending_refund"},
-            {"refund_status": {"$exists": False}},
-        ]
-    }))
-    if not tasks:
-        return {"message": "No pending refunds found", "processed": 0}
+# @router.post("/refunds/bulk")
+# async def bulk_refund():
+#     """Process all pending refunds with smart fallback."""
+#     tasks = list(collection_task.find({
+#         "paymentStatus": "paid",
+#         "refundAmount":  {"$gt": 0},
+#         "$or": [
+#             {"refund_status": "pending_refund"},
+#             {"refund_status": {"$exists": False}},
+#         ]
+#     }))
+#     if not tasks:
+#         return {"message": "No pending refunds found", "processed": 0}
 
-    results   = []
-    succeeded = 0
-    failed    = 0
+#     results   = []
+#     succeeded = 0
+#     failed    = 0
 
-    for task in tasks:
-        task_id       = str(task["_id"])
-        customer_id   = str(task.get("userId", ""))
-        worker_id     = str(task.get("assignedWorkerId", ""))
-        refund_amount = task.get("refundAmount", 0)
-        penalty       = task.get("penaltyAmount", 0)
-        task_name     = task.get("taskName", "your task")
-        now           = datetime.utcnow()
+#     for task in tasks:
+#         task_id       = str(task["_id"])
+#         customer_id   = str(task.get("userId", ""))
+#         worker_id     = str(task.get("assignedWorkerId", ""))
+#         refund_amount = task.get("refundAmount", 0)
+#         penalty       = task.get("penaltyAmount", 0)
+#         task_name     = task.get("taskName", "your task")
+#         now           = datetime.utcnow()
 
-        if refund_amount <= 0:
-            results.append({"task_id": task_id, "status": "skipped", "reason": "Refund amount <= 0"})
-            failed += 1
-            continue
+#         if refund_amount <= 0:
+#             results.append({"task_id": task_id, "status": "skipped", "reason": "Refund amount <= 0"})
+#             failed += 1
+#             continue
 
-        try:
-            # ── Fetch refund doc to get split amounts ─────────────────────────
-            refund_doc = None
-            amount_customer = refund_amount  # fallback: full amount to customer
-            amount_worker   = 0              # fallback: nothing to worker
+#         try:
+#             refund_doc      = refund_collection.find_one({"task_id": task_id})
+#             amount_customer = refund_doc.get("amount_customer", refund_amount) if refund_doc else refund_amount
+#             amount_worker   = refund_doc.get("amount_worker", 0) if refund_doc else 0
 
-            try:
-                refund_doc = db_refunds.find_one({"task_id": task_id})  # adjust collection name
-                if refund_doc:
-                    amount_customer = refund_doc.get("amount_customer", refund_amount)
-                    amount_worker   = refund_doc.get("amount_worker", 0)
-            except Exception:
-                pass
+#             # Get customer payment info from payments collection
+#             customer_payment = collection_payment.find_one(
+#                 {"task_id": task_id, "type": "customer_payment", "status": "success"},
+#                 sort=[("created_at", -1)]
+#             )
+#             payment_method = customer_payment.get("method") if customer_payment else None
+#             payment_id     = customer_payment.get("account_id") if customer_payment else None
 
-            # ── Fetch customer ────────────────────────────────────────────────
-            customer = None
-            try:
-                from ..config import database as db
-                customer = db.collection.find_one({"_id": ObjectId(customer_id)})
-            except Exception:
-                pass
+#             transaction_uuid = str(uuid.uuid4())
 
-            phone = None
-            if customer:
-                phone = customer.get("esewa_ref_id") or customer.get("khalti_txn_id") or customer.get("phoneNo")
+#             if payment_method and payment_id and amount_customer > 0:
+#                 disburse_result = await smart_disburse(payment_id, amount_customer, transaction_uuid, sandbox=False, preferred_method=payment_method.lower())
+#             else:
+#                 disburse_result = {
+#                     "method": "none", "status": "manual_required",
+#                     "transaction_uuid": transaction_uuid, "gateway_ref": "",
+#                     "attempts": [{"method": "none", "status": "no_payment_info"}],
+#                 }
 
-            transaction_uuid = str(uuid.uuid4())
+#             refund_status = "refunded" if disburse_result["status"] == "success" else "manual_required"
 
-            # ── Disburse to customer ──────────────────────────────────────────
-            if phone and amount_customer > 0:
-                disburse_result = await smart_disburse(phone, amount_customer, transaction_uuid, sandbox=False)
-            else:
-                disburse_result = {
-                    "method": "none", "status": "manual_required",
-                    "transaction_uuid": transaction_uuid, "gateway_ref": "",
-                    "attempts": [{"method": "none", "status": "no_phone", "note": "Customer has no eSewa/Khalti ID"}],
-                }
+#             # Task gets status flag ONLY
+#             collection_task.update_one(
+#                 {"_id": ObjectId(task_id)},
+#                 {"$set": {"refund_status": refund_status}}
+#             )
 
-            refund_status = "refunded" if disburse_result["status"] == "success" else "manual_required"
+#             # Customer refund → payments collection
+#             save_payment(
+#                 task_id=task_id,
+#                 payment_type="refund",
+#                 direction="outbound",
+#                 amount=amount_customer,
+#                 method=disburse_result["method"],
+#                 status=disburse_result["status"],
+#                 account_id=payment_id or "",
+#                 transaction_uuid=disburse_result["transaction_uuid"],
+#                 gateway_ref=disburse_result["gateway_ref"],
+#                 attempts=disburse_result["attempts"],
+#                 resolved_by="auto" if disburse_result["status"] == "success" else "",
+#                 extra={"refunded_at": now, "refunded_by": "admin", "penalty_amount": penalty},
+#             )
 
-            # ── Disburse to worker (their share) ──────────────────────────────
-            worker_disburse_result = None
-            worker_refund_status   = "skipped"
+#             # ── Worker share ──────────────────────────────────────────────────
+#             worker_disburse_result = None
+#             worker_refund_status   = "skipped"
 
-            if worker_id and amount_worker > 0:
-                worker = None
-                try:
-                    worker = collection_worker.find_one({"_id": ObjectId(worker_id)})
-                except Exception:
-                    pass
+#             if worker_id and amount_worker > 0:
+#                 worker = collection_worker.find_one({"email": worker_id})
+#                 if worker:
+#                     worker_payment_method = worker.get("paymentMethod")
+#                     worker_payment_id     = worker.get("paymentId")
+#                     worker_txn_uuid       = str(uuid.uuid4())
 
-                if worker:
-                    worker_phone = (
-                        worker.get("esewa_ref_id")
-                        or worker.get("khalti_txn_id")
-                        or worker.get("phoneNo")
-                    )
-                    worker_transaction_uuid = str(uuid.uuid4())
+#                     if worker_payment_method and worker_payment_id:
+#                         worker_disburse_result = await smart_disburse(worker_payment_id, amount_worker, worker_txn_uuid, sandbox=False, preferred_method=worker_payment_method.lower())
+#                     else:
+#                         worker_disburse_result = {
+#                             "method": "none", "status": "manual_required",
+#                             "transaction_uuid": worker_txn_uuid, "gateway_ref": "",
+#                             "attempts": [{"method": "none", "status": "no_payment_info"}],
+#                         }
 
-                    if worker_phone:
-                        worker_disburse_result = await smart_disburse(
-                            worker_phone, amount_worker, worker_transaction_uuid, sandbox=False
-                        )
-                    else:
-                        worker_disburse_result = {
-                            "method": "none", "status": "manual_required",
-                            "transaction_uuid": worker_transaction_uuid, "gateway_ref": "",
-                            "attempts": [{"method": "none", "status": "no_phone", "note": "Worker has no eSewa/Khalti ID"}],
-                        }
+#                     worker_refund_status = "refunded" if worker_disburse_result["status"] == "success" else "manual_required"
 
-                    worker_refund_status = (
-                        "refunded" if worker_disburse_result["status"] == "success" else "manual_required"
-                    )
+#                     save_payment(
+#                         task_id=task_id,
+#                         payment_type="worker_refund_share",
+#                         direction="outbound",
+#                         amount=amount_worker,
+#                         method=worker_disburse_result["method"],
+#                         status=worker_disburse_result["status"],
+#                         account_id=worker_payment_id or "",
+#                         transaction_uuid=worker_disburse_result["transaction_uuid"],
+#                         gateway_ref=worker_disburse_result["gateway_ref"],
+#                         attempts=worker_disburse_result["attempts"],
+#                         resolved_by="auto" if worker_disburse_result["status"] == "success" else "",
+#                         extra={"paid_at": now},
+#                     )
 
-                    save_payment(
-                        task_id=task_id,
-                        payment_type="worker_refund_share",
-                        direction="outbound",
-                        amount=amount_worker,
-                        method=worker_disburse_result["method"],
-                        status=worker_disburse_result["status"],
-                        phone=worker_phone or "",
-                        transaction_uuid=worker_disburse_result["transaction_uuid"],
-                        gateway_ref=worker_disburse_result["gateway_ref"],
-                        attempts=worker_disburse_result["attempts"],
-                        resolved_by="auto" if worker_disburse_result["status"] == "success" else "",
-                    )
+#                     if worker_disburse_result["status"] == "success":
+#                         await _notify(
+#                             user_id=worker_id,
+#                             title="Payment Credited 💰",
+#                             body=f"Your share of NPR {amount_worker:.2f} for '{task_name}' has been credited.",
+#                             token=worker.get("fcmToken"),
+#                             email=worker.get("email"),
+#                             is_worker=True,
+#                             data={"event_type": "worker_share_paid", "task_id": task_id, "amount": str(amount_worker)},
+#                             ws_payload={"type": "worker_share_paid", "taskId": task_id, "taskName": task_name, "amount": amount_worker},
+#                         )
 
-                    # ── Notify worker of their payment ────────────────────────
-                    worker_body = (
-                        f"Your share of NPR {amount_worker:.2f} for '{task_name}' has been credited to your account."
-                        if worker_disburse_result["status"] == "success"
-                        else f"Your share of NPR {amount_worker:.2f} for '{task_name}' requires manual processing."
-                    )
-                    await _notify(
-                        user_id=worker_id,
-                        title="Payment Credited 💰" if worker_disburse_result["status"] == "success" else "Payment Pending 🔔",
-                        body=worker_body,
-                        token=worker.get("fcmToken"),
-                        email=worker.get("email"),
-                        is_worker=True,
-                        data={"event_type": "worker_share_paid", "task_id": task_id, "amount": str(amount_worker)},
-                        ws_payload={"type": "worker_share_paid", "taskId": task_id, "taskName": task_name, "amount": amount_worker},
-                    )
+#             # Notify customer
+#             if disburse_result["status"] == "success":
+#                 try:
+#                     from ..config import database as db
+#                     customer = db.collection.find_one({"_id": ObjectId(customer_id)})
+#                     if customer:
+#                         body = (
+#                             f"Your refund of NPR {amount_customer:.2f} for '{task_name}' has been processed."
+#                             + (f" NPR {penalty:.2f} retained as penalty." if penalty > 0 else "")
+#                         )
+#                         await _notify(
+#                             user_id=customer_id, title="Refund Processed ✅", body=body,
+#                             token=customer.get("fcmToken"), email=customer.get("email"),
+#                             is_worker=False,
+#                             data={"event_type": "refund_processed", "task_id": task_id, "refund_amount": str(amount_customer)},
+#                             ws_payload={"type": "refund_processed", "taskId": task_id, "taskName": task_name, "refundAmount": amount_customer},
+#                         )
+#                 except Exception:
+#                     pass
 
-            # ── Update task ───────────────────────────────────────────────────
-            collection_task.update_one(
-                {"_id": ObjectId(task_id)},
-                {"$set": {
-                    "refund_status":              refund_status,
-                    "refund_method":              disburse_result["method"],
-                    "refund_transaction":         disburse_result["transaction_uuid"],
-                    "refunded_at":                now,
-                    "refunded_by":                "admin",
-                    "worker_refund_status":       worker_refund_status,
-                    "worker_refund_amount":       amount_worker,
-                    "worker_refund_transaction":  worker_disburse_result["transaction_uuid"] if worker_disburse_result else None,
-                }}
-            )
+#             succeeded += 1 if disburse_result["status"] == "success" else 0
+#             failed    += 0 if disburse_result["status"] == "success" else 1
 
-            # ── Save customer payment record ──────────────────────────────────
-            save_payment(
-                task_id=task_id,
-                payment_type="refund",
-                direction="outbound",
-                amount=amount_customer,
-                method=disburse_result["method"],
-                status=disburse_result["status"],
-                phone=phone or "",
-                transaction_uuid=disburse_result["transaction_uuid"],
-                gateway_ref=disburse_result["gateway_ref"],
-                attempts=disburse_result["attempts"],
-                resolved_by="auto" if disburse_result["status"] == "success" else "",
-            )
+#             results.append({
+#                 "task_id":              task_id,
+#                 "status":               refund_status,
+#                 "amount_customer":      amount_customer,
+#                 "amount_worker":        amount_worker,
+#                 "worker_refund_status": worker_refund_status,
+#                 "penalty_amount":       penalty,
+#                 "method":               disburse_result["method"],
+#             })
 
-            # ── Notify customer ───────────────────────────────────────────────
-            if customer and disburse_result["status"] == "success":
-                body = (
-                    f"Your refund of NPR {amount_customer:.2f} for '{task_name}' has been processed."
-                    + (f" NPR {penalty:.2f} retained as penalty." if penalty > 0 else "")
-                )
-                await _notify(
-                    user_id=customer_id,
-                    title="Refund Processed ✅",
-                    body=body,
-                    token=customer.get("fcmToken"),
-                    email=customer.get("email"),
-                    is_worker=False,
-                    data={"event_type": "refund_processed", "task_id": task_id, "refund_amount": str(amount_customer)},
-                    ws_payload={"type": "refund_processed", "taskId": task_id, "taskName": task_name, "refundAmount": amount_customer},
-                )
+#         except Exception as e:
+#             results.append({"task_id": task_id, "status": "failed", "reason": str(e)})
+#             failed += 1
 
-            if disburse_result["status"] == "success":
-                succeeded += 1
-            else:
-                failed += 1
+#     return {
+#         "message":   f"Bulk refund complete: {succeeded} succeeded, {failed} failed/manual",
+#         "succeeded": succeeded,
+#         "failed":    failed,
+#         "results":   results,
+#     }
 
-            results.append({
-                "task_id":              task_id,
-                "status":               refund_status,
-                "amount_customer":      amount_customer,
-                "amount_worker":        amount_worker,
-                "worker_refund_status": worker_refund_status,
-                "penalty_amount":       penalty,
-                "method":               disburse_result["method"],
-                "attempts":             disburse_result["attempts"],
-                "worker_attempts":      worker_disburse_result["attempts"] if worker_disburse_result else [],
-            })
-
-        except Exception as e:
-            results.append({"task_id": task_id, "status": "failed", "reason": str(e)})
-            failed += 1
-
-    return {
-        "message":   f"Bulk refund complete: {succeeded} succeeded, {failed} failed/manual",
-        "succeeded": succeeded,
-        "failed":    failed,
-        "results":   results,
-    }
 
 @router.patch("/update-status/{refund_id}")
 async def update_refund_status(
     refund_id:       str,
-    status:          str             = Form(...),
-    amount_customer: float | None    = Form(None),
-    amount_worker:   float | None    = Form(None),
-    admin_note:      str             = Form(""),
+    status:          str        = Form(...),
+    amount_customer: float|None = Form(None),
+    amount_worker:   float|None = Form(None),
+    admin_note:      str        = Form(""),
 ):
-    """Approve or decline a refund request. On approval, disburses to customer AND worker."""
-    
-    print(f"\n[REFUND DEBUG] ========== UPDATE REFUND STATUS ==========")
-    print(f"[REFUND DEBUG] refund_id: {refund_id}")
-    print(f"[REFUND DEBUG] status: {status}")
-    print(f"[REFUND DEBUG] amount_customer: {amount_customer}")
-    print(f"[REFUND DEBUG] amount_worker: {amount_worker}")
-    print(f"[REFUND DEBUG] admin_note: {admin_note}")
-    
+    """Approve or decline a refund request. On approval, disburses to customer and worker."""
     if status not in ("approved", "declined"):
         raise HTTPException(400, "Invalid status. Must be 'approved' or 'declined'.")
- 
+
     try:
         obj_id = ObjectId(refund_id)
     except bson_errors.InvalidId:
         raise HTTPException(400, "Invalid refund ID format.")
- 
+
     refund = refund_collection.find_one({"_id": obj_id})
     if not refund:
         raise HTTPException(404, "Refund not found.")
-    
-    print(f"[REFUND DEBUG] Refund found: {refund.get('_id')}")
-    print(f"[REFUND DEBUG] Refund current status: {refund.get('status')}")
-    print(f"[REFUND DEBUG] Refund requester_id: {refund.get('requester_id')}")
-    print(f"[REFUND DEBUG] Refund task_id: {refund.get('task_id')}")
-    
     if refund.get("status") not in ("pending", None):
         raise HTTPException(400, f"Refund is already '{refund.get('status')}' and cannot be updated.")
     if status == "approved" and (amount_customer is None or amount_customer <= 0):
         raise HTTPException(400, "A positive customer refund amount is required for approval.")
- 
+
     task        = None
     task_id_str = refund.get("task_id")
- 
+
     if status == "approved":
         if not task_id_str:
             raise HTTPException(400, "No task linked to this refund.")
@@ -897,74 +736,53 @@ async def update_refund_status(
             raise HTTPException(400, "Linked task has an invalid ID.")
         if not task:
             raise HTTPException(404, "Linked task not found.")
-        
-        print(f"[REFUND DEBUG] Task found: {task.get('_id')}")
-        print(f"[REFUND DEBUG] Task assignedWorkerId: {task.get('assignedWorkerId')}")
-        print(f"[REFUND DEBUG] Task userId: {task.get('userId')}")
-        print(f"[REFUND DEBUG] Task totalCost: {task.get('totalCost')}")
-        
+
         total_paid = float(task.get("totalCost") or task.get("basePrice") or 0)
         if amount_customer > total_paid:
             raise HTTPException(400, f"Refund ({amount_customer}) exceeds what the customer paid ({total_paid}).")
- 
-    now           = datetime.utcnow()
-    task_name     = task.get("taskName", "your task") if task else "your task"
-    penalty       = amount_worker or 0.0
- 
+
+    now       = datetime.utcnow()
+    task_name = task.get("taskName", "your task") if task else "your task"
+    penalty   = amount_worker or 0.0
+
     update_fields = {
         "status":      status,
         "admin_note":  admin_note,
         "resolved_at": now,
         "resolved_by": "admin",
     }
- 
+
     customer_disburse_result = None
     worker_disburse_result   = None
- 
+
     if status == "approved":
         update_fields["amount_customer"] = amount_customer
         update_fields["amount_worker"]   = penalty
- 
-        # ── 1. Fetch & disburse to CUSTOMER ──────────────────────────────────
-        print(f"\n[REFUND DEBUG] === CUSTOMER DISBURSEMENT ===")
-        customer        = None
+
+        # ── 1. Disburse to CUSTOMER ───────────────────────────────────────────
         customer_obj_id = refund.get("requester_id") or (task.get("userId") if task else None)
-        print(f"[REFUND DEBUG] customer_obj_id: {customer_obj_id}")
- 
-        try:
-            from ..config import database as db
-            customer = db.collection.find_one({"_id": ObjectId(str(customer_obj_id))})
-        except Exception as e:
-            print(f"[REFUND] Customer lookup failed: {e}")
- 
-        customer_phone = None
-        if customer:
-            print(f"[REFUND DEBUG] Customer found: {customer.get('email')}")
-            customer_phone = customer.get("esewa_id") or customer.get("khalti_id") or customer.get("phoneNo")
-            print(f"[REFUND DEBUG] Customer phone: {customer_phone}")
-        else:
-            print(f"[REFUND DEBUG] Customer NOT found!")
- 
+
+        # Get customer payment info from payments collection
+        customer_payment = collection_payment.find_one(
+            {"task_id": task_id_str, "type": "customer_payment", "status": "success"},
+            sort=[("created_at", -1)]
+        )
+        payment_method    = customer_payment.get("method") if customer_payment else None
+        payment_id        = customer_payment.get("account_id") if customer_payment else None
         customer_txn_uuid = str(uuid.uuid4())
- 
-        if customer_phone:
-            customer_disburse_result = await smart_disburse(
-                customer_phone, amount_customer, customer_txn_uuid, sandbox=True  # Changed to True for testing
-            )
+
+        if payment_method and payment_id:
+            customer_disburse_result = await smart_disburse(payment_id, amount_customer, customer_txn_uuid, sandbox=True, preferred_method=payment_method.lower())
         else:
             customer_disburse_result = {
                 "method": "none", "status": "manual_required",
                 "transaction_uuid": customer_txn_uuid, "gateway_ref": "",
-                "attempts": [{"method": "none", "status": "no_phone", "note": "Customer has no eSewa/Khalti ID"}],
+                "attempts": [{"method": "none", "status": "no_payment_info"}],
             }
-        
-        print(f"[REFUND DEBUG] Customer disbursement result: {customer_disburse_result}")
- 
-        update_fields["refund_method"]      = customer_disburse_result["method"]
-        update_fields["refund_status"]      = customer_disburse_result["status"]
-        update_fields["refund_transaction"] = customer_disburse_result["transaction_uuid"]
-        update_fields["refund_gateway_ref"] = customer_disburse_result["gateway_ref"]
- 
+
+        update_fields["refund_status"] = customer_disburse_result["status"]
+
+        # Customer refund → payments collection
         save_payment(
             task_id=task_id_str or "",
             payment_type="refund",
@@ -972,137 +790,95 @@ async def update_refund_status(
             amount=amount_customer,
             method=customer_disburse_result["method"],
             status=customer_disburse_result["status"],
-            phone=customer_phone or "",
+            account_id=payment_id or "",
             transaction_uuid=customer_disburse_result["transaction_uuid"],
             gateway_ref=customer_disburse_result["gateway_ref"],
             attempts=customer_disburse_result["attempts"],
             note=admin_note,
             resolved_by="auto" if customer_disburse_result["status"] == "success" else "",
+            extra={"refunded_at": now, "penalty_amount": penalty},
         )
- 
+
+        # Task gets status flag ONLY
+        if task_id_str:
+            collection_task.update_one(
+                {"_id": ObjectId(task_id_str)},
+                {"$set": {
+                    "taskStatus":         "refunded",
+                    "refund_status":      customer_disburse_result["status"],
+                    "refund_resolved_at": now,
+                }}
+            )
+
         # Notify customer
-        if customer and customer_disburse_result["status"] == "success":
-            body = (
-                f"Your refund of NPR {amount_customer:.2f} for '{task_name}' has been approved."
-                + (f" NPR {penalty:.2f} was retained as a penalty." if penalty > 0 else "")
-            )
-            await _notify(
-                user_id=str(customer_obj_id),
-                title="Refund Approved ✅",
-                body=body,
-                token=customer.get("fcmToken"),
-                email=customer.get("email"),
-                is_worker=False,
-                data={"event_type": "refund_approved", "task_id": task_id_str or "", "refund_amount": str(amount_customer)},
-                ws_payload={"type": "refund_approved", "taskId": task_id_str or "", "taskName": task_name, "refundAmount": amount_customer, "penaltyAmount": penalty},
-            )
- 
-        # ── 2. Fetch & disburse to WORKER (penalty share) ─────────────────────
-        print(f"\n[REFUND DEBUG] === WORKER DISBURSEMENT ===")
+        try:
+            from ..config import database as db
+            customer = db.collection.find_one({"_id": ObjectId(str(customer_obj_id))})
+            if customer and customer_disburse_result["status"] == "success":
+                body = (
+                    f"Your refund of NPR {amount_customer:.2f} for '{task_name}' has been approved."
+                    + (f" NPR {penalty:.2f} was retained as a penalty." if penalty > 0 else "")
+                )
+                await _notify(
+                    user_id=str(customer_obj_id), title="Refund Approved ✅", body=body,
+                    token=customer.get("fcmToken"), email=customer.get("email"),
+                    is_worker=False,
+                    data={"event_type": "refund_approved", "task_id": task_id_str or "", "refund_amount": str(amount_customer)},
+                    ws_payload={"type": "refund_approved", "taskId": task_id_str or "", "taskName": task_name, "refundAmount": amount_customer, "penaltyAmount": penalty},
+                )
+        except Exception as e:
+            print(f"[REFUND] Customer notify failed: {e}")
+
+        # ── 2. Disburse to WORKER (penalty share) ─────────────────────────────
         if task:
             worker_id = task.get("assignedWorkerId")
-            print(f"[REFUND DEBUG] worker_id from task: {worker_id}")
-            print(f"[REFUND DEBUG] penalty amount: {penalty}")
-            
-            if worker_id:
-                # Try multiple lookup methods for debugging
-                print(f"[REFUND DEBUG] Attempting to find worker with _id: {worker_id}")
-                worker_doc = collection_worker.find_one({"_id": worker_id})
-                
-                if not worker_doc:
-                    print(f"[REFUND DEBUG] Not found with _id, trying with email: {worker_id}")
-                    worker_doc = collection_worker.find_one({"email": worker_id})
-                
-                if not worker_doc:
-                    print(f"[REFUND DEBUG] Not found with email, trying with id: {worker_id}")
-                    worker_doc = collection_worker.find_one({"id": worker_id})
-                
-                print(f"[REFUND DEBUG] Worker lookup result: {'FOUND' if worker_doc else 'NOT FOUND'}")
-                
+            if worker_id and penalty > 0:
+                worker_doc = (
+                    collection_worker.find_one({"email": worker_id}) or
+                    collection_worker.find_one({"_id": worker_id}) or
+                    collection_worker.find_one({"id": worker_id})
+                )
                 if worker_doc:
-                    print(f"[REFUND DEBUG] Worker doc _id: {worker_doc.get('_id')}")
-                    print(f"[REFUND DEBUG] Worker doc email: {worker_doc.get('email')}")
-                    print(f"[REFUND DEBUG] Worker doc phoneNo: {worker_doc.get('phoneNo')}")
-                    print(f"[REFUND DEBUG] Worker doc esewa_id: {worker_doc.get('esewa_id')}")
-                    print(f"[REFUND DEBUG] Worker doc khalti_id: {worker_doc.get('khalti_id')}")
-                    
-                    worker_phone = (
-                        worker_doc.get("esewa_id") or
-                        worker_doc.get("khalti_id") or
-                        worker_doc.get("phoneNo")
+                    worker_payment_method = worker_doc.get("paymentMethod")
+                    worker_payment_id     = worker_doc.get("paymentId")
+                    worker_txn_uuid       = str(uuid.uuid4())
+
+                    if worker_payment_method and worker_payment_id:
+                        worker_disburse_result = await smart_disburse(worker_payment_id, penalty, worker_txn_uuid, sandbox=True, preferred_method=worker_payment_method.lower())
+                    else:
+                        worker_disburse_result = {
+                            "method": "none", "status": "manual_required",
+                            "transaction_uuid": worker_txn_uuid, "gateway_ref": "", "attempts": [],
+                        }
+
+                    # Worker penalty → payments collection
+                    save_payment(
+                        task_id=task_id_str or "",
+                        payment_type="worker_penalty_payout",
+                        direction="outbound",
+                        amount=penalty,
+                        method=worker_disburse_result["method"],
+                        status=worker_disburse_result["status"],
+                        account_id=worker_payment_id or "",
+                        transaction_uuid=worker_disburse_result["transaction_uuid"],
+                        gateway_ref=worker_disburse_result["gateway_ref"],
+                        attempts=worker_disburse_result["attempts"],
+                        note=f"Worker penalty share from refund on task {task_id_str}",
+                        resolved_by="auto" if worker_disburse_result["status"] == "success" else "",
+                        extra={"paid_at": now},
                     )
-                    print(f"[REFUND DEBUG] Final worker_phone used: {worker_phone}")
- 
-                    if penalty > 0:
-                        if worker_phone:
-                            worker_txn_uuid = str(uuid.uuid4())
-                            print(f"[REFUND DEBUG] Calling smart_disburse for worker with phone: {worker_phone}")
-                            worker_disburse_result = await smart_disburse(
-                                worker_phone, penalty, worker_txn_uuid, sandbox=True  # Changed to True for testing
-                            )
-                            print(f"[REFUND DEBUG] Worker disbursement result: {worker_disburse_result}")
-                            
-                            save_payment(
-                                task_id=task_id_str or "",
-                                payment_type="worker_penalty_payout",
-                                direction="outbound",
-                                amount=penalty,
-                                method=worker_disburse_result["method"],
-                                status=worker_disburse_result["status"],
-                                phone=worker_phone,
-                                transaction_uuid=worker_disburse_result["transaction_uuid"],
-                                gateway_ref=worker_disburse_result["gateway_ref"],
-                                attempts=worker_disburse_result["attempts"],
-                                note=f"Worker share from refund approval on task {task_id_str}",
-                                resolved_by="auto" if worker_disburse_result["status"] == "success" else "",
-                            )
-                            
-                            if worker_disburse_result["status"] == "success":
-                                collection_worker.update_one(
-                                    {"_id": worker_doc["_id"]},
-                                    {"$inc": {"total_earnings": penalty, "earnings": penalty}}
-                                )
-                                print(f"[REFUND DEBUG] Penalty of NPR {penalty:.2f} disbursed to worker {worker_id} successfully.")
-                            else:
-                                print(f"[REFUND DEBUG] Worker disbursement failed with status: {worker_disburse_result['status']}")
-                        else:
-                            print(f"[REFUND DEBUG] ERROR: Worker has NO PHONE NUMBER!")
-                            worker_disburse_result = {
-                                "method": "none", "status": "manual_required",
-                                "transaction_uuid": "", "gateway_ref": "", "attempts": [],
-                            }
-                            save_payment(
-                                task_id=task_id_str or "",
-                                payment_type="worker_penalty_payout",
-                                direction="outbound",
-                                amount=penalty,
-                                method="none",
-                                status="manual_required",
-                                phone="",
-                                note="Worker has no eSewa/Khalti ID — manual transfer needed",
-                                resolved_by="",
-                            )
-                    else:
-                        print(f"[REFUND DEBUG] No penalty amount (penalty=0), skipping worker disbursement")
- 
-                    # Build worker notification body
-                    if penalty > 0 and worker_disburse_result:
-                        if worker_disburse_result["status"] == "success":
-                            worker_notify_body = (
-                                f"NPR {penalty:.2f} from '{task_name}' refund has been sent "
-                                f"to your {worker_disburse_result['method'].upper()} account."
-                            )
-                        else:
-                            worker_notify_body = (
-                                f"NPR {penalty:.2f} from '{task_name}' refund could not be "
-                                f"auto-sent — admin will process manually."
-                            )
-                    else:
-                        worker_notify_body = (
-                            f"A full refund of NPR {amount_customer:.2f} was issued for "
-                            f"'{task_name}'. No penalty applied to you."
+
+                    if worker_disburse_result["status"] == "success":
+                        collection_worker.update_one(
+                            {"_id": worker_doc["_id"]},
+                            {"$inc": {"total_earnings": penalty, "earnings": penalty}}
                         )
- 
+
+                    worker_notify_body = (
+                        f"NPR {penalty:.2f} from '{task_name}' refund has been sent to your {worker_disburse_result['method'].upper()} account."
+                        if worker_disburse_result["status"] == "success"
+                        else f"NPR {penalty:.2f} from '{task_name}' refund could not be auto-sent — admin will process manually."
+                    )
                     await _notify(
                         user_id=str(worker_doc["_id"]),
                         title="Refund Issued to Customer 🔔",
@@ -1113,73 +889,227 @@ async def update_refund_status(
                         data={"event_type": "refund_approved", "task_id": task_id_str or "", "penalty_amount": str(penalty)},
                         ws_payload={"type": "refund_approved", "taskId": task_id_str or "", "taskName": task_name, "penaltyAmount": penalty},
                     )
-                else:
-                    print(f"[REFUND DEBUG] CRITICAL: Worker NOT FOUND for worker_id: {worker_id}")
-                    print(f"[REFUND DEBUG] This is why the worker phone is not being retrieved correctly!")
-            else:
-                print(f"[REFUND DEBUG] No worker_id in task")
-        else:
-            print(f"[REFUND DEBUG] No task object available")
- 
-        # ── 3. Update task status ─────────────────────────────────────────────
-        if task_id_str:
-            try:
-                collection_task.update_one(
-                    {"_id": ObjectId(task_id_str)},
-                    {"$set": {"taskStatus": "refunded", "refund_resolved_at": now}}
-                )
-                print(f"[REFUND DEBUG] Task {task_id_str} updated to refunded")
-            except Exception as e:
-                print(f"[REFUND] Failed to update task: {e}")
- 
-    # ── Persist refund document update ────────────────────────────────────────
+
     refund_collection.update_one({"_id": obj_id}, {"$set": update_fields})
-    print(f"[REFUND DEBUG] Refund {refund_id} updated with status: {status}")
-    print(f"[REFUND DEBUG] ========== UPDATE REFUND STATUS COMPLETE ==========\n")
- 
+
     return {
-        "message":                f"Refund request {status} successfully.",
-        "refund_id":              refund_id,
-        "status":                 status,
-        "amount_customer":        update_fields.get("amount_customer"),
-        "amount_worker":          update_fields.get("amount_worker"),
-        "admin_note":             admin_note,
-        "resolved_at":            now.isoformat(),
-        "customer_disburse":      customer_disburse_result,
-        "worker_disburse":        worker_disburse_result,
+        "message":           f"Refund request {status} successfully.",
+        "refund_id":         refund_id,
+        "status":            status,
+        "amount_customer":   update_fields.get("amount_customer"),
+        "amount_worker":     update_fields.get("amount_worker"),
+        "admin_note":        admin_note,
+        "resolved_at":       now.isoformat(),
+        "customer_disburse": customer_disburse_result,
+        "worker_disburse":   worker_disburse_result,
     }
 
+@router.post("/refunds/bulk")
+async def bulk_refund():
+    """Process all pending refunds with smart fallback."""
+    # Include both pending, queued, AND approved/refund_in_progress
+    pending_refunds = list(refund_collection.find({
+        "status": {"$in": [ "queued", "approved", "refund_in_progress"]},
+    }))
+
+    if not pending_refunds:
+        return {"message": "No pending refunds found", "processed": 0}
+
+    results   = []
+    succeeded = 0
+    failed    = 0
+    total_amount = 0
+
+    for refund_doc in pending_refunds:
+        task_id       = refund_doc.get("task_id")
+        customer_id   = refund_doc.get("requester_id")
+        worker_id     = refund_doc.get("reported_id")
+        amount_customer = refund_doc.get("amount_customer") or 0
+        amount_worker   = refund_doc.get("amount_worker") or 0
+        now           = datetime.utcnow()
+
+        # Skip if amount is 0
+        if amount_customer <= 0 and amount_worker <= 0:
+            results.append({"refund_id": str(refund_doc["_id"]), "status": "skipped", "reason": "No amount to refund"})
+            continue
+
+        try:
+            task = collection_task.find_one({"_id": ObjectId(task_id)}) if task_id else None
+            task_name = task.get("taskName", "your task") if task else "your task"
+
+            customer_success = False
+            worker_success = False
+            customer_method = "none"
+            worker_method = "none"
+
+            # ── Customer refund ───────────────────────────────────────────────
+            if amount_customer > 0:
+                customer_payment = collection_payment.find_one(
+                    {"task_id": str(task_id), "type": "customer_payment", "status": {"$in": ["success", "paid"]}},
+                    sort=[("created_at", -1)],
+                )
+                payment_method = customer_payment.get("method") if customer_payment else None
+                payment_id = customer_payment.get("account_id") if customer_payment else None
+                customer_txn_uuid = str(uuid.uuid4())
+
+                if payment_method and payment_id:
+                    customer_disburse_result = await smart_disburse(
+                        payment_id, amount_customer, customer_txn_uuid,
+                        sandbox=False, preferred_method=payment_method.lower()
+                    )
+                    customer_success = customer_disburse_result["status"] == "success"
+                    customer_method = customer_disburse_result["method"]
+                else:
+                    customer_success = False
+                    customer_method = "none"
+
+                # Save customer refund to payments collection
+                save_payment(
+                    task_id=task_id or "",
+                    payment_type="refund",
+                    direction="outbound",
+                    amount=amount_customer,
+                    method=customer_method,
+                    status="success" if customer_success else "failed",
+                    account_id=payment_id or "",
+                    transaction_uuid=customer_txn_uuid,
+                    resolved_by="auto" if customer_success else "",
+                    extra={"refunded_at": now, "penalty_amount": amount_worker},
+                )
+
+            # ── Worker payout ──────────────────────────────────────────────────
+            if worker_id and amount_worker > 0:
+                worker_doc = (
+                    collection_worker.find_one({"email": str(worker_id)}) or
+                    collection_worker.find_one({"_id": ObjectId(str(worker_id))}) if ObjectId.is_valid(str(worker_id)) else None
+                )
+                if worker_doc:
+                    worker_payment_method = worker_doc.get("paymentMethod")
+                    worker_payment_id = worker_doc.get("paymentId")
+                    worker_txn_uuid = str(uuid.uuid4())
+
+                    if worker_payment_method and worker_payment_id:
+                        worker_disburse_result = await smart_disburse(
+                            worker_payment_id, amount_worker, worker_txn_uuid,
+                            sandbox=False, preferred_method=worker_payment_method.lower()
+                        )
+                        worker_success = worker_disburse_result["status"] == "success"
+                        worker_method = worker_disburse_result["method"]
+                    else:
+                        worker_success = False
+                        worker_method = "none"
+
+                    # Save worker payment
+                    save_payment(
+                        task_id=task_id or "",
+                        payment_type="worker_refund_share",
+                        direction="outbound",
+                        amount=amount_worker,
+                        method=worker_method,
+                        status="success" if worker_success else "failed",
+                        account_id=worker_payment_id or "",
+                        transaction_uuid=worker_txn_uuid,
+                        resolved_by="auto" if worker_success else "",
+                        extra={"paid_at": now},
+                    )
+
+                    if worker_success:
+                        collection_worker.update_one(
+                            {"_id": worker_doc["_id"]},
+                            {"$inc": {"total_earnings": amount_worker, "earnings": amount_worker}}
+                        )
+
+            # Update final status based on results
+            if customer_success and (amount_worker == 0 or worker_success):
+                final_status = "refunded"
+                succeeded += 1
+            elif customer_success or worker_success:
+                final_status = "partially_refunded"
+                succeeded += 1
+            else:
+                final_status = "failed"
+                failed += 1
+
+            total_amount += amount_customer if customer_success else 0
+
+            # Update refund doc status
+            refund_collection.update_one(
+                {"_id": refund_doc["_id"]},
+                {"$set": {
+                    "status": final_status,
+                    "refundStatus": final_status,
+                    "resolved_at": now,
+                    "resolved_by": "auto",
+                }}
+            )
+
+            # Update task status flag
+            if task_id:
+                collection_task.update_one(
+                    {"_id": ObjectId(task_id)},
+                    {"$set": {"refund_status": final_status}}
+                )
+
+            results.append({
+                "refund_id":         str(refund_doc["_id"]),
+                "task_id":           task_id,
+                "status":            final_status,
+                "amount_customer":   amount_customer,
+                "amount_worker":     amount_worker,
+                "customer_success":  customer_success,
+                "worker_success":    worker_success,
+            })
+
+        except Exception as e:
+            failed += 1
+            results.append({
+                "refund_id": str(refund_doc["_id"]),
+                "task_id": task_id,
+                "status": "failed",
+                "error": str(e)
+            })
+
+    return {
+        "message":   f"Bulk refund complete: {succeeded} succeeded, {failed} failed",
+        "succeeded": succeeded,
+        "failed":    failed,
+        "total_amount": total_amount,
+        "results":   results,
+    }# ══════════════════════════════════════════════════════════════════════════════
+# READ ENDPOINTS — pull everything from payments collection
+# ══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/payouts/pending")
 def get_pending_payouts():
     """All tasks with released escrow not yet paid."""
-    tasks  = list(collection_task.find({
-        "escrow_status": "released",
-        "payout_status": {"$exists": False},
-    }))
+    tasks  = list(collection_task.find({"escrow_status": "released", "payout_status": {"$exists": False}}))
     result = []
     for task in tasks:
-        task_id   = str(task["_id"])
-        worker_id = task.get("assignedWorkerId")
-        worker    = collection_worker.find_one({"email": worker_id}) if worker_id else None
+        task_id      = str(task["_id"])
+        worker_id    = task.get("assignedWorkerId")
+        worker       = collection_worker.find_one({"email": worker_id}) if worker_id else None
+        # Pull amounts from payments collection
+        release_rec  = collection_payment.find_one({"task_id": task_id, "type": "escrow_release", "status": "success"}, sort=[("created_at", -1)])
+        worker_payout = release_rec.get("worker_payout") or release_rec.get("amount", 0) if release_rec else 0
+ 
         result.append({
             "task_id":        task_id,
             "task_name":      task.get("taskName") or task.get("taskDescrip", "Unnamed Task"),
             "worker_email":   worker_id,
             "worker_name":    f"{worker.get('firstName','')} {worker.get('lastName','')}".strip() if worker else "Unknown",
-            "worker_phone":   worker.get("phoneNo") if worker else None,
-            "worker_payout":  task.get("worker_payout", 0),
-            "platform_fee":   task.get("platform_fee", 0),
+            "worker_payment_method": worker.get("paymentMethod", "N/A") if worker else "N/A",
+            "worker_payment_id":     worker.get("paymentId", "N/A") if worker else "N/A",
+            "worker_payout":  worker_payout,
+            "platform_fee":   task.get("platformFee") or task.get("platform_fee") or 0, 
             "total_cost":     task.get("totalCost", 0),
-            "released_at":    str(task.get("released_at", "")),
-            "payment_method": task.get("payment_method", ""),
+            "released_at":    str(release_rec.get("releasedAt") or release_rec.get("created_at", "")) if release_rec else "",  # ← correct key
         })
     return {"count": len(result), "total_amount": sum(t["worker_payout"] for t in result), "payouts": result}
 
 
 @router.get("/payouts/manual-required")
 def get_manual_required_payouts():
-    """Payouts where both eSewa and Khalti failed — need manual bank transfer."""
+    """Payouts where both gateways failed — need manual bank transfer."""
     payments = list(collection_payment.find({"type": "worker_payout", "status": "manual_required"}))
     result   = []
     for p in payments:
@@ -1190,39 +1120,43 @@ def get_manual_required_payouts():
             "task_id":    task_id,
             "task_name":  task.get("taskName", "Unknown") if task else "Unknown",
             "amount":     p.get("amount"),
-            "phone":      p.get("phone"),
+            "account_id": p.get("account_id"),
             "attempts":   p.get("attempts", []),
             "created_at": str(p.get("created_at", "")),
         })
     return {"count": len(result), "payouts": result}
 
-
 @router.get("/payouts/history")
 def get_payout_history():
-    """Full payout history — all released tasks."""
-    tasks  = list(collection_task.find({"escrow_status": "released"}))
-    result = []
-    for task in tasks:
-        task_id   = str(task["_id"])
-        worker_id = task.get("assignedWorkerId")
+    """Full payout history — sourced entirely from payments collection."""
+    payouts = list(collection_payment.find({"type": "worker_payout"}).sort("created_at", -1))
+    result  = []
+    for p in payouts:
+        task_id   = p.get("task_id")
+        task      = collection_task.find_one({"_id": ObjectId(task_id)}) if task_id else None
+        worker_id = task.get("assignedWorkerId") if task else None
         worker    = collection_worker.find_one({"email": worker_id}) if worker_id else None
+        
+        # ← GET PLATFORM FEE FROM TASK (prefer platform_fee over platformFee)
+        platform_fee = 0
+        if task:
+            platform_fee = task.get("platform_fee") or task.get("platformFee") or 0
+        
         result.append({
+            "payment_id":       str(p["_id"]),
             "task_id":          task_id,
-            "task_name":        task.get("taskName") or task.get("taskDescrip", "Unnamed Task"),
+            "task_name":        task.get("taskName") or task.get("taskDescrip", "Unnamed") if task else "Unknown",
             "worker_email":     worker_id,
             "worker_name":      f"{worker.get('firstName','')} {worker.get('lastName','')}".strip() if worker else "Unknown",
-            "worker_payout":    task.get("worker_payout", 0),
-            "platform_fee":     task.get("platform_fee", 0),
-            "total_cost":       task.get("totalCost", 0),
-            "payout_status":    task.get("payout_status", "pending"),
-            "payout_method":    task.get("payout_method", ""),
-            "payout_at":        str(task.get("payout_at", "")),
-            "released_at":      str(task.get("released_at", "")),
-            "payment_method":   task.get("payment_method", ""),
-            "transaction_uuid": task.get("payout_transaction", ""),
+            "amount":           p.get("amount"),
+            "platform_fee":     platform_fee,  # ← FROM TASK
+            "method":           p.get("method"),
+            "status":           p.get("status"),
+            "transaction_uuid": p.get("transaction_uuid"),
+            "gateway_ref":      p.get("gateway_ref"),
+            "paid_at":          str(p.get("paid_at", "")),
+            "created_at":       str(p.get("created_at", "")),
         })
-    total_paid    = sum(t["worker_payout"] for t in result if t["payout_status"] == "paid")
-    total_pending = sum(t["worker_payout"] for t in result if t["payout_status"] != "paid")
+    total_paid    = sum(p["amount"] for p in result if p["status"] == "success")
+    total_pending = sum(p["amount"] for p in result if p["status"] != "success")
     return {"count": len(result), "total_paid": total_paid, "total_pending": total_pending, "payouts": result}
-
-

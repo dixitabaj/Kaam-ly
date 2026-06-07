@@ -56,46 +56,57 @@ class DirectNotificationRequest(BaseModel):
 
 def _resolve_token(user_id: str, is_worker: bool = False) -> tuple[Optional[str], Optional[str]]:
     """
-    Try every possible lookup: string _id, ObjectId _id, email.
+    Try every possible lookup: email, ObjectId _id, string _id.
     Searches worker collection first if is_worker=True, then falls back to customer.
     """
+    print(f"[RESOLVE] ══════════════════════════════════")
+    print(f"[RESOLVE] Looking for user_id: {user_id}")
+    print(f"[RESOLVE] is_worker: {is_worker}")
+    
     collections_to_try = (
         [collection_worker, collection] if is_worker
         else [collection, collection_worker]
     )
 
-    for col in collections_to_try:
-        # 1. string _id
-        doc = col.find_one({"_id": user_id}, {"fcmToken": 1, "email": 1})
-        if doc:
-            token = doc.get("fcmToken")
-            email = doc.get("email")
-            print(f"[RESOLVE] ✓ string _id match — token={'✓' if token else '✗'}")
-            return token, email
+    for idx, col in enumerate(collections_to_try):
+        col_name = "worker" if col == collection_worker else "customer"
+        print(f"[RESOLVE] Searching in {col_name} collection...")
+        
+        # 1. Try as email first (most common case)
+        if "@" in user_id:
+            print(f"[RESOLVE]   → Trying email lookup: {user_id}")
+            doc = col.find_one({"email": user_id}, {"fcmToken": 1, "email": 1})
+            if doc:
+                token = doc.get("fcmToken")
+                email = doc.get("email")
+                print(f"[RESOLVE]   ✅ Email match! token={'✓' if token else '✗'}")
+                return token, email
 
-        # 2. ObjectId _id
+        # 2. Try as ObjectId _id
         try:
+            print(f"[RESOLVE]   → Trying ObjectId: {user_id}")
             doc = col.find_one({"_id": ObjectId(user_id)}, {"fcmToken": 1, "email": 1})
             if doc:
                 token = doc.get("fcmToken")
                 email = doc.get("email")
-                print(f"[RESOLVE] ✓ ObjectId match — token={'✓' if token else '✗'}")
+                print(f"[RESOLVE]   ✅ ObjectId match! token={'✓' if token else '✗'}")
                 return token, email
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[RESOLVE]   ✗ ObjectId conversion failed: {e}")
 
-        # 3. email field
-        doc = col.find_one({"email": user_id}, {"fcmToken": 1, "email": 1})
+        # 3. Try as string _id (for worker emails stored as _id)
+        print(f"[RESOLVE]   → Trying string _id: {user_id}")
+        doc = col.find_one({"_id": user_id}, {"fcmToken": 1, "email": 1})
         if doc:
             token = doc.get("fcmToken")
             email = doc.get("email")
-            print(f"[RESOLVE] ✓ email match — token={'✓' if token else '✗'}")
+            print(f"[RESOLVE]   ✅ String _id match! token={'✓' if token else '✗'}")
             return token, email
 
-    print(f"[RESOLVE] ✗ No document found for user_id={user_id} is_worker={is_worker}")
+    print(f"[RESOLVE] ✗ No document found for user_id={user_id}")
+    print(f"[RESOLVE] ══════════════════════════════════\n")
     return None, None
-
-
+    
 def _send_fcm_sync(token: str, title: str, body: str, data: dict = None) -> bool:
     # FCM requires ALL data values to be strings
     safe_data = {
@@ -158,7 +169,7 @@ async def notify_with_fallback(
     click_action: str = "/",
     is_worker: bool = False,
 ):
-    print(f"\n[NOTIFY] ══════════════════════════════════")
+    print(f"\n[NOTIFY] ")
     print(f"[NOTIFY] userId    : {userId}")
     print(f"[NOTIFY] title     : {title}")
     print(f"[NOTIFY] body      : {body}")

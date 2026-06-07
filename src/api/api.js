@@ -143,15 +143,15 @@ export const fetchAllWorkers=async ()=>{
   }
 }
 
-export const registerWorker = async (data) => {
-  const res = await fetch(`${BASE_URL}/worker`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
-  });
-  if (!res.ok) throw new Error('Failed to register worker');
-  return await res.json();
-};
+// export const registerWorker = async (data) => {
+//   const res = await fetch(`${BASE_URL}/worker`, {
+//     method: "POST",
+//     headers: { "Content-Type": "application/json" },
+//     body: JSON.stringify(data)
+//   });
+//   if (!res.ok) throw new Error('Failed to register worker');
+//   return await res.json();
+// };
 
 export const loginUser = async (data) => {
   const res = await fetch(`${BASE_URL}/login`, {
@@ -502,24 +502,51 @@ export const classifyImage = async (file) => {
 
 
 
-export const updateTaskStatus = async (taskId, status) => {
-  try {
-    const response = await fetch(
-      `http://127.0.0.1:8000/api/task/${taskId}/status`,
-      {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ status }),
-      }
-    );
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.log("Error while changing task status", error);
+export const updateTaskStatus = async (taskId, status, reason = null) => {
+  if (status === "declined" && reason) {
+    const res = await fetch(`http://127.0.0.1:8000/api/task/${taskId}/decline`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
   }
+
+  const res = await fetch(`http://127.0.0.1:8000/api/task/${taskId}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+};
+
+// In api.js
+export const cancelWorkerTask = async (taskId, cancelledBy, reason) => {
+  const response = await fetch(
+    `http://127.0.0.1:8000/api/task/${taskId}/cancel`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cancelled_by: cancelledBy, reason }),
+    }
+  );
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.detail || "Cancel failed");
+  }
+  return response.json();
+};
+
+export const updateWorkerProfile = async (workerId, payload) => {
+  const res = await fetch(`${BASE_URL}/worker/${workerId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
 };
 
 export const getTasksByWorker= async (workerId) =>{
@@ -572,6 +599,7 @@ export const predictTask = async (text) => {
  
   return res.json();
 };
+
 
 // api/api.js
 export const loginUsingGoogle = async (googleData) => {
@@ -1018,6 +1046,61 @@ export async function sendChatMessage(message, endpoint) {
   return data.response;
 }
 
+export async function getReportsByUser(userId) {
+  const res = await fetch(`http://localhost:8000/api/reports/user/${userId}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+
+// ── OTP ────────────────────────────────────────────────────────────────────
+export const sendOtp = async (email) => {
+  const res = await fetch('http://localhost:8000/api/send-otp', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ email }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Failed to send OTP');
+  return data;
+};
+
+// ── Worker ─────────────────────────────────────────────────────────────────
+export const registerWorker = async (payload) => {
+  const res = await fetch('http://localhost:8000/api/worker', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || data.message || 'Something went wrong');
+  return data;
+};
+
+export const uploadSkillEvidence = async (email, skill, file) => {
+  const fd = new FormData();
+  fd.append('file',      file);
+  fd.append('worker_id', email);
+  fd.append('skill',     skill);
+  const res = await fetch('http://localhost:8000/api/upload/skill-evidence', {
+    method: 'POST',
+    body:   fd,
+  });
+  if (!res.ok) throw new Error(`Evidence upload failed for ${skill}`);
+  return res.json();
+};
+
+export const verifyOtp = async (email, otp) => {
+  const res = await fetch('http://localhost:8000/api/verify-otp', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ email, otp }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Invalid code. Please try again.');
+  return data;
+};
+
 // api/customerProfile.js
 
 // ── UPDATE INDIVIDUAL FIELDS ──────────────────────────────────────────────────
@@ -1187,5 +1270,18 @@ export async function saveDateOverride(workerId, dateStr, slots) {
   if (!res.ok) throw new Error("Failed to save date override");
   return res.json();
 }
+
+export const requestExtraPayment = async (taskId, workerId, amount, reason) => {
+  const res = await fetch(`http://127.0.0.1:8000/api/tasks/${taskId}/request-extra`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ worker_id: workerId, amount: Number(amount), reason }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "Failed to send request");
+  }
+  return res.json();
+};
 
 

@@ -7,6 +7,9 @@ import os
 from dotenv import load_dotenv
 import asyncio
 import traceback
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 
 # ── Time helpers ──────────────────────────────────────────────────────────────
@@ -21,6 +24,21 @@ def _to_str(mins: int) -> str:
 def _add_hours(time_str: str, hours: float) -> str:
     return _to_str(_to_mins(time_str) + int(hours * 60))
 
+def update_task_with_images(task_id: str, image_urls: list[str]) -> bool:
+    """Update task with uploaded image URLs."""
+    try:
+        obj_id = ObjectId(task_id)
+    except Exception:
+        return False
+    
+    result = database.collection_task.update_one(
+        {"_id": obj_id},
+        {"$set": {
+            "images": image_urls,
+        }}
+    )
+    
+    return result.modified_count > 0
 
 # ── Worker resolver ───────────────────────────────────────────────────────────
 
@@ -74,13 +92,14 @@ def serialize_task(task: dict) -> dict:
 
 
 # ── Task CRUD ─────────────────────────────────────────────────────────────────
-
 async def insert_task(task: dict) -> str:
     task["createdAt"] = datetime.now(timezone.utc)
+
+    # Insert task first to get task_id
     result  = database.collection_task.insert_one(task)
     task_id = str(result.inserted_id)
     print(f"[TASK] Task inserted: {task_id}")
- 
+    # ── Rest of your existing notification code ──────────────────────────────
     userId     = task.get("userId")
     assignedId = task.get("assignedWorkerId")
  
@@ -116,6 +135,7 @@ async def insert_task(task: dict) -> str:
                 "event_type": "task_created",
                 "task_id":    task_id,
                 "taskName":   task["taskName"],
+
             },
         ))
  
@@ -128,7 +148,7 @@ async def insert_task(task: dict) -> str:
             email=worker.get("email"),
             is_worker=True,
             data={
-                "event_type": "new_task",               # ← SW uses this to show correct notification
+                "event_type": "new_task",
                 "task_id":    task_id,
                 "taskName":   task["taskName"],
                 "taskType":   task.get("taskType", ""),
@@ -147,7 +167,6 @@ async def insert_task(task: dict) -> str:
             traceback.print_exc()
  
     return task_id
-
 def get_task_by_id(task_id: str) -> dict | None:
     try:
         obj_id = ObjectId(task_id)
@@ -192,6 +211,20 @@ def assign_worker(task_id: str, worker_id: str) -> bool:
     )
     return result.modified_count > 0
 
+def decline_task(task_id: str, reason: str) -> bool:
+    try:
+        obj_id = ObjectId(task_id)
+    except Exception:
+        return False
+    result = database.collection_task.update_one(
+        {"_id": obj_id},
+        {"$set": {
+            "status":           "declined",
+            "declineReason":   reason,
+            "declinedAt":      datetime.now(timezone.utc),
+        }}
+    )
+    return result.modified_count > 0
 
 def get_tasks_by_worker(worker_id: str) -> list[dict]:
     tasks = list(database.collection_task.find({"assignedWorkerId": worker_id}))
@@ -207,8 +240,9 @@ def update_task_offer(task_id: str, offer) -> bool:
     existing = database.collection_task.find_one({"_id": ObjectId(task_id)})
     if not existing:
         return False
-
-    total_cost = offer.estimatedHours * existing["basePrice"] + offer.additionalCost
+    subtotal      = offer.estimatedHours * existing["basePrice"] + offer.additionalCost
+    platform_fee  = round(subtotal * 0.05, 2)
+    total_cost    = round(subtotal + platform_fee, 2)
 
     result = database.collection_task.update_one(
         {"_id": ObjectId(task_id)},
@@ -217,6 +251,7 @@ def update_task_offer(task_id: str, offer) -> bool:
             "additionalCost": offer.additionalCost,
             "totalCost":      total_cost,
             "offerStatus":    offer.offerStatus,
+            "platformFee": platform_fee
         }}
     )
     return result.modified_count > 0
@@ -666,6 +701,7 @@ def auto_release_job():
             "status":        "completed",
             "escrow_status": {"$ne": "released"},
             "completedAt":   {"$exists": True, "$ne": None},
+             "dispute":       {"$nin": [True, "true"]},
         }))
     except Exception as e:
         print(f"[auto_release] DB error: {e}")

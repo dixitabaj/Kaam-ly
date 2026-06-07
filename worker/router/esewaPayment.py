@@ -1,9 +1,9 @@
 """
 Full Payment Flow
 - eSewa initiate + verify
-- Khalti initiate + verify  
+- Khalti initiate + verify
 - Customer release (escrow confirmation)
-- All payment records stored in payments collection
+- All payment records stored in payments collection ONLY
 """
 
 import os
@@ -24,7 +24,7 @@ from bson import ObjectId
 from worker.config.database import (
     collection_task,
     collection_worker,
-    collection_payment,   # ← new collection, add to database.py
+    collection_payment,
 )
 from ..services.OAuth2 import get_current_user
 
@@ -76,14 +76,15 @@ def generate_esewa_signature(message: str) -> str:
 
 def save_payment(
     task_id:          str,
-    payment_type:     str,    # "customer_payment" | "worker_payout" | "refund"
-    direction:        str,    # "inbound" | "outbound"
+    payment_type:     str,    # "customer_payment" | "worker_payout" | "escrow_release" | "refund"
+    direction:        str,    # "inbound" | "outbound" | "internal"
     amount:           float,
     method:           str,    # "esewa" | "khalti"
     status:           str,    # "success" | "failed" | "pending"
     transaction_uuid: str = "",
     gateway_ref:      str = "",
     raw_response:     dict = None,
+    extra:            dict = None,  # any additional fields e.g. paid_at, platform_fee, worker_payout
 ) -> str:
     """Save a payment record and return its _id as string."""
     doc = {
@@ -94,10 +95,12 @@ def save_payment(
         "method":           method,
         "status":           status,
         "transaction_uuid": transaction_uuid,
-        "gateway_ref":      gateway_ref,       # esewa_ref_id or khalti_txn_id
+        "gateway_ref":      gateway_ref,
         "raw_response":     raw_response or {},
         "created_at":       datetime.utcnow(),
     }
+    if extra:
+        doc.update(extra)
     result = collection_payment.insert_one(doc)
     return str(result.inserted_id)
 
@@ -119,7 +122,7 @@ def pay_via_esewa(task_id: str):
     message          = f"total_amount={total_amount},transaction_uuid={transaction_uuid},product_code={ESEWA_MERCHANT_CODE}"
     signature        = generate_esewa_signature(message)
 
-    # Save pending payment record
+    # Save pending payment record — all details here
     save_payment(
         task_id=task_id,
         payment_type="customer_payment",
@@ -130,14 +133,13 @@ def pay_via_esewa(task_id: str):
         transaction_uuid=transaction_uuid,
     )
 
-    # Update task with transaction UUID and pending status
+    # Task gets status flags ONLY
     collection_task.update_one(
         {"_id": ObjectId(task_id)},
         {"$set": {
-            "esewa_transaction_uuid": transaction_uuid,
-            "payment_method":         "esewa",
-            "payment_status":         "unpaid",
-            "escrow_status":          "pending",
+            "payment_method": "esewa",
+            "payment_status": "unpaid",
+            "escrow_status":  "pending",
         }}
     )
 
@@ -170,60 +172,60 @@ def verify_esewa_redirect(
 
     try:
         decoded = json.loads(base64.b64decode(data).decode("utf-8"))
-    except Exception as e:
+    except Exception:
         return RedirectResponse(url=f"{BASE_URL}/payment/failed")
 
-    task      = get_task_or_404(task_id)
-    status    = decoded.get("status")
-    ref_id    = decoded.get("transaction_code")   # eSewa's reference ID
-    amount    = float(decoded.get("total_amount", 0))
-    txn_uuid  = decoded.get("transaction_uuid", task.get("esewa_transaction_uuid", ""))
+    task     = get_task_or_404(task_id)
+    status   = decoded.get("status")
+    ref_id   = decoded.get("transaction_code")
+    amount   = float(decoded.get("total_amount", 0))
+    txn_uuid = decoded.get("transaction_uuid", "")
 
     if status != "COMPLETE":
-        # Save failed payment record
-        save_payment(
-            task_id=task_id,
-            payment_type="customer_payment",
-            direction="inbound",
-            amount=amount,
-            method="esewa",
-            status="failed",
-            transaction_uuid=txn_uuid,
-            gateway_ref=ref_id or "",
-            raw_response=decoded,
+        # Update pending → failed in payments collection
+        collection_payment.update_one(
+            {"task_id": task_id, "method": "esewa", "status": "pending"},
+            {"$set": {
+                "status":       "failed",
+                "gateway_ref":  ref_id or "",
+                "raw_response": decoded,
+                "failed_at":    datetime.utcnow(),
+            }}
+        )
+        # Task only needs to know it's still unpaid
+        collection_task.update_one(
+            {"_id": ObjectId(task_id)},
+            {"$set": {"payment_status": "unpaid", "escrow_status": "pending"}}
         )
         return RedirectResponse(url=f"{BASE_URL}/payment/failed")
 
-    # ── Payment success ───────────────────────────────────────────────────────
+    now = datetime.utcnow()
 
-    # Update payment record from pending → success
+    # Update pending → success in payments collection — all money details here
     collection_payment.update_one(
         {"task_id": task_id, "method": "esewa", "status": "pending"},
         {"$set": {
             "status":       "success",
             "gateway_ref":  ref_id,
+            "amount":       amount,
             "raw_response": decoded,
-            "paid_at":      datetime.utcnow(),
+            "paid_at":      now,
         }}
     )
 
-    # Update task — only status flags, no money details
+    # Task gets status flags ONLY — no ref IDs, no amounts, no timestamps
     collection_task.update_one(
         {"_id": ObjectId(task_id)},
         {"$set": {
             "payment_status": "paid",
             "escrow_status":  "held",
-            "esewa_ref_id":   ref_id,     # keep for quick reference
             "payment_method": "esewa",
-            "paid_at":        datetime.utcnow(),
         }}
     )
 
-    user_email = task.get("userEmail", "")
-    user_id    = str(task.get("userId", ""))
-
+    user_id = str(task.get("userId", ""))
     return RedirectResponse(
-        url=f"{BASE_URL}/customer/pay/{task_id}/{user_email}/{user_id}/customer?payment=success"
+        url=f"{BASE_URL}/customer/pay/{task_id}/{user_id}/customer?payment=success"
     )
 
 
@@ -242,27 +244,26 @@ def verify_esewa_manual(body: VerifyEsewa):
 
     if data.get("status") == "COMPLETE":
         ref_id = data.get("ref_id", body.transaction_uuid)
+        now    = datetime.utcnow()
 
-        save_payment(
-            task_id=body.task_id,
-            payment_type="customer_payment",
-            direction="inbound",
-            amount=body.total_amount,
-            method="esewa",
-            status="success",
-            transaction_uuid=body.transaction_uuid,
-            gateway_ref=ref_id,
-            raw_response=data,
+        # All payment details go to payments collection
+        collection_payment.update_one(
+            {"task_id": body.task_id, "method": "esewa", "status": "pending"},
+            {"$set": {
+                "status":       "success",
+                "gateway_ref":  ref_id,
+                "raw_response": data,
+                "paid_at":      now,
+            }}
         )
 
+        # Task gets status flags ONLY
         collection_task.update_one(
             {"_id": ObjectId(body.task_id)},
             {"$set": {
                 "payment_status": "paid",
                 "escrow_status":  "held",
-                "esewa_ref_id":   ref_id,
                 "payment_method": "esewa",
-                "paid_at":        datetime.utcnow(),
             }}
         )
         return {"message": "Payment verified. Funds held in escrow.", "status": "success"}
@@ -282,15 +283,15 @@ def pay_via_khalti(task_id: str):
     if task.get("payment_status") == "paid":
         raise HTTPException(status_code=400, detail="Task already paid")
 
-    total_amount_paisa = int(task["totalCost"]) * 100   # Khalti uses paisa
+    total_amount_paisa = int(task["totalCost"]) * 100
     task_name          = task.get("taskName") or task.get("taskDescrip", "Task Payment")
     transaction_uuid   = str(uuid.uuid4())
 
     payload = {
-        "return_url":         f"http://localhost:8000/payment/verify/khalti/{task_id}",
-        "website_url":        BASE_URL,
-        "amount":             total_amount_paisa,
-        "purchase_order_id":  transaction_uuid,
+        "return_url":          f"http://localhost:8000/payment/verify/khalti/{task_id}",
+        "website_url":         BASE_URL,
+        "amount":              total_amount_paisa,
+        "purchase_order_id":   transaction_uuid,
         "purchase_order_name": task_name,
     }
 
@@ -298,8 +299,8 @@ def pay_via_khalti(task_id: str):
         f"{KHALTI_BASE_URL}/api/v2/epayment/initiate/",
         json=payload,
         headers={
-            "Authorization":  f"Key {KHALTI_SECRET_KEY}",
-            "Content-Type":   "application/json",
+            "Authorization": f"Key {KHALTI_SECRET_KEY}",
+            "Content-Type":  "application/json",
         }
     )
     data = resp.json()
@@ -309,7 +310,7 @@ def pay_via_khalti(task_id: str):
 
     pidx = data["pidx"]
 
-    # Save pending payment record
+    # All payment details in payments collection
     save_payment(
         task_id=task_id,
         payment_type="customer_payment",
@@ -322,14 +323,13 @@ def pay_via_khalti(task_id: str):
         raw_response=data,
     )
 
-    # Update task
+    # Task gets status flags ONLY
     collection_task.update_one(
         {"_id": ObjectId(task_id)},
         {"$set": {
-            "khalti_pidx":      pidx,
-            "payment_method":   "khalti",
-            "payment_status":   "unpaid",
-            "escrow_status":    "pending",
+            "payment_method": "khalti",
+            "payment_status": "unpaid",
+            "escrow_status":  "pending",
         }}
     )
 
@@ -349,9 +349,16 @@ def verify_khalti_redirect(
     task = get_task_or_404(task_id)
 
     if status != "Completed" or not pidx:
+        collection_payment.update_one(
+            {"task_id": task_id, "method": "khalti", "status": "pending"},
+            {"$set": {"status": "failed", "failed_at": datetime.utcnow()}}
+        )
+        collection_task.update_one(
+            {"_id": ObjectId(task_id)},
+            {"$set": {"payment_status": "unpaid", "escrow_status": "pending"}}
+        )
         return RedirectResponse(url=f"{BASE_URL}/payment/failed")
 
-    # Lookup pidx with Khalti
     resp = requests.post(
         f"{KHALTI_BASE_URL}/api/v2/epayment/lookup/",
         json={"pidx": pidx},
@@ -365,14 +372,19 @@ def verify_khalti_redirect(
     if data.get("status") != "Completed":
         collection_payment.update_one(
             {"task_id": task_id, "method": "khalti", "status": "pending"},
-            {"$set": {"status": "failed", "raw_response": data}}
+            {"$set": {"status": "failed", "raw_response": data, "failed_at": datetime.utcnow()}}
+        )
+        collection_task.update_one(
+            {"_id": ObjectId(task_id)},
+            {"$set": {"payment_status": "unpaid", "escrow_status": "pending"}}
         )
         return RedirectResponse(url=f"{BASE_URL}/payment/failed")
 
     txn_id = data.get("transaction_id", pidx)
-    amount = data.get("total_amount", 0) / 100   # convert paisa back to NPR
+    amount = data.get("total_amount", 0) / 100   # paisa → NPR
+    now    = datetime.utcnow()
 
-    # Update payment record pending → success
+    # All payment details in payments collection
     collection_payment.update_one(
         {"task_id": task_id, "method": "khalti", "status": "pending"},
         {"$set": {
@@ -380,33 +392,28 @@ def verify_khalti_redirect(
             "gateway_ref":  txn_id,
             "amount":       amount,
             "raw_response": data,
-            "paid_at":      datetime.utcnow(),
+            "paid_at":      now,
         }}
     )
 
-    # Update task — status flags only
+    # Task gets status flags ONLY
     collection_task.update_one(
         {"_id": ObjectId(task_id)},
         {"$set": {
             "payment_status": "paid",
             "escrow_status":  "held",
-            "khalti_pidx":    pidx,
-            "khalti_txn_id":  txn_id,
             "payment_method": "khalti",
-            "paid_at":        datetime.utcnow(),
         }}
     )
 
-    user_email = task.get("userEmail", "")
-    user_id    = str(task.get("userId", ""))
-
+    user_id = str(task.get("userId", ""))
     return RedirectResponse(
-        url=f"{BASE_URL}/customer/pay/{task_id}/{user_email}/{user_id}/customer?payment=success"
+        url=f"{BASE_URL}/customer/pay/{task_id}/{user_id}/customer?payment=success"
     )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# CUSTOMER RELEASE (Escrow confirmation — no real money moves here)
+# CUSTOMER RELEASE (Escrow confirmation)
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.patch("/customer/release/{task_id}")
@@ -419,22 +426,17 @@ def release_to_worker(
     Flips escrow_status: 'held' → 'released'.
     No money moves here — admin payout handles the actual transfer.
     """
-
     task = get_task_or_404(task_id)
 
-    # ── Auth: only task owner can release ────────────────────────────────────
     if current_user["user_id"] != task.get("userId"):
         raise HTTPException(status_code=403, detail="Not authorized to release this payment")
 
-    # ── Task must be completed ────────────────────────────────────────────────
     if task.get("status") != "completed":
         raise HTTPException(status_code=400, detail="Task must be completed before releasing payment")
 
-    # ── Payment must be paid ──────────────────────────────────────────────────
     if task.get("payment_status") != "paid":
         raise HTTPException(status_code=400, detail="Payment has not been completed")
 
-    # ── Escrow must still be held ─────────────────────────────────────────────
     if task.get("escrow_status") == "released":
         raise HTTPException(status_code=400, detail="Payment already released")
     if task.get("escrow_status") == "refunded":
@@ -442,26 +444,25 @@ def release_to_worker(
     if task.get("escrow_status") != "held":
         raise HTTPException(status_code=400, detail="Escrow is not in held state")
 
-    # ── Validate payment reference (eSewa or Khalti) ──────────────────────────
-    payment_ref = (
-        task.get("esewa_ref_id") or
-        task.get("khalti_pidx") or
-        task.get("khalti_txn_id") or
-        task.get("esewa_transaction_uuid")
+    # Pull payment ref from payments collection — not from task
+    payment_record = collection_payment.find_one(
+        {"task_id": task_id, "type": "customer_payment", "status": "success"},
+        sort=[("created_at", -1)]
     )
-    if not payment_ref:
-        raise HTTPException(status_code=400, detail="No payment reference found on this task")
+    if not payment_record:
+        raise HTTPException(status_code=400, detail="No successful payment record found for this task")
 
-    # ── Validate amount ───────────────────────────────────────────────────────
+    payment_ref = payment_record.get("gateway_ref") or payment_record.get("transaction_uuid")
+    if not payment_ref:
+        raise HTTPException(status_code=400, detail="No payment reference found")
+
     final_price = float(task.get("totalCost") or task.get("basePrice") or 0)
     if final_price <= 0:
         raise HTTPException(status_code=400, detail="Invalid task amount")
 
-    # ── Calculate payout split ────────────────────────────────────────────────
-    platform_fee  = round(final_price * 0.05, 2)    # 5% platform cut
+    platform_fee  = round(final_price * 0.05, 2)
     worker_payout = round(final_price - platform_fee, 2)
 
-    # ── Find worker ───────────────────────────────────────────────────────────
     worker_id = task.get("assignedWorkerId")
     if not worker_id:
         raise HTTPException(status_code=400, detail="No worker assigned to this task")
@@ -472,18 +473,15 @@ def release_to_worker(
 
     now = datetime.utcnow()
 
-    # ── Update task — release escrow ──────────────────────────────────────────
+    # Task gets status flag ONLY
     collection_task.update_one(
         {"_id": ObjectId(task_id)},
         {"$set": {
             "escrow_status": "released",
-            "released_at":   now,
-            "platform_fee":  platform_fee,
-            "worker_payout": worker_payout,
         }}
     )
 
-    # ── Save release event in payments collection ─────────────────────────────
+    # All financial details go to payments collection
     save_payment(
         task_id=task_id,
         payment_type="escrow_release",
@@ -493,6 +491,12 @@ def release_to_worker(
         status="success",
         transaction_uuid=payment_ref,
         gateway_ref=payment_ref,
+        extra={
+            "platform_fee":  platform_fee,
+            "worker_payout": worker_payout,
+            "total_cost":    final_price,
+            "released_at":   now,
+        }
     )
 
     return {
@@ -525,6 +529,10 @@ def get_task_payments(task_id: str):
             "status":           p.get("status"),
             "transaction_uuid": p.get("transaction_uuid"),
             "gateway_ref":      p.get("gateway_ref"),
+            "platform_fee":     p.get("platform_fee"),
+            "worker_payout":    p.get("worker_payout"),
+            "paid_at":          str(p.get("paid_at", "")),
+            "released_at":      str(p.get("released_at", "")),
             "created_at":       str(p.get("created_at", "")),
         })
     return {

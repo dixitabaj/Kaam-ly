@@ -8,6 +8,9 @@ import {
   toggleAvailability,
   getTasksByWorker,
 } from "../api/api";
+import { HelpCircle } from "lucide-react";
+import ChatWidget from "../components/HelpSection/HelpSection";
+import ReactDOM from "react-dom"
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const T = {
@@ -35,18 +38,18 @@ const T = {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DAYS      = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-const HOURS     = Array.from({ length: 17 }, (_, i) => i + 6); // 6am → 10pm
+const HOURS     = Array.from({ length: 24 }, (_, i) => i + 1);
 const DAY_NAMES = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
 const DAY_CAPS  = {
   sunday:"Sunday", monday:"Monday", tuesday:"Tuesday",
   wednesday:"Wednesday", thursday:"Thursday", friday:"Friday", saturday:"Saturday",
 };
-const START_HOUR = 6;
+const START_HOUR = 1;
 
 const BOOKING_STATUS = {
   pending: {
     label: "Requested", icon: "",
-    bg: T.blueLight, border: T.blue, textColor: T.blueDark, stripe: true,
+    bg: T.blueLight,
   },
   confirmed_unpaid: {
     label: "Unpaid", icon: "🟡",
@@ -76,7 +79,8 @@ function toMins(str) {
 }
 function toOffset(str) {
   if (!str || !str.includes(":")) return 0;
-  const [h, m] = str.split(":").map(Number);
+  let [h, m] = str.split(":").map(Number);
+  if (h === 0) h = 24;
   return (h + (m || 0) / 60) - START_HOUR;
 }
 function padTime(t) {
@@ -127,7 +131,6 @@ function useWindowSize() {
   return size;
 }
 
-// Breakpoints:  mobile < 640, tablet 640-1024, desktop 1024-1600, tv >= 1600
 function useBreakpoint() {
   const { width } = useWindowSize();
   if (width >= 1600) return "tv";
@@ -142,7 +145,6 @@ const FontLink = () => (
     @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&display=swap');
     * { box-sizing: border-box; }
 
-    /* Responsive base font so everything scales on TV */
     html { font-size: 16px; }
     @media (min-width: 1600px) { html { font-size: 20px; } }
     @media (min-width: 2000px) { html { font-size: 24px; } }
@@ -163,152 +165,238 @@ const FontLink = () => (
     .nav-btn:hover { border-color: ${T.orange} !important; color: ${T.orange} !important; }
     .status-btn { transition: all 0.2s; }
     .status-btn:hover { box-shadow: 0 3px 10px rgba(246,173,86,0.25); }
-    .toggle-track { position:relative; width:38px; height:21px; border-radius:99px; cursor:pointer; transition:background 0.2s; flex-shrink:0; }
-    .toggle-thumb { position:absolute; top:2.5px; left:2.5px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.2); transition:transform 0.2s; }
-    .toggle-on .toggle-thumb { transform:translateX(17px); }
+    .toggle-track { position:relative; width:2.375rem; height:1.3125rem; border-radius:99px; cursor:pointer; transition:background 0.2s; flex-shrink:0; }
+    .toggle-thumb { position:absolute; top:0.15625rem; left:0.15625rem; width:1rem; height:1rem; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.2); transition:transform 0.2s; }
+    .toggle-on .toggle-thumb { transform:translateX(1.0625rem); }
     @media (min-width:1600px) {
-      .toggle-track { width:50px; height:28px; }
-      .toggle-thumb { width:22px; height:22px; }
-      .toggle-on .toggle-thumb { transform:translateX(22px); }
+      .toggle-track { width:3.125rem; height:1.75rem; }
+      .toggle-thumb { width:1.375rem; height:1.375rem; }
+      .toggle-on .toggle-thumb { transform:translateX(1.375rem); }
     }
-    @keyframes slideUp { from { transform: translateY(24px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes slideUp  { from { transform: translateY(1.5rem); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     @keyframes toastIn  { from { transform: translateX(110%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
     @keyframes toastOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(110%); opacity: 0; } }
-    @keyframes stripe   { from { background-position: 0 0; } to { background-position: 28px 0; } }
+    @keyframes toastBar { from { width: 100%; } to { width: 0%; } }
+    @keyframes stripe   { from { background-position: 0 0; } to { background-position: 1.75rem 0; } }
     .pending-stripe {
       background-image: repeating-linear-gradient(45deg, rgba(59,130,246,0.18) 0px, rgba(59,130,246,0.18) 6px, rgba(59,130,246,0.06) 6px, rgba(59,130,246,0.06) 14px);
       animation: stripe 1.2s linear infinite;
-      background-size: 28px 28px;
+      background-size: 1.75rem 1.75rem;
     }
     .modal-sheet { animation: slideUp 0.22s cubic-bezier(0.34,1.56,0.64,1); }
-    .toast-in  { animation: toastIn  0.35s cubic-bezier(0.34,1.56,0.64,1) forwards; }
-    .toast-out { animation: toastOut 0.3s ease-in forwards; }
+    .toast-slide-in { animation: toastIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards; }
     .tab-btn { transition: all 0.15s; }
     .tab-btn:hover { background: ${T.orangeLight} !important; }
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-thumb { background: ${T.orangeBorder}; border-radius: 3px; }
 
-    /* Mobile swipe hint */
     .grid-scroll { -webkit-overflow-scrolling: touch; scroll-snap-type: x mandatory; }
     .grid-scroll > * { scroll-snap-align: start; }
+
+    /* ── Calendar page layout ── */
+    .cal-page {
+      display: flex;
+      flex-direction: column;
+      min-height: calc(100vh - var(--navbar-height, 64px));
+      background: ${T.bg};
+      font-family: 'DM Sans', sans-serif;
+    }
+    .cal-main {
+      flex: 1;
+      padding: clamp(1rem, 3vw, 2rem) clamp(1rem, 4vw, 2rem);
+      max-width: 1120px;
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    @media (min-width: 1600px) {
+      .cal-main { max-width: 1800px; padding: 3rem 4rem; }
+    }
+
+    /* Calendar grid container — fills remaining vertical space */
+    .cal-grid-wrap {
+      background: ${T.white};
+      border: 1px solid ${T.border};
+      border-radius: 1rem;
+      overflow: hidden;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+      transition: opacity 0.25s;
+      display: flex;
+      flex-direction: column;
+      /* grow to fill available space, with a sensible min/max */
+      flex: 1;
+      min-height: clamp(18rem, 45vh, 40rem);
+      max-height: clamp(22rem, 60vh, 56rem);
+    }
+    @media (max-width: 639px) {
+      .cal-grid-wrap {
+        min-height: clamp(14rem, 50vw, 24rem);
+        max-height: clamp(18rem, 55vw, 28rem);
+      }
+    }
+
+    /* Hour scroll area inside the grid */
+    .cal-hour-scroll {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+    }
   `}</style>
 );
 
 // ── Sub-components ────────────────────────────────────────────────────────────
-
-function BookingTooltip({ task, style }) {
-  const bs = getBookingStyle(task);
-  if (!bs) return null;
-  return (
-    <div style={{
-      position:"absolute", zIndex:10, background:T.white,
-      border:`1px solid ${T.border}`, borderRadius:"0.625rem", padding:"0.625rem 0.875rem",
-      boxShadow:"0 8px 24px rgba(0,0,0,0.12)", minWidth:200,
-      fontFamily:"'DM Sans', sans-serif", pointerEvents:"none", ...style,
-    }}>
-      <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:6 }}>
-        <span style={{ fontSize:"0.75rem" }}>{bs.icon}</span>
-        <span style={{ fontWeight:700, fontSize:"0.82rem", color:bs.textColor }}>{bs.label}</span>
-      </div>
-      <div style={{ fontSize:"0.75rem", color:T.text, fontWeight:600, marginBottom:3 }}>{task.taskName}</div>
-      <div style={{ fontSize:"0.7rem", color:T.textMid, marginBottom:2 }}>
-        {fmt12(...(task.serviceTime||"09:00").split(":").map(Number))}
-        {task.estimatedHours
-          ? ` → ${fmt12(...addHours(task.serviceTime||"09:00", task.estimatedHours).split(":").map(Number))} (${task.estimatedHours}h)`
-          : " · Duration TBD"}
-      </div>
-      {task.totalCost > 0 && (
-        <div style={{ fontSize:"0.7rem", color:T.textMid }}>
-          Rs. {task.totalCost.toLocaleString()} · {task.payment_method || "—"}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function BookingBlock({ task, hourH }) {
-  const [hovered, setHovered] = useState(false);
+  const [hovered, setHovered]       = useState(false);
+  const [tooltipPos, setTooltipPos] = useState(null);
+  const blockRef = useRef(null);
   const bs = getBookingStyle(task);
   if (!bs) return null;
 
-  const start = task.serviceTime || "09:00";
-  const end   = getBookingEndTime(task);
+  const start  = task.serviceTime || "09:00";
+  const end    = getBookingEndTime(task);
   const top    = toOffset(start) * hourH;
   const height = Math.max((toOffset(end) - toOffset(start)) * hourH, 50);
   if (top < 0) return null;
 
-  const tooltipStyle = top > 260
-    ? { bottom: height + 6, left: 0 }
-    : { top: height + 6, left: 0 };
+  const handleMouseEnter = () => {
+    if (blockRef.current) {
+      const rect       = blockRef.current.getBoundingClientRect();
+      const tooltipH   = 130;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      if (spaceBelow >= tooltipH + 8) {
+        setTooltipPos({ top: rect.bottom + 6, left: rect.left });
+      } else if (spaceAbove >= tooltipH + 8) {
+        setTooltipPos({ top: rect.top - tooltipH - 6, left: rect.left });
+      } else {
+        setTooltipPos({ top: rect.top, left: rect.right + 8 });
+      }
+    }
+    setHovered(true);
+  };
+
+  const handleMouseLeave = () => {
+    setHovered(false);
+    setTooltipPos(null);
+  };
 
   return (
-    <div
-      className="booking-block"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        position:"absolute", top, left:3, right:3, height,
-        background:bs.bg, border:`1.5px solid ${bs.border}`,
-        borderRadius:"0.5rem", padding:"5px 7px", zIndex:100,
-        display:"flex", flexDirection:"column", justifyContent:"center",
-        overflow:"visible", fontFamily:"'DM Sans', sans-serif",
-      }}
-    >
-      {bs.stripe && (
-        <div className="pending-stripe" style={{ position:"absolute", inset:0, borderRadius:"0.5rem" }} />
-      )}
-      <div style={{ position:"relative", zIndex:1 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:4, marginBottom:2 }}>
-          <span style={{ fontSize:"0.65rem" }}>{bs.icon}</span>
-          <span style={{ fontWeight:700, fontSize:"0.7rem", color:bs.textColor }}>{bs.label}</span>
-        </div>
-        <div style={{ fontSize:"0.68rem", fontWeight:600, color:bs.textColor, whiteSpace:"normal" }}>{task.taskName}</div>
-        <div style={{ fontSize:"0.65rem", color:bs.textColor, opacity:0.8, marginTop:1 }}>
-          {fmt12(...start.split(":").map(Number))} → {fmt12(...end.split(":").map(Number))}
-        </div>
-        {task.totalCost > 0 && (
-          <div style={{ fontSize:"0.65rem", color:bs.textColor, opacity:0.75, marginTop:1 }}>
-            Rs. {task.totalCost.toLocaleString()}
-          </div>
+    <>
+      <div
+        ref={blockRef}
+        className="booking-block"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        style={{
+          position:"absolute", top, left:3, right:3,
+          background:bs.bg, border:`1.5px solid ${bs.border}`,
+          borderRadius:"0.5rem", padding:"5px 7px", zIndex:100,
+          display:"flex", flexDirection:"column", justifyContent:"center",
+          overflow:"visible", fontFamily:"'DM Sans', sans-serif",
+        }}
+      >
+        {bs.stripe && (
+          <div className="pending-stripe" style={{ position:"absolute", inset:0, borderRadius:"0.5rem" }} />
         )}
+        <div style={{ position:"relative", zIndex:1 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:4, marginBottom:2 }}>
+            <span style={{ fontSize:"0.65rem" }}>{bs.icon}</span>
+            <span style={{ fontWeight:700, fontSize:"0.7rem", color:bs.textColor }}>{bs.label}</span>
+          </div>
+          <div style={{ fontSize:"0.68rem", fontWeight:600, color:bs.textColor, whiteSpace:"normal" }}>{task.taskName}</div>
+          <div style={{ fontSize:"0.65rem", color:bs.textColor, opacity:0.8, marginTop:1 }}>
+            {fmt12(...start.split(":").map(Number))} → {fmt12(...end.split(":").map(Number))}
+          </div>
+          {task.totalCost > 0 && (
+            <div style={{ fontSize:"0.65rem", color:bs.textColor, opacity:0.75, marginTop:1 }}>
+              Rs. {task.totalCost.toLocaleString()}
+            </div>
+          )}
+        </div>
       </div>
-      {hovered && <BookingTooltip task={task} style={tooltipStyle} />}
+
+      {hovered && tooltipPos && ReactDOM.createPortal(
+        <div style={{
+          position:"fixed", top:tooltipPos.top, left:tooltipPos.left,
+          zIndex:9999, background:"#fff", border:`1px solid #ebe8e2`,
+          borderRadius:"0.625rem", padding:"0.625rem 0.875rem",
+          boxShadow:"0 8px 24px rgba(0,0,0,0.12)", minWidth:200,
+          fontFamily:"'DM Sans', sans-serif", pointerEvents:"none",
+        }}>
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:6 }}>
+            <span style={{ fontSize:"0.75rem" }}>{bs.icon}</span>
+            <span style={{ fontWeight:700, fontSize:"0.82rem", color:bs.textColor }}>{bs.label}</span>
+          </div>
+          <div style={{ fontSize:"0.75rem", color:"#1a1512", fontWeight:600, marginBottom:3 }}>{task.taskName}</div>
+          <div style={{ fontSize:"0.7rem", color:"#6b6460", marginBottom:2 }}>
+            {fmt12(...(task.serviceTime||"09:00").split(":").map(Number))}
+            {task.estimatedHours
+              ? ` → ${fmt12(...addHours(task.serviceTime||"09:00", task.estimatedHours).split(":").map(Number))} (${task.estimatedHours}h)`
+              : " · Duration TBD"}
+          </div>
+          {task.totalCost > 0 && (
+            <div style={{ fontSize:"0.7rem", color:"#6b6460" }}>
+              Rs. {task.totalCost.toLocaleString()} · {task.payment_method || "—"}
+            </div>
+          )}
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function Toast({ toast, onRemove }) {
+  const isOff = toast.type === "unavailable";
+  const dotColor = isOff ? T.red : T.green;
+  return (
+    <div className="toast-slide-in" style={{
+      display:"flex", alignItems:"center", gap:"0.75rem",
+      padding:"0.75rem 1rem", borderRadius:"0.75rem",
+      position:"relative", overflow:"hidden",
+      minWidth:"16.25rem", maxWidth:"21.25rem",
+      background:T.white, border:`1px solid ${T.border}`,
+      color:T.text, fontSize:"0.8125rem", fontWeight:600,
+      boxShadow:"0 8px 24px rgba(0,0,0,0.10)",
+      fontFamily:"'DM Sans', sans-serif",
+    }}>
+      <div style={{ width:"0.5rem", height:"0.5rem", borderRadius:"50%", background:dotColor, flexShrink:0 }} />
+      <div style={{ flex:1, lineHeight:1.5 }}>
+        <div style={{ fontWeight:700, fontSize:"0.88rem", marginBottom:"0.125rem", color:T.text }}>
+          {isOff ? "You're now unavailable" : "You're now available"}
+        </div>
+        <div style={{ fontSize:"0.78rem", color:T.textMid }}>
+          {isOff ? "Clients won't be able to book you." : "Your schedule has been restored."}
+        </div>
+      </div>
+      <button onClick={() => onRemove(toast.id)} style={{ background:"none", border:"none", cursor:"pointer", color:T.textLight, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"1rem", padding:0, lineHeight:1, flexShrink:0 }}>×</button>
+      <div style={{ position:"absolute", bottom:0, left:0, right:0, height:"0.125rem", background:T.grayLight }}>
+        <div style={{ height:"100%", opacity:0.65, background:dotColor, animation:"toastBar 3.5s linear forwards" }} />
+      </div>
     </div>
   );
 }
 
-function Toast({ toast }) {
-  if (!toast) return null;
-  const isOff = toast.type === "unavailable";
+function ToastContainer({ toasts, onRemove }) {
+  if (!toasts.length) return null;
   return (
-    <div className={toast.exiting ? "toast-out" : "toast-in"}
-      style={{
-        position:"fixed", bottom:"1.75rem", right:"1.5rem", zIndex:2000,
-        background:isOff?"#1a1512":T.white, color:isOff?"#fff":T.text,
-        borderRadius:"0.875rem", padding:"0.875rem 1.125rem", minWidth:280, maxWidth:360,
-        boxShadow:"0 8px 32px rgba(0,0,0,0.18)", display:"flex",
-        alignItems:"flex-start", gap:12, fontFamily:"'DM Sans', sans-serif",
-        border:`1px solid ${isOff?"#333":T.border}`,
-      }}>
-      <span style={{ fontSize:"1.1rem", marginTop:1 }}>{isOff?"🔴":"🟢"}</span>
-      <div style={{ flex:1 }}>
-        <div style={{ fontWeight:700, fontSize:"0.88rem", marginBottom:3 }}>
-          {isOff?"You're now unavailable":"You're now available"}
+    <div style={{ position:"fixed", top:"1.75rem", right:"1.5rem", zIndex:2000, display:"flex", flexDirection:"column", gap:"0.625rem", alignItems:"flex-end", pointerEvents:"none" }}>
+      {toasts.map(t => (
+        <div key={t.id} style={{ pointerEvents:"auto" }}>
+          <Toast toast={t} onRemove={onRemove} />
         </div>
-        <div style={{ fontSize:"0.78rem", opacity:0.72, lineHeight:1.45 }}>
-          {isOff
-            ? "Clients won't be able to book you."
-            : "Your schedule has been restored."}
-        </div>
-      </div>
+      ))}
     </div>
   );
 }
 
 function Toggle({ on, onChange }) {
   return (
-    <div className={`toggle-track ${on?"toggle-on":""}`}
-      style={{ background:on?T.orange:T.border }}
+    <div className={`toggle-track ${on ? "toggle-on" : ""}`}
+      style={{ background: on ? T.orange : T.border }}
       onClick={e => { e.stopPropagation(); onChange(!on); }}>
       <div className="toggle-thumb" />
     </div>
@@ -317,9 +405,9 @@ function Toggle({ on, onChange }) {
 
 function TimePicker({ value, onChange }) {
   const [h, m] = value.split(":").map(Number);
-  const isPM = h >= 12;
-  const dH   = h % 12 === 0 ? 12 : h % 12;
-  const emit = (newH, newM, pm) => {
+  const isPM   = h >= 12;
+  const dH     = h % 12 === 0 ? 12 : h % 12;
+  const emit   = (newH, newM, pm) => {
     const actual = pm ? (newH === 12 ? 12 : newH + 12) : (newH === 12 ? 0 : newH);
     onChange(`${String(actual).padStart(2,"0")}:${String(newM).padStart(2,"0")}`);
   };
@@ -337,7 +425,7 @@ function TimePicker({ value, onChange }) {
       <select value={m} onChange={e => emit(dH, +e.target.value, isPM)} style={sel}>
         {[0,15,30,45].map(v => <option key={v} value={v}>{String(v).padStart(2,"0")}</option>)}
       </select>
-      <select value={isPM?"PM":"AM"} onChange={e => emit(dH, m, e.target.value==="PM")} style={sel}>
+      <select value={isPM ? "PM" : "AM"} onChange={e => emit(dH, m, e.target.value === "PM")} style={sel}>
         <option>AM</option><option>PM</option>
       </select>
     </div>
@@ -392,23 +480,24 @@ function Modal({ day, dateKey: specificDate, daySlots, onSave, onSaveDate, onDel
     >
       <div className="modal-sheet" onClick={e => e.stopPropagation()}
         style={{
-          background:T.white, borderRadius:"1.25rem", padding:"clamp(1.25rem, 3vw, 2.5rem)",
-          width:"100%", maxWidth:"min(440px, 95vw)", maxHeight:"85vh",
+          background:T.white, borderRadius:"1.25rem",
+          padding:"clamp(1.25rem, 3vw, 2.5rem)",
+          width:"100%", maxWidth:"min(27.5rem, 95vw)", maxHeight:"85vh",
           overflowY:"auto", boxShadow:"0 20px 60px rgba(0,0,0,0.18)",
         }}
       >
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"1rem" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
           <div>
             <div style={{ fontWeight:700, fontSize:"clamp(1rem,2vw,1.15rem)", color:T.text, fontFamily:"'DM Serif Display', serif" }}>
               Edit Availability
             </div>
             <div style={{ fontSize:"0.78rem", color:T.textLight, textTransform:"capitalize", marginTop:2 }}>{day}</div>
           </div>
-          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:"0.625rem" }}>
             {daySlots?.length > 0 && tab==="weekly" && (
               <button onClick={onDelete} style={{ background:"none", border:"none", color:T.red, fontSize:"0.78rem", cursor:"pointer", fontWeight:600 }}>Clear day</button>
             )}
-            <button onClick={onClose} style={{ background:T.bg, border:`1px solid ${T.border}`, borderRadius:"0.5rem", width:28, height:28, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:T.textMid, fontSize:"1rem" }}>×</button>
+            <button onClick={onClose} style={{ background:T.bg, border:`1px solid ${T.border}`, borderRadius:"0.5rem", width:"1.75rem", height:"1.75rem", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:T.textMid, fontSize:"1rem" }}>×</button>
           </div>
         </div>
 
@@ -418,7 +507,7 @@ function Modal({ day, dateKey: specificDate, daySlots, onSave, onSaveDate, onDel
               <button key={t.key} className="tab-btn"
                 onClick={() => { setTab(t.key); setSlots(daySlots?.length?daySlots:[{start:"09:00",end:"17:00",enabled:true}]); setError(""); }}
                 style={{
-                  flex:1, padding:"7px 10px", border:"none", borderRadius:"0.5rem", cursor:"pointer",
+                  flex:1, padding:"0.4375rem 0.625rem", border:"none", borderRadius:"0.5rem", cursor:"pointer",
                   fontFamily:"'DM Sans', sans-serif", fontWeight:600, fontSize:"0.78rem",
                   background:tab===t.key?T.white:"transparent",
                   color:tab===t.key?T.orangeDark:T.textMid,
@@ -431,13 +520,13 @@ function Modal({ day, dateKey: specificDate, daySlots, onSave, onSaveDate, onDel
         )}
 
         {tab==="date" && specificDate && (
-          <div style={{ background:T.blueLight, border:`1px solid ${T.blue}`, borderRadius:"0.625rem", padding:"10px 14px", marginBottom:"1rem", fontSize:"0.78rem", color:T.blueDark, lineHeight:1.5 }}>
+          <div style={{ background:T.blueLight, border:`1px solid ${T.blue}`, borderRadius:"0.625rem", padding:"0.625rem 0.875rem", marginBottom:"1rem", fontSize:"0.78rem", color:T.blueDark, lineHeight:1.5 }}>
             📅 These slots apply <strong>only on {displayDate}</strong> and override the weekly schedule.
           </div>
         )}
 
         {error && (
-          <div style={{ fontSize:"0.78rem", color:T.red, marginBottom:"0.75rem", fontWeight:500, background:T.redLight, padding:"8px 12px", borderRadius:"0.5rem" }}>⚠ {error}</div>
+          <div style={{ fontSize:"0.78rem", color:T.red, marginBottom:"0.75rem", fontWeight:500, background:T.redLight, padding:"0.5rem 0.75rem", borderRadius:"0.5rem" }}>⚠ {error}</div>
         )}
 
         {slots.map((slot, i) => (
@@ -446,7 +535,7 @@ function Modal({ day, dateKey: specificDate, daySlots, onSave, onSaveDate, onDel
               <span style={{ fontSize:"0.75rem", color:T.textLight, fontWeight:600, letterSpacing:"0.04em", textTransform:"uppercase" }}>
                 Slot {i+1} {bad.has(i) && <span style={{ color:T.red }}>· overlaps</span>}
               </span>
-              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:"0.5rem" }}>
                 <Toggle on={slot.enabled} onChange={v => update(i,"enabled",v)} />
                 {slots.length > 1 && (
                   <button onClick={() => setSlots(slots.filter((_,idx) => idx!==i))}
@@ -454,7 +543,7 @@ function Modal({ day, dateKey: specificDate, daySlots, onSave, onSaveDate, onDel
                 )}
               </div>
             </div>
-            <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", opacity:slot.enabled?1:0.35, pointerEvents:slot.enabled?"auto":"none" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:"0.5rem", flexWrap:"wrap", opacity:slot.enabled?1:0.35, pointerEvents:slot.enabled?"auto":"none" }}>
               <TimePicker value={slot.start} onChange={v => update(i,"start",v)} />
               <span style={{ color:T.textLight, fontSize:"0.8rem" }}>–</span>
               <TimePicker value={slot.end} onChange={v => update(i,"end",v)} />
@@ -485,8 +574,8 @@ function Modal({ day, dateKey: specificDate, daySlots, onSave, onSaveDate, onDel
 function StatusPill({ active, onToggle }) {
   return (
     <button className="status-btn" onClick={onToggle}
-      style={{ display:"flex", alignItems:"center", gap:7, padding:"7px 14px", borderRadius:30, border:`1.5px solid ${active?T.orange:T.border}`, background:active?T.orangeLight:T.bg, cursor:"pointer", marginLeft:12, fontFamily:"'DM Sans', sans-serif" }}>
-      <div style={{ width:9, height:9, borderRadius:"50%", background:active?T.orange:T.textLight, transition:"background 0.2s" }} />
+      style={{ display:"flex", alignItems:"center", gap:"0.4375rem", padding:"0.4375rem 0.875rem", borderRadius:"1.875rem", border:`1.5px solid ${active?T.orange:T.border}`, background:active?T.orangeLight:T.bg, cursor:"pointer", marginLeft:"0.75rem", fontFamily:"'DM Sans', sans-serif" }}>
+      <div style={{ width:"0.5625rem", height:"0.5625rem", borderRadius:"50%", background:active?T.orange:T.textLight, transition:"background 0.2s" }} />
       <span style={{ fontWeight:600, fontSize:"0.82rem", color:active?T.orangeDark:T.textMid }}>
         {active?"Available":"Unavailable"}
       </span>
@@ -497,17 +586,17 @@ function StatusPill({ active, onToggle }) {
 function Legend({ bp }) {
   const items = [
     { color:T.orange, label:"Free slot" },
-    { color:T.blue,   label:"Requested", stripe:true },
-    { color:T.orange, label:"Unpaid",    faded:true },
+    { color:T.blue,   label:"Requested" },
+    { color:T.orange, label:"Unpaid", faded:true },
     { color:T.green,  label:"Confirmed & paid" },
   ];
   const isSmall = bp === "mobile";
   return (
-    <div style={{ display:"flex", gap:isSmall?8:14, flexWrap:"wrap", marginTop:"0.75rem" }}>
+    <div style={{ display:"flex", gap:isSmall?"0.5rem":"0.875rem", flexWrap:"wrap" }}>
       {items.map(({ color, label, stripe, faded }) => (
-        <div key={label} style={{ display:"flex", alignItems:"center", gap:5, fontSize:"0.7rem", color:T.textMid }}>
+        <div key={label} style={{ display:"flex", alignItems:"center", gap:"0.3125rem", fontSize:"0.7rem", color:T.textMid }}>
           <div style={{
-            width:12, height:12, borderRadius:3, border:`1.5px solid ${color}`,
+            width:"0.75rem", height:"0.75rem", borderRadius:"0.1875rem", border:`1.5px solid ${color}`,
             background: stripe
               ? `repeating-linear-gradient(45deg,rgba(59,130,246,0.2) 0px,rgba(59,130,246,0.2) 4px,rgba(59,130,246,0.05) 4px,rgba(59,130,246,0.05) 8px)`
               : faded ? T.orangeLight
@@ -524,18 +613,18 @@ function Legend({ bp }) {
 // ── Mobile day picker ─────────────────────────────────────────────────────────
 function MobileDayPicker({ weekDays, selectedIdx, onSelect, today, bookingsByDate, freeSlots }) {
   return (
-    <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:4 }}>
+    <div style={{ display:"flex", gap:"0.375rem", overflowX:"auto", paddingBottom:"0.25rem" }}>
       {weekDays.map((date, i) => {
-        const key       = dateKey(date);
-        const isToday   = date.toDateString() === today.toDateString();
+        const key        = dateKey(date);
+        const isToday    = date.toDateString() === today.toDateString();
         const isSelected = i === selectedIdx;
-        const hasFree   = (freeSlots[key]||[]).length > 0;
-        const dayBooks  = bookingsByDate[key]||[];
+        const hasFree    = (freeSlots[key]||[]).length > 0;
+        const dayBooks   = bookingsByDate[key]||[];
         return (
           <button key={i} onClick={() => onSelect(i)}
             style={{
-              display:"flex", flexDirection:"column", alignItems:"center", gap:3,
-              padding:"8px 12px", borderRadius:12, border:`1.5px solid ${isSelected?T.orange:T.border}`,
+              display:"flex", flexDirection:"column", alignItems:"center", gap:"0.1875rem",
+              padding:"0.5rem 0.75rem", borderRadius:"0.75rem", border:`1.5px solid ${isSelected?T.orange:T.border}`,
               background:isSelected?T.orangeLight:T.white, cursor:"pointer", flexShrink:0,
               fontFamily:"'DM Sans', sans-serif",
             }}>
@@ -543,16 +632,16 @@ function MobileDayPicker({ weekDays, selectedIdx, onSelect, today, bookingsByDat
               {DAYS[date.getDay()]}
             </span>
             <span style={{
-              width:30, height:30, borderRadius:"50%", background:isToday?T.orange:isSelected?T.orangeBorder:"transparent",
+              width:"1.875rem", height:"1.875rem", borderRadius:"50%", background:isToday?T.orange:isSelected?T.orangeBorder:"transparent",
               color:isToday?"#fff":T.text, display:"flex", alignItems:"center", justifyContent:"center",
               fontWeight:isToday?700:500, fontSize:"0.85rem",
             }}>
               {date.getDate()}
             </span>
-            <div style={{ display:"flex", gap:2 }}>
-              {hasFree && <span style={{ width:4, height:4, borderRadius:"50%", background:T.orange }} />}
-              {dayBooks.some(t=>t.status==="pending") && <span style={{ width:4, height:4, borderRadius:"50%", background:T.blue }} />}
-              {dayBooks.some(t=>t.status==="confirmed") && <span style={{ width:4, height:4, borderRadius:"50%", background:T.green }} />}
+            <div style={{ display:"flex", gap:"0.125rem" }}>
+              {hasFree && <span style={{ width:"0.25rem", height:"0.25rem", borderRadius:"50%", background:T.orange }} />}
+              {dayBooks.some(t=>t.status==="pending") && <span style={{ width:"0.25rem", height:"0.25rem", borderRadius:"50%", background:T.blue }} />}
+              {dayBooks.some(t=>t.status==="confirmed") && <span style={{ width:"0.25rem", height:"0.25rem", borderRadius:"50%", background:T.green }} />}
             </div>
           </button>
         );
@@ -563,16 +652,16 @@ function MobileDayPicker({ weekDays, selectedIdx, onSelect, today, bookingsByDat
 
 // ── MAIN ──────────────────────────────────────────────────────────────────────
 export default function CalendarAvailability() {
-  const bp = useBreakpoint();
+  const bp        = useBreakpoint();
   const isMobile  = bp === "mobile";
   const isTablet  = bp === "tablet";
   const isTV      = bp === "tv";
 
-  // Responsive hour-row height: taller on TV, shorter on mobile
+  // Hour height scales with breakpoint — all relative to rem base
   const HOUR_H = isMobile ? 48 : isTablet ? 52 : isTV ? 80 : 60;
 
   const userString = localStorage.getItem("user") || sessionStorage.getItem("user");
-  const workerId = userString
+  const workerId   = userString
     ? (() => { try { const p = JSON.parse(userString); return p?.email||p?.id||p?._id||null; } catch { return null; } })()
     : null;
 
@@ -585,9 +674,8 @@ export default function CalendarAvailability() {
   const [loading,            setLoading]            = useState(true);
   const [saving,             setSaving]             = useState(false);
   const [modal,              setModal]              = useState(null);
-  const [toast,              setToast]              = useState(null);
   const [selectedDayIdx,     setSelectedDayIdx]     = useState(today.getDay());
-  const toastTimerRef = useRef(null);
+  const [toasts,             setToasts]             = useState([]);
 
   const weekDays = Array.from({ length:7 }, (_, i) => {
     const d = new Date(today);
@@ -664,13 +752,11 @@ export default function CalendarAvailability() {
   }, [weekOffset]);
 
   const showToast = (type) => {
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setToast({ type, exiting:false });
-    toastTimerRef.current = setTimeout(() => {
-      setToast(prev => prev ? { ...prev, exiting:true } : null);
-      setTimeout(() => setToast(null), 300);
-    }, 3500);
+    const id = Date.now() + Math.random();
+    setToasts(prev => [...prev, { id, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
   };
+  const removeToast = (id) => setToasts(prev => prev.filter(t => t.id !== id));
 
   const toggleGlobal = async () => {
     const next = !globalAvailability;
@@ -678,7 +764,7 @@ export default function CalendarAvailability() {
     showToast(next ? "available" : "unavailable");
     setSaving(true);
     try { await toggleAvailability(workerId, next); }
-    catch(e) { console.error(e); setGlobalAvailability(!next); setToast(null); }
+    catch(e) { console.error(e); setGlobalAvailability(!next); }
     finally { setSaving(false); }
   };
 
@@ -714,18 +800,13 @@ export default function CalendarAvailability() {
   };
 
   if (loading) return (
-    <div style={{ padding:60, fontFamily:"'DM Sans', sans-serif", color:T.textLight, textAlign:"center" }}>Loading…</div>
+    <div style={{ padding:"3.75rem", fontFamily:"'DM Sans', sans-serif", color:T.textLight, textAlign:"center" }}>Loading…</div>
   );
 
-  // ── Responsive layout values ────────────────────────────────────────────────
-  const mainPadding = isMobile ? "1rem" : isTV ? "3rem 4rem" : "2rem";
-  const maxWidth    = isTV ? 1800 : 1120;
-  const gridMaxH    = isMobile ? 380 : isTV ? 640 : 420;
-  const timeColW    = isMobile ? 40 : isTV ? 72 : 52;
-  const titleSize   = isTV ? "2.4rem" : "1.8rem";
-  const summaryMinW = isMobile ? 80 : isTV ? 150 : 100;
+  const timeColW    = isMobile ? "2.5rem" : isTV ? "10.75rem" : "3.25rem";
+  const titleSize   = isTV ? "2.4rem" : "clamp(1.4rem, 3vw, 1.8rem)";
+  const summaryMinW = isMobile ? "5rem" : isTV ? "9.375rem" : "6.25rem";
 
-  // Days shown in grid: all 7 on desktop/TV, 1 on mobile (selected), 3 on tablet
   const visibleDays = isMobile
     ? [weekDays[selectedDayIdx]]
     : isTablet
@@ -736,68 +817,64 @@ export default function CalendarAvailability() {
     <>
       <FontLink />
       <BookingNavbar />
-      <Toast toast={toast} />
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
 
-      <div style={{ background:T.bg, fontFamily:"'DM Sans', sans-serif", minHeight:"100vh" }}>
-        <main style={{ padding:mainPadding, maxWidth, margin:"0 auto" }}>
+      <div className="cal-page">
+        <main className="cal-main">
 
           {/* ── Header ── */}
-          <div style={{ display:"flex", flexWrap:"wrap", justifyContent:"space-between", alignItems:"center", marginBottom:"0.75rem", gap:10 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:4, flexWrap:"wrap" }}>
-              <h1 style={{ fontFamily:"'DM Serif Display', serif", fontSize:titleSize, color:T.text, margin:0, letterSpacing:"-0.5px" }}>
+          <div style={{ display:"flex", flexWrap:"wrap", justifyContent:"space-between", alignItems:"center", gap:"0.625rem" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:"0.25rem", flexWrap:"wrap" }}>
+              <h1 style={{ fontFamily:"inter", fontSize:titleSize, color:T.text, margin:0, letterSpacing:"-0.5px" }}>
                 Availability
               </h1>
               <StatusPill active={globalAvailability} onToggle={toggleGlobal} />
             </div>
 
-            <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
+            <div style={{ display:"flex", gap:"0.375rem", alignItems:"center", flexWrap:"wrap" }}>
               {saving && <span style={{ fontSize:"0.72rem", color:T.orange, fontWeight:600 }}>Saving…</span>}
               <button className="nav-btn" onClick={() => setWeekOffset(w => w-1)}
-                style={{ background:T.white, border:`1px solid ${T.border}`, borderRadius:"0.5rem", padding:isMobile?"5px 10px":"6px 13px", cursor:"pointer", fontSize:"0.82rem", color:T.textMid, fontFamily:"'DM Sans', sans-serif" }}>
+                style={{ background:T.white, border:`1px solid ${T.border}`, borderRadius:"0.5rem", padding:isMobile?"0.3125rem 0.625rem":"0.375rem 0.8125rem", cursor:"pointer", fontSize:"0.82rem", color:T.textMid, fontFamily:"'DM Sans', sans-serif" }}>
                 ← {isMobile ? "" : "Prev"}
               </button>
               <button className="nav-btn" onClick={() => setWeekOffset(0)}
-                style={{ background:weekOffset===0?T.orange:T.white, color:weekOffset===0?"#fff":T.textMid, border:`1px solid ${weekOffset===0?T.orange:T.border}`, borderRadius:"0.5rem", padding:isMobile?"5px 10px":"6px 13px", cursor:"pointer", fontSize:"0.82rem", fontWeight:600, fontFamily:"'DM Sans', sans-serif" }}>
+                style={{ background:weekOffset===0?T.orange:T.white, color:weekOffset===0?"#fff":T.textMid, border:`1px solid ${weekOffset===0?T.orange:T.border}`, borderRadius:"0.5rem", padding:isMobile?"0.3125rem 0.625rem":"0.375rem 0.8125rem", cursor:"pointer", fontSize:"0.82rem", fontWeight:600, fontFamily:"'DM Sans', sans-serif" }}>
                 {isMobile ? "Now" : "This Week"}
               </button>
               <button className="nav-btn" onClick={() => setWeekOffset(w => w+1)}
-                style={{ background:T.white, border:`1px solid ${T.border}`, borderRadius:"0.5rem", padding:isMobile?"5px 10px":"6px 13px", cursor:"pointer", fontSize:"0.82rem", color:T.textMid, fontFamily:"'DM Sans', sans-serif" }}>
+                style={{ background:T.white, border:`1px solid ${T.border}`, borderRadius:"0.5rem", padding:isMobile?"0.3125rem 0.625rem":"0.375rem 0.8125rem", cursor:"pointer", fontSize:"0.82rem", color:T.textMid, fontFamily:"'DM Sans', sans-serif" }}>
                 {isMobile ? "" : "Next"} →
               </button>
             </div>
           </div>
 
           {!globalAvailability && (
-            <div style={{ display:"flex", alignItems:"center", gap:10, background:"#1a1512", color:"#fff", borderRadius:"0.75rem", padding:"12px 18px", marginBottom:"1.25rem", fontSize:"0.85rem", fontWeight:500 }}>
-              <span>🔴</span>
+            <div style={{ display:"flex", alignItems:"center", gap:"0.625rem", background:T.redLight, color:T.red, border:`1px solid #fecaca`, borderRadius:"0.75rem", padding:"0.75rem 1.125rem", fontSize:"0.85rem", fontWeight:500 }}>
+              <div style={{ width:"0.5rem", height:"0.5rem", borderRadius:"50%", background:T.red, flexShrink:0 }} />
               <span>You're currently <strong>unavailable</strong>. Clients cannot book you.</span>
             </div>
           )}
 
           {/* ── Mobile / Tablet day picker ── */}
           {(isMobile || isTablet) && (
-            <div style={{ marginBottom:"0.75rem" }}>
-              <MobileDayPicker
-                weekDays={weekDays}
-                selectedIdx={selectedDayIdx}
-                onSelect={setSelectedDayIdx}
-                today={today}
-                bookingsByDate={bookingsByDate}
-                freeSlots={freeSlots}
-              />
-            </div>
+            <MobileDayPicker
+              weekDays={weekDays}
+              selectedIdx={selectedDayIdx}
+              onSelect={setSelectedDayIdx}
+              today={today}
+              bookingsByDate={bookingsByDate}
+              freeSlots={freeSlots}
+            />
           )}
 
           {/* ── Calendar grid ── */}
-          <div style={{
-            background:T.white, border:`1px solid ${T.border}`, borderRadius:"1rem",
-            overflow:"hidden", boxShadow:"0 2px 12px rgba(0,0,0,0.05)",
-            opacity:globalAvailability?1:0.45, pointerEvents:globalAvailability?"auto":"none",
-            transition:"opacity 0.25s",
-          }}>
-            {/* Day headers — hidden on mobile (day picker replaces it) */}
+          <div
+            className="cal-grid-wrap"
+            style={{ opacity:globalAvailability?1:0.45, pointerEvents:globalAvailability?"auto":"none" }}
+          >
+            {/* Day headers */}
             {!isMobile && (
-              <div style={{ display:"flex", borderBottom:`1px solid ${T.border}` }}>
+              <div style={{ display:"flex", borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
                 <div style={{ width:timeColW, flexShrink:0 }} />
                 {visibleDays.map((date, i) => {
                   const dayName      = DAY_NAMES[date.getDay()];
@@ -816,16 +893,16 @@ export default function CalendarAvailability() {
                       <div className="day-num"
                         onClick={() => setModal({ dayName, dateKey:key, daySlots:availability[dayName]||[] })}
                         style={{
-                          width:isTV?42:32, height:isTV?42:32, borderRadius:"50%",
+                          width:isTV?"2.625rem":"2rem", height:isTV?"2.625rem":"2rem", borderRadius:"50%",
                           background:isToday?T.orange:"transparent", color:isToday?"#fff":T.text,
                           display:"flex", alignItems:"center", justifyContent:"center",
-                          margin:"4px auto 0", fontWeight:isToday?700:500, fontSize:isTV?"1rem":"0.87rem", cursor:"pointer", position:"relative",
+                          margin:"0.25rem auto 0", fontWeight:isToday?700:500, fontSize:isTV?"1rem":"0.87rem", cursor:"pointer", position:"relative",
                         }}>
                         {date.getDate()}
-                        <div style={{ position:"absolute", bottom:1, display:"flex", gap:2, justifyContent:"center" }}>
-                          {hasFree      && <span style={{ width:4, height:4, borderRadius:"50%", background:isToday?"#fff":T.orange, display:"block" }} />}
-                          {hasPending   && <span style={{ width:4, height:4, borderRadius:"50%", background:T.blue,  display:"block" }} />}
-                          {hasConfirmed && <span style={{ width:4, height:4, borderRadius:"50%", background:T.green, display:"block" }} />}
+                        <div style={{ position:"absolute", bottom:1, display:"flex", gap:"0.125rem", justifyContent:"center" }}>
+                          {hasFree      && <span style={{ width:"0.25rem", height:"0.25rem", borderRadius:"50%", background:isToday?"#fff":T.orange, display:"block" }} />}
+                          {hasPending   && <span style={{ width:"0.25rem", height:"0.25rem", borderRadius:"50%", background:T.blue,  display:"block" }} />}
+                          {hasConfirmed && <span style={{ width:"0.25rem", height:"0.25rem", borderRadius:"50%", background:T.green, display:"block" }} />}
                         </div>
                       </div>
                     </div>
@@ -834,85 +911,92 @@ export default function CalendarAvailability() {
               </div>
             )}
 
-            {/* Hour grid */}
-            <div style={{ display:"flex", overflowY:"auto", maxHeight:gridMaxH }}>
-              {/* Time labels */}
-              <div style={{ width:timeColW, flexShrink:0 }}>
-                {HOURS.map(h => (
-                  <div key={h} style={{ height:HOUR_H, display:"flex", alignItems:"flex-start", paddingTop:6, paddingRight:8, justifyContent:"flex-end", fontSize:isTV?"0.75rem":"0.63rem", color:T.textLight, userSelect:"none" }}>
-                    {h%12===0?12:h%12}{h>=12?"p":"a"}
-                  </div>
-                ))}
+            {/* Hour grid — fills remaining height */}
+            <div className="cal-hour-scroll">
+              <div style={{ display:"flex", height: `${HOURS.length * HOUR_H}px` }}>
+                {/* Time labels */}
+                <div style={{ width:timeColW, flexShrink:0 }}>
+                  {HOURS.map(h => (
+                    <div key={h} style={{ height:HOUR_H, display:"flex", alignItems:"flex-start", paddingTop:"0.375rem", paddingRight:"0.5rem", justifyContent:"flex-end", fontSize:isTV?"0.75rem":"0.63rem", color:T.textLight, userSelect:"none" }}>
+                      {h%12===0?12:h%12}{h>=12?"P.M.":"A.M."}
+                    </div>
+                  ))}
+                </div>
+
+                {visibleDays.map((date, i) => {
+                  const dayName      = DAY_NAMES[date.getDay()];
+                  const key          = dateKey(date);
+                  const dayBooks     = bookingsByDate[key]||[];
+                  const dayFreeSlots = freeSlots[key]||[];
+
+                  return (
+                    <div key={i} style={{ flex:1, position:"relative", borderLeft:`1px solid ${T.border}` }}>
+                      {HOURS.map(h => (
+                        <div key={h} className="hour-row"
+                          style={{ height:HOUR_H, border:`1px solid ${T.border}` }}
+                          onClick={() => setModal({ dayName, dateKey:key, daySlots:availability[dayName]||[] })} />
+                      ))}
+
+                      {dayFreeSlots.map((slot, si) => {
+                        const offsetStart  = toOffset(slot.start);
+                        const offsetEnd    = toOffset(slot.end);
+                        const gridHours    = HOURS.length;
+                        if (offsetEnd <= 0 || offsetStart >= gridHours) return null;
+                        const clampedStart = Math.max(offsetStart, 0);
+                        const clampedEnd   = Math.min(offsetEnd, gridHours);
+                        const topPx        = clampedStart * HOUR_H;
+                        const heightPx     = Math.max((clampedEnd - clampedStart) * HOUR_H, 6);
+                        if (heightPx < 6) return null;
+                        return (
+                          <div key={si} className="slot-block"
+                            onClick={() => setModal({ dayName, dateKey:key, daySlots:availability[dayName]||[] })}
+                            style={{
+                              position:"absolute", top:topPx, left:3, right:3, height:heightPx,
+                              background:`linear-gradient(160deg,${T.orange}dd,${T.orangeDark}dd)`,
+                              borderRadius:"0.5rem", padding:heightPx>28?"5px 7px":"2px 5px",
+                              zIndex:2, border:`1px solid ${T.orange}`,
+                              boxShadow:"0 2px 8px rgba(246,173,86,0.2)", overflow:"clip",
+                            }}>
+                            {heightPx > 28 && (
+                              <>
+                                <div style={{ fontSize:isTV?"0.7rem":"0.6rem", color:"#fff", fontWeight:700 }}>
+                                  {fmt12(...slot.start.split(":").map(Number))}
+                                </div>
+                                <div style={{ fontSize:isTV?"0.65rem":"0.56rem", color:"rgba(255,255,255,0.8)" }}>
+                                  {fmt12(...slot.end.split(":").map(Number))}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {dayBooks.map((task, bi) => (
+                        <BookingBlock key={task._id||task.id||bi} task={task} hourH={HOUR_H} />
+                      ))}
+                    </div>
+                  );
+                })}
               </div>
-
-              {visibleDays.map((date, i) => {
-                const dayName      = DAY_NAMES[date.getDay()];
-                const key          = dateKey(date);
-                const dayBooks     = bookingsByDate[key]||[];
-                const dayFreeSlots = freeSlots[key]||[];
-
-                return (
-                  <div key={i} style={{ flex:1, position:"relative", borderLeft:`1px solid ${T.border}` }}>
-                    {HOURS.map(h => (
-                      <div key={h} className="hour-row"
-                        style={{ height:HOUR_H, borderTop:`1px solid ${T.border}` }}
-                        onClick={() => setModal({ dayName, dateKey:key, daySlots:availability[dayName]||[] })} />
-                    ))}
-
-                    {dayFreeSlots.map((slot, si) => {
-                      const offsetStart = toOffset(slot.start);
-                      const offsetEnd   = toOffset(slot.end);
-                      const gridHours   = HOURS.length;
-                      if (offsetEnd <= 0 || offsetStart >= gridHours) return null;
-                      const clampedStart = Math.max(offsetStart, 0);
-                      const clampedEnd   = Math.min(offsetEnd, gridHours);
-                      const topPx    = clampedStart * HOUR_H;
-                      const heightPx = Math.max((clampedEnd - clampedStart) * HOUR_H, 6);
-                      if (heightPx < 6) return null;
-                      return (
-                        <div key={si} className="slot-block"
-                          onClick={() => setModal({ dayName, dateKey:key, daySlots:availability[dayName]||[] })}
-                          style={{
-                            position:"absolute", top:topPx, left:3, right:3, height:heightPx,
-                            background:`linear-gradient(160deg,${T.orange}dd,${T.orangeDark}dd)`,
-                            borderRadius:"0.5rem", padding:heightPx>28?"5px 7px":"2px 5px",
-                            zIndex:2, border:`1px solid ${T.orange}`,
-                            boxShadow:"0 2px 8px rgba(246,173,86,0.2)", overflow:"hidden",
-                          }}>
-                          {heightPx > 28 && (
-                            <>
-                              <div style={{ fontSize:isTV?"0.7rem":"0.6rem", color:"#fff", fontWeight:700 }}>
-                                {fmt12(...slot.start.split(":").map(Number))}
-                              </div>
-                              <div style={{ fontSize:isTV?"0.65rem":"0.56rem", color:"rgba(255,255,255,0.8)" }}>
-                                {fmt12(...slot.end.split(":").map(Number))}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      );
-                    })}
-
-                    {dayBooks.map((task, bi) => (
-                      <BookingBlock key={task._id||task.id||bi} task={task} hourH={HOUR_H} />
-                    ))}
-                  </div>
-                );
-              })}
             </div>
           </div>
 
           <Legend bp={bp} />
 
           {/* ── Summary cards ── */}
-          <div style={{ display:"flex", gap:isMobile?6:"0.5rem", marginTop:"1rem", flexWrap:isMobile?"nowrap":"wrap", overflowX:isMobile?"auto":"visible", paddingBottom:isMobile?6:0 }}>
+          <div style={{
+            display:"flex", gap:isMobile?"0.375rem":"0.5rem",
+            flexWrap:isMobile?"nowrap":"wrap",
+            overflowX:isMobile?"auto":"visible",
+            paddingBottom:isMobile?"0.375rem":0,
+          }}>
             {DAY_NAMES.map(day => {
-              const slots      = (availability[day]||[]).filter(s => s.enabled);
-              const hasData    = (availability[day]||[]).length > 0;
-              const weekDay    = weekDays.find(d => DAY_NAMES[d.getDay()] === day);
-              const weekDayKey = weekDay ? dateKey(weekDay) : null;
+              const slots        = (availability[day]||[]).filter(s => s.enabled);
+              const hasData      = (availability[day]||[]).length > 0;
+              const weekDay      = weekDays.find(d => DAY_NAMES[d.getDay()] === day);
+              const weekDayKey   = weekDay ? dateKey(weekDay) : null;
               const dayBookCount = weekDayKey ? (bookingsByDate[weekDayKey]||[]).length : 0;
-              const isActiveDay = weekDay && weekDays[selectedDayIdx]?.toDateString() === weekDay?.toDateString();
+              const isActiveDay  = weekDay && weekDays[selectedDayIdx]?.toDateString() === weekDay?.toDateString();
 
               return (
                 <div key={day} className="summary-card"
@@ -920,23 +1004,23 @@ export default function CalendarAvailability() {
                   style={{
                     flex:isMobile?"0 0 auto":1,
                     minWidth:summaryMinW,
-                    width:isMobile?90:undefined,
+                    width:isMobile?"5.625rem":undefined,
                     background:slots.length?T.orangeLight:T.white,
                     border:`1.5px solid ${isActiveDay&&isMobile?T.orange:slots.length?T.orangeBorder:T.border}`,
                     borderRadius:"0.75rem", padding:isTV?"1rem":"0.75rem",
                     opacity:globalAvailability?1:0.5,
                     cursor:globalAvailability?"pointer":"default",
                   }}>
-                  <div style={{ fontSize:isTV?"0.75rem":"0.65rem", color:T.textLight, textTransform:"capitalize", marginBottom:5, fontWeight:600, letterSpacing:"0.04em" }}>
+                  <div style={{ fontSize:isTV?"0.75rem":"0.65rem", color:T.textLight, textTransform:"capitalize", marginBottom:"0.3125rem", fontWeight:600, letterSpacing:"0.04em" }}>
                     {day.slice(0,3).toUpperCase()}
                   </div>
                   {slots.length > 0 ? (
                     <>
-                      <div style={{ fontSize:isTV?"0.85rem":"0.75rem", color:T.orangeDark, fontWeight:700, marginBottom:3 }}>
+                      <div style={{ fontSize:isTV?"0.85rem":"0.75rem", color:T.orangeDark, fontWeight:700, marginBottom:"0.1875rem" }}>
                         {slots.length} slot{slots.length>1?"s":""}
                       </div>
                       {slots.slice(0,2).map((s,i) => (
-                        <div key={i} style={{ fontSize:isTV?"0.7rem":"0.6rem", color:T.textMid, marginTop:2 }}>
+                        <div key={i} style={{ fontSize:isTV?"0.7rem":"0.6rem", color:T.textMid, marginTop:"0.125rem" }}>
                           {fmt12(...s.start.split(":").map(Number))} – {fmt12(...s.end.split(":").map(Number))}
                         </div>
                       ))}
@@ -945,7 +1029,7 @@ export default function CalendarAvailability() {
                     <div style={{ fontSize:"0.7rem", color:T.textLight }}>{hasData?"Off":"Not set"}</div>
                   )}
                   {dayBookCount > 0 && (
-                    <div style={{ fontSize:"0.62rem", color:T.blue, fontWeight:600, marginTop:4 }}>
+                    <div style={{ fontSize:"0.62rem", color:T.blue, fontWeight:600, marginTop:"0.25rem" }}>
                       {dayBookCount} booking{dayBookCount>1?"s":""}
                     </div>
                   )}
@@ -968,6 +1052,7 @@ export default function CalendarAvailability() {
           onClose={() => setModal(null)}
         />
       )}
+      <ChatWidget />
     </>
   );
 }

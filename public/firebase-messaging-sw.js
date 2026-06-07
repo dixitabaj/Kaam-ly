@@ -3,16 +3,35 @@
 importScripts("https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js");
 
+firebase.initializeApp({
+  apiKey:            "AIzaSyD4MNdeLF9QnorEeHPzfZ5Y4Zmhl7HPh8M",
+  authDomain:        "kaam-ly.firebaseapp.com",
+  projectId:         "kaam-ly",
+  storageBucket:     "kaam-ly.firebasestorage.app",
+  messagingSenderId: "983636611425",
+  appId:             "1:983636611425:web:c66dfc1a19af0242b9f520",
+});
 
 const messaging = firebase.messaging();
 const API_BASE  = "http://localhost:8000";
 
 // ── 1. Push listener (handles background notifications) ───────────────────────
+// public/firebase-messaging-sw.js
+// firebase-messaging-sw.js
 messaging.onBackgroundMessage((payload) => {
   console.log("[SW] Background message:", payload);
 
-  const title = payload.notification?.title || "Kaam-ly";
-  const body  = payload.notification?.body  || "You have a new update.";
+  // Debug: check how many clients are found
+  self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+    console.log("[SW] Found clients:", clients.length);
+    clients.forEach((client) => {
+      console.log("[SW] Posting to client:", client.url);
+      client.postMessage({ type: "fcm-background", payload });
+    });
+  });
+
+  const title = payload.notification?.title || payload.data?.title || "Kaam-ly";
+  const body  = payload.notification?.body  || payload.data?.body  || "";
 
   self.registration.showNotification(title, {
     body,

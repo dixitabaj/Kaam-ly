@@ -3,7 +3,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
- 
+from datetime import datetime
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
  
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
@@ -145,4 +145,153 @@ def send_action_email(
     except Exception as e:
         print(f"[EMAIL] ❌ Failed → {receiver_email}: {e}")
         return False
- 
+
+       
+
+def send_email(to_email: str, subject: str, html_content: str):
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["From"]    = SENDER_EMAIL
+        msg["To"]      = to_email
+        msg["Subject"] = subject
+        msg.attach(MIMEText(html_content, "html"))
+
+        with smtplib.SMTP(SMTP_SERVER, PORT) as server:
+            server.starttls()
+            server.login(LOGIN, PASSWORD)
+            server.send_message(msg)
+
+        print(f"✓ Email sent to {to_email}")
+        return True
+    except Exception as e:
+        print(f"✗ Email failed to {to_email}: {e}")
+        return False
+
+
+def send_refund_email(
+    to_email: str,
+    user_name: str,
+    subject: str,
+    amount: float,
+    is_customer: bool,
+    task_id: str = None,
+    admin_note: str = None
+):
+    """Send refund approval email"""
+
+    if is_customer:
+        message = f"""
+        <p>Dear {user_name},</p>
+        <p>Your refund request has been <strong>approved</strong> and is now being processed.</p>
+        <p><strong>Refund Amount:</strong> NPR {amount:,.2f}</p>
+        {f'<p><strong>Task ID:</strong> {task_id}</p>' if task_id else ''}
+        <p>The refund will be credited to your original payment method within 5-7 business days.</p>
+        {f'<p><strong>Admin Note:</strong> {admin_note}</p>' if admin_note else ''}
+        <p>If you have any questions, please contact our support team.</p>
+        """
+    else:
+        if amount > 0:
+            message = f"""
+            <p>Dear {user_name},</p>
+            <p>A refund has been processed for a task you worked on.</p>
+            <p><strong>Your Payment Amount:</strong> NPR {amount:,.2f}</p>
+            {f'<p><strong>Task ID:</strong> {task_id}</p>' if task_id else ''}
+            <p>Your payment will be processed and released to your account shortly.</p>
+            {f'<p><strong>Admin Note:</strong> {admin_note}</p>' if admin_note else ''}
+            <p>If you have any questions, please contact our support team.</p>
+            """
+        else:
+            message = f"""
+            <p>Dear {user_name},</p>
+            <p>A full refund has been issued for a task you worked on.</p>
+            {f'<p><strong>Task ID:</strong> {task_id}</p>' if task_id else ''}
+            <p>Unfortunately, no payment will be released for this task as a full refund was approved.</p>
+            {f'<p><strong>Admin Note:</strong> {admin_note}</p>' if admin_note else ''}
+            <p>If you believe this is an error, please contact our support team immediately.</p>
+            """
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background-color: #E8843A; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }}
+            .content {{ background-color: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }}
+            .footer {{ text-align: center; margin-top: 20px; font-size: 12px; color: #777; }}
+            strong {{ color: #E8843A; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h2>Kaamly - Refund Update</h2>
+            </div>
+            <div class="content">
+                {message}
+                <p>Thank you for using Kaamly!</p>
+                <p>Best regards,<br>The Kaamly Team</p>
+            </div>
+            <div class="footer">
+                <p>This is an automated email. Please do not reply to this message.</p>
+                <p>&copy; {datetime.now().year} Kaamly. All rights reserved.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    return send_email(to_email, subject, html_content)
+
+
+def send_declined_refund_email(
+    to_email: str,
+    user_name: str,
+    task_id: str = None,
+    admin_note: str = None
+):
+    """Send refund declined email"""
+
+    message = f"""
+    <p>Dear {user_name},</p>
+    <p>After reviewing your refund request, we regret to inform you that it has been <strong>declined</strong>.</p>
+    {f'<p><strong>Task ID:</strong> {task_id}</p>' if task_id else ''}
+    {f'<p><strong>Reason:</strong> {admin_note}</p>' if admin_note else '<p>Please contact our support team for more information about this decision.</p>'}
+    <p>If you believe this decision was made in error or have additional information to provide, please reach out to our support team.</p>
+    <p>We appreciate your understanding.</p>
+    """
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background-color: #D94F3D; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }}
+            .content {{ background-color: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }}
+            .footer {{ text-align: center; margin-top: 20px; font-size: 12px; color: #777; }}
+            strong {{ color: #D94F3D; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h2>Kaamly - Refund Request Update</h2>
+            </div>
+            <div class="content">
+                {message}
+                <p>Thank you for using Kaamly!</p>
+                <p>Best regards,<br>The Kaamly Team</p>
+            </div>
+            <div class="footer">
+                <p>This is an automated email. Please do not reply to this message.</p>
+                <p>&copy; {datetime.now().year} Kaamly. All rights reserved.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    return send_email(to_email, "Kaamly: Refund Request Update", html_content)

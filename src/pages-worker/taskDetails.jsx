@@ -171,6 +171,7 @@ const TaskImages = ({ taskImg }) => {
   const [lbIndex, setLbIndex] = useState(null);
   if (!taskImg) return null;
   const images = Array.isArray(taskImg) ? taskImg : [taskImg];
+  console.log("Image", images);
   return (
     <>
       <div style={{ marginBottom: 16 }}>
@@ -345,6 +346,8 @@ const PriceBreakdown = ({ task }) => {
   const hourlyRate     = task?.basePrice ?? 0;
   const estimatedHrs   = task?.estimatedHours ?? 0;
   const additionalCost = task?.additionalCost ?? 0;
+  const platformFee    = task?.platformFee ?? 0;
+  console.log(platformFee);
   const baseCost       = hourlyRate * estimatedHrs;
   const totalCost      = task?.totalCost ?? (baseCost + additionalCost);
 
@@ -363,6 +366,7 @@ const PriceBreakdown = ({ task }) => {
             <span style={{ fontWeight: 600, color: C.text }}>{row.value}</span>
           </div>
         ))}
+       
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '13px 16px', background: C.orangeLight, fontSize: 14 }}>
           <span style={{ fontWeight: 700, color: C.text }}>Total Cost</span>
           <span style={{ fontWeight: 800, color: C.green, fontSize: 15 }}>Rs. {totalCost.toLocaleString()}</span>

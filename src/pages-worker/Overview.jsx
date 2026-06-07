@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
+import ChatWidget from "../components/HelpSection/HelpSection";
 
 // ── Sub-components from your current dashboard
 const StatusPill = ({ status }) => {

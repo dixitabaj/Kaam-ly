@@ -674,6 +674,14 @@ export default function LivenessCheck({ workerId, referencePhoto, onComplete, on
       });
       const data     = await res.json();
       const enriched = { ...data, selfiePhoto: selfie };
+      console.log('Backend Response:', {
+      verified: data.verified,
+      confidence: data.confidence,
+      distance: data.distance,
+      threshold: data.threshold,
+      message: data.message,
+      failed_at: data.failed_at
+    });
       setResult(enriched);
       if (data.verified && onComplete) onComplete(enriched);
     } catch {

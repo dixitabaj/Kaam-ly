@@ -25,7 +25,7 @@ except ImportError:
 # ── Config ─────────────────────────────────────────────────────────────────
 UPLOAD_DIR   = "uploads"
 DEEPFACE_MODEL   = "Facenet512"
-DEEPFACE_BACKEND = "opencv"
+DEEPFACE_BACKEND = "mtcnn"
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -57,9 +57,12 @@ def cleanup(*paths: str):
 
 def compare_images(img1_path: str, img2_path: str) -> dict:
     """
-    Run DeepFace verification between two image paths.
-    Returns a dict with verified, confidence, distance, threshold.
+    Run DeepFace verification with a custom threshold.
     """
+    # 1. INCREASE THIS VALUE
+    # Your distance was 0.326. Setting this to 0.45 gives a safe margin.
+    CUSTOM_THRESHOLD = 0.45 
+
     match = DeepFace.verify(
         img1_path         = img1_path,
         img2_path         = img2_path,
@@ -67,20 +70,24 @@ def compare_images(img1_path: str, img2_path: str) -> dict:
         detector_backend  = DEEPFACE_BACKEND,
         enforce_detection = False,
     )
-    distance   = round(match.get("distance",  1.0), 4)
-    threshold  = round(match.get("threshold", 0.3), 4)
-    # Clamp confidence to 0–100
-    raw_conf   = (1 - distance / threshold) * 100
+
+    # 2. Get the actual calculated distance
+    distance = round(match.get("distance", 1.0), 4)
+    
+    # 3. Use the CUSTOM_THRESHOLD for the 'verified' decision
+    verified = bool(distance <= CUSTOM_THRESHOLD)
+
+    # 4. Calculate confidence based on our new threshold
+    # (Closer to 0 distance means higher confidence)
+    raw_conf   = (1 - distance / CUSTOM_THRESHOLD) * 100
     confidence = round(max(0.0, min(100.0, raw_conf)), 1)
-    verified   = match.get("verified", False)
 
     return {
         "verified":   verified,
         "confidence": confidence,
         "distance":   distance,
-        "threshold":  threshold,
+        "threshold":  CUSTOM_THRESHOLD,
     }
-
 
 # ── Service layer ────────────────────────────────────────────────────────────
 
@@ -143,19 +150,36 @@ class FaceVerifyRequest(BaseModel):
 def verify_face(request: FaceVerifyRequest):
     """
     Main verification endpoint called by the frontend after liveness check.
-    Compares the live selfie against the worker's uploaded profile photo.
     """
+    # Print 1: Log the initiation of the request
+    print(f"\n--- [Face Verification Started] ---")
+    print(f"Worker ID: {request.worker_id}")
+    
     try:
-        return run_face_verification(
+        result = run_face_verification(
             worker_id           = request.worker_id,
             selfie_b64          = request.selfie,
             reference_photo_b64 = request.reference_photo,
             liveness_proof      = request.liveness_proof or {},
         )
+        
+        # Print 2: Log the metrics and result
+        status = "MATCH" if result['verified'] else "NO MATCH"
+        print(f"Result: {status}")
+        print(f"Distance: {result['distance']} | Threshold: {result['threshold']}")
+        print(f"Confidence: {result['confidence']}%")
+        print(f"--- [Verification Complete] ---\n")
+        
+        return result
+
     except ValueError as e:
+        print(f"Validation Error: {e}")
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        print(f"Face verify error: {e}")
+        # Detailed error logging
+        print(f"CRITICAL ERROR during face verify: {e}")
+        import traceback
+        traceback.print_exc() 
         raise HTTPException(status_code=500, detail=f"Verification failed: {str(e)}")
 
 

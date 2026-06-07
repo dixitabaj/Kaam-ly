@@ -7,8 +7,9 @@ const ProgressBar = ({ step, totalSteps = 4 }) => {
     { number: 1, label: 'Account' },
     { number: 2, label: 'Skills' },
     { number: 3, label: 'Profile' },
-    { number: 4, label: 'Availability' },
-    {number: 5, label:'Verification'}
+    {number: 4, label: 'Coverage' },
+    { number: 5, label: 'Availability' },
+    {number: 6, label:'Verification'}
   ];
 
   return (

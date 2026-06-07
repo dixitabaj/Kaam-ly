@@ -6,6 +6,8 @@ import { workerStats, workerEarnings, getRecentPayouts } from "../api/api";
 import Sidebar from "./sidebar";
 import BookingNavbar from "../components/Navbar/Navbar";
 
+import ChatWidget from "../components/HelpSection/HelpSection";
+
 const FontLink = () => (
   <style>{`
     @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&display=swap');
@@ -327,6 +329,7 @@ export default function EarningDashboard() {
     <>
       <FontLink />
       <BookingNavbar />
+      <ChatWidget/>
       <div style={{ display: "flex", backgroundColor: "rgb(247,245,239)", minHeight: "calc(100vh - 89px)" }}>
         <Sidebar workerId={workerId} />
 

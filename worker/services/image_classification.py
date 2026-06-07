@@ -152,7 +152,7 @@ def classify_image(image_bytes):
         if is_simple:
             return {
                 "class_index":      -1,
-                "class_name":       "Rejected - Not a Valid Service Image",
+                "class_name":       "Couldn't Classify",
                 "confidence":       0.0,
                 "message":          reason,
                 "rejected":         True,
@@ -177,10 +177,10 @@ def classify_image(image_bytes):
             if confidence.item() < MIN_CONFIDENCE or confidence_gap < MIN_GAP:
                 return {
                     "class_index":      -1,
-                    "class_name":       "Uncertain Classification",
+                    "class_name":       "Couldn't Classify",
                     "confidence":       round(confidence.item(), 4),
                     "confidence_gap":   round(confidence_gap, 4),
-                    "message":          "Model is uncertain about this image",
+                    "message":          "Couldn't classify this image, please use the search bar",
                     "rejected":         True,
                     "rejection_reason": "low_confidence",
                     "top_predictions":  [

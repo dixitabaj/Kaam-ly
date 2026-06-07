@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import Sidebar from "./sidebar";
 import BookingNavbar from "../components/Navbar/Navbar";
-import { getReviewsById, getTaskById } from "../api/api";
+import { getReviewsById, getTaskById, fetchCustomerById } from "../api/api";
+import ChatWidget from "../components/HelpSection/HelpSection";
 
 const FontLink = () => (
   <style>{`
@@ -18,7 +19,6 @@ const FontLink = () => (
     textarea:focus { outline: none; border-color: #f97316 !important; }
     input:focus    { outline: none; border-color: #f97316 !important; }
 
-    /* ── Stat grid ── */
     .stat-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -26,7 +26,6 @@ const FontLink = () => (
       margin-bottom: 1.75rem;
     }
 
-    /* ── Toolbar wrapping ── */
     .toolbar {
       display: flex;
       justify-content: space-between;
@@ -43,7 +42,6 @@ const FontLink = () => (
       flex-wrap: wrap;
     }
 
-    /* ── Table columns ── */
     .review-grid {
       display: grid;
       grid-template-columns: 2fr 1.6fr 1fr 100px 90px 110px;
@@ -51,24 +49,20 @@ const FontLink = () => (
       align-items: center;
     }
 
-    /* ── Drawer width ── */
     .review-drawer {
       width: min(440px, 95vw);
     }
 
-    /* ── Tablet (≤ 900px): collapse less-critical columns ── */
     @media (max-width: 900px) {
       .review-grid {
         grid-template-columns: 2fr 1fr 90px 90px;
       }
       .col-task-completed,
       .col-date { display: none; }
-
       .toolbar { flex-direction: column; align-items: flex-start; }
       .toolbar-right { width: 100%; }
     }
 
-    /* ── Mobile (≤ 600px) ── */
     @media (max-width: 600px) {
       .review-grid {
         grid-template-columns: 1fr 80px 80px;
@@ -78,7 +72,6 @@ const FontLink = () => (
       .stat-grid { grid-template-columns: repeat(2, 1fr); }
     }
 
-    /* ── TV / large display (≥ 1600px) ── */
     @media (min-width: 1600px) {
       .tv-main {
         padding: 3rem 4rem !important;
@@ -86,15 +79,12 @@ const FontLink = () => (
       }
       .tv-title    { font-size: 38px !important; }
       .tv-subtitle { font-size: 1rem !important; }
-
       .stat-grid   { gap: 1.5rem; margin-bottom: 2.5rem; }
       .stat-label  { font-size: 0.85rem !important; margin-bottom: 20px !important; }
       .stat-value  { font-size: 2rem !important; }
       .stat-sub    { font-size: 0.85rem !important; }
-
       .toolbar     { padding: 1.5rem 2rem; }
       .toolbar-title { font-size: 1.1rem !important; }
-
       .review-grid {
         grid-template-columns: 2fr 1.8fr 1.2fr 130px 110px 140px;
         padding: 1.1rem 2rem;
@@ -103,7 +93,6 @@ const FontLink = () => (
       .reviewer-name { font-size: 1rem !important; }
       .task-name   { font-size: 0.95rem !important; }
       .date-cell   { font-size: 0.92rem !important; }
-
       .review-drawer { width: 580px !important; }
       .drawer-header { font-size: 1.1rem !important; }
       .drawer-section-label { font-size: 0.82rem !important; }
@@ -112,13 +101,10 @@ const FontLink = () => (
       .info-value  { font-size: 0.95rem !important; }
       .reply-textarea { font-size: 1rem !important; }
       .reply-btn   { font-size: 1rem !important; padding: 1rem !important; }
-
       .filter-btn  { font-size: 0.88rem !important; padding: 7px 16px !important; }
       .search-input { width: 280px !important; height: 40px !important; font-size: 0.9rem !important; }
-
       .avatar-circle { width: 44px !important; height: 44px !important; font-size: 0.85rem !important; }
       .avatar-circle-lg { width: 58px !important; height: 58px !important; font-size: 1.1rem !important; }
-
       .stars-cell  { font-size: 1rem !important; }
       .badge-text  { font-size: 0.8rem !important; padding: 3px 12px !important; }
     }
@@ -203,17 +189,18 @@ const InfoRow = ({ label, value }) => (
 );
 
 /* ─── Drawer ──────────────────────────────────────────────────── */
-function ReviewDrawer({ review, task, onClose, onReplySubmit }) {
+function ReviewDrawer({ review, task, userName, onClose, onReplySubmit }) {
   const [replyText, setReplyText] = useState(review.workerReply || "");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted]   = useState(!!review.workerReply);
 
-  const userId = review.customerId || "Unknown";
-  const rating = review.rating || 0;
+  // Use fetched userName, fallback to user_id if name not available
+  const displayName = userName || review.user_id || "Unknown";
+  const rating = review.rating || review.stars || 0;
 
   const avatarColors = ["#f97316","#3b82f6","#22c55e","#a855f7","#ef4444","#0ea5e9","#eab308"];
-  const avatarBg = avatarColors[userId.charCodeAt(0) % avatarColors.length];
-  const initials = userId.slice(0, 2).toUpperCase();
+  const avatarBg = avatarColors[displayName.charCodeAt(0) % avatarColors.length];
+  const initials = displayName.slice(0, 2).toUpperCase();
 
   const handleSubmit = async () => {
     if (!replyText.trim()) return;
@@ -234,12 +221,12 @@ function ReviewDrawer({ review, task, onClose, onReplySubmit }) {
 
   return (
     <>
-      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.18)", zIndex: 900 }} />
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.18)", zIndex: 1900 }} />
       <div className="drawer review-drawer" style={{
         position: "fixed", top: 0, right: 0, bottom: 0,
         background: "#fff",
         boxShadow: "-6px 0 32px rgba(0,0,0,0.08)",
-        zIndex: 1000, overflowY: "auto",
+        zIndex: 11000, overflowY: "auto",
         display: "flex", flexDirection: "column",
         fontFamily: "'Inter', sans-serif",
       }}>
@@ -267,7 +254,7 @@ function ReviewDrawer({ review, task, onClose, onReplySubmit }) {
               fontWeight: 700, fontSize: "0.95rem", flexShrink: 0,
             }}>{initials}</div>
             <div>
-              <div style={{ fontWeight: 600, fontSize: "0.9rem", color: "#1a1310" }}>{userId}</div>
+              <div style={{ fontWeight: 600, fontSize: "0.9rem", color: "#1a1310" }}>{displayName}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
                 <Stars count={rating} size="1rem" />
                 <Badge rating={rating} />
@@ -282,7 +269,7 @@ function ReviewDrawer({ review, task, onClose, onReplySubmit }) {
           <div style={{ background: "#fdf8f4", borderRadius: 10, padding: "1rem", marginBottom: "1.5rem", border: "1px solid #ede9e4" }}>
             <div className="drawer-section-label" style={{ fontSize: "0.68rem", color: "#b0a89f", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Comment</div>
             <p className="drawer-comment" style={{ margin: 0, fontSize: "0.88rem", color: "#3d3530", lineHeight: 1.65 }}>
-              {review.comment || "No comment left."}
+              {review.text || review.comment || "No comment left."}
             </p>
           </div>
 
@@ -300,58 +287,7 @@ function ReviewDrawer({ review, task, onClose, onReplySubmit }) {
             </div>
           </div>
 
-          {/* Reply */}
-          <div>
-            <div className="drawer-section-label" style={{ fontSize: "0.68rem", color: "#b0a89f", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: "0.75rem" }}>
-              {submitted ? "Your Reply" : "Respond to Review"}
-            </div>
-
-            {submitted ? (
-              <div style={{ background: "#f0fdf4", borderRadius: 10, padding: "1rem", border: "1px solid #bbf7d0" }}>
-                <div style={{ fontSize: "0.72rem", color: "#16a34a", fontWeight: 600, marginBottom: 6 }}>Reply submitted</div>
-                <p className="drawer-comment" style={{ margin: 0, fontSize: "0.86rem", color: "#3d3530", lineHeight: 1.6 }}>{replyText}</p>
-                <button onClick={() => setSubmitted(false)} style={{
-                  marginTop: 10, background: "none", border: "none",
-                  color: "#16a34a", fontSize: "0.72rem", cursor: "pointer",
-                  padding: 0, textDecoration: "underline",
-                }}>Edit reply</button>
-              </div>
-            ) : (
-              <>
-                <textarea
-                  className="reply-textarea"
-                  value={replyText}
-                  onChange={e => setReplyText(e.target.value)}
-                  placeholder="Write a professional response to this review..."
-                  rows={4}
-                  style={{
-                    width: "100%", padding: "0.85rem",
-                    border: "1.5px solid #ede9e4", borderRadius: 10,
-                    fontSize: "0.85rem", fontFamily: "'Inter', sans-serif",
-                    resize: "vertical", color: "#2d2420",
-                    background: "#fdf8f4", lineHeight: 1.55,
-                    transition: "border-color 0.15s",
-                  }}
-                />
-                <button
-                  className="reply-btn"
-                  onClick={handleSubmit}
-                  disabled={submitting || !replyText.trim()}
-                  style={{
-                    marginTop: "0.65rem", width: "100%", padding: "0.75rem",
-                    background: replyText.trim() ? "#f97316" : "#ede9e4",
-                    color: replyText.trim() ? "#fff" : "#b0a89f",
-                    border: "none", borderRadius: 10,
-                    fontWeight: 600, fontSize: "0.88rem",
-                    cursor: replyText.trim() ? "pointer" : "not-allowed",
-                    transition: "all 0.15s", fontFamily: "'Inter', sans-serif",
-                  }}
-                >
-                  {submitting ? "Submitting..." : "Submit Reply"}
-                </button>
-              </>
-            )}
-          </div>
+        
         </div>
       </div>
     </>
@@ -362,6 +298,7 @@ function ReviewDrawer({ review, task, onClose, onReplySubmit }) {
 export default function Reviews() {
   const [reviews, setReviews]         = useState([]);
   const [taskDetails, setTaskDetails] = useState({});
+  const [userNames, setUserNames]     = useState({});   // ← NEW: user_id → display name
   const [loading, setLoading]         = useState(true);
   const [filter, setFilter]           = useState(0);
   const [search, setSearch]           = useState("");
@@ -378,14 +315,35 @@ export default function Reviews() {
       try {
         const data = await getReviewsById(workerId);
         setReviews([...data].reverse());
+
         const details = {};
+        const names   = {};
+
         for (const r of data) {
+          // Fetch task details
           if (r.taskId && !details[r.taskId]) {
             try { details[r.taskId] = await getTaskById(r.taskId); }
             catch { details[r.taskId] = null; }
           }
+
+          // Fetch user name by user_id
+          if (r.user_id && !names[r.user_id]) {
+            try {
+              const user = await fetchCustomerById(r.user_id);
+              // Adjust the field name below to match your User schema
+              // e.g. user.fullName, user.name, user.firstName + user.lastName
+              names[r.user_id] = user?.fullName || user?.name
+                || (user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : null)
+                || user?.email
+                || r.user_id;
+            } catch {
+              names[r.user_id] = r.user_id;
+            }
+          }
         }
+
         setTaskDetails(details);
+        setUserNames(names);
       } catch (err) {
         console.error("Error fetching reviews:", err);
       } finally {
@@ -405,29 +363,35 @@ export default function Reviews() {
   );
 
   const total     = reviews.length;
-  const avg       = total > 0 ? reviews.reduce((s, r) => s + (r.rating || 0), 0) / total : 0;
-  const fiveStars = reviews.filter(r => Math.round(r.rating) === 5).length;
-  const oneStars  = reviews.filter(r => Math.round(r.rating) === 1).length;
+  const avg       = total > 0 ? reviews.reduce((s, r) => s + (r.rating || r.stars || 0), 0) / total : 0;
+  const fiveStars = reviews.filter(r => Math.round(r.rating || r.stars) === 5).length;
+  const oneStars  = reviews.filter(r => Math.round(r.rating || r.stars) === 1).length;
 
   const displayed = reviews
-    .filter(r => filter === 0 || Math.round(r.rating) === filter)
-    .filter(r => !search ||
-      (r.customerId || "").toLowerCase().includes(search.toLowerCase()) ||
-      (r.comment    || "").toLowerCase().includes(search.toLowerCase())
-    );
+    .filter(r => filter === 0 || Math.round(r.rating || r.stars) === filter)
+    .filter(r => {
+      if (!search) return true;
+      const name = userNames[r.user_id] || "";
+      return (
+        name.toLowerCase().includes(search.toLowerCase()) ||
+        (r.text || r.comment || "").toLowerCase().includes(search.toLowerCase())
+      );
+    });
 
   const avatarColors = ["#f97316","#3b82f6","#22c55e","#a855f7","#ef4444","#0ea5e9","#eab308"];
   const getAvatarColor = (str = "") => avatarColors[str.charCodeAt(0) % avatarColors.length];
-  const getInitials    = (id  = "") => id.slice(0, 2).toUpperCase();
+  const getInitials    = (str = "") => str.slice(0, 2).toUpperCase();
 
   return (
     <>
       <FontLink />
       <BookingNavbar />
+
+              <ChatWidget/>
       <div style={{ display: "flex", minHeight: "100vh", background: "#F7F5EF", fontFamily: "'Inter', sans-serif" }}>
         <Sidebar workerId={workerId} />
 
-        <main className="tv-main" style={{ flex: 1, padding: "2rem 2.5rem", maxWidth: 1200, marginLeft:"320px", width: "100%" }}>
+        <main className="tv-main" style={{ flex: 1, padding: "2rem 2.5rem", maxWidth: 1200, marginLeft: "320px", width: "100%" }}>
 
           {/* Page Title */}
           <div style={{ marginBottom: "1.75rem", marginLeft: "5px" }}>
@@ -510,10 +474,10 @@ export default function Reviews() {
                 {reviews.length === 0 ? "No reviews yet." : "No reviews match this filter."}
               </div>
             ) : displayed.map((review, i) => {
-              const userId   = review.customerId || "Unknown";
-              const rating   = review.rating || 0;
-              const task     = taskDetails[review.taskId];
-              const hasReply = !!review.workerReply;
+              const displayName = userNames[review.user_id] || review.user_id || "Unknown";
+              const rating      = review.rating || review.stars || 0;
+              const task        = taskDetails[review.taskId];
+              const hasReply    = !!review.workerReply;
 
               return (
                 <div key={review._id || i} className="review-row review-grid"
@@ -523,18 +487,18 @@ export default function Reviews() {
                     transition: "background 0.1s",
                   }}
                 >
-                  {/* Reviewer */}
+                  {/* Reviewer — shows name instead of ID */}
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <div className="avatar-circle" style={{
                       width: 32, height: 32, borderRadius: "50%",
-                      background: getAvatarColor(userId), color: "#fff",
+                      background: getAvatarColor(displayName), color: "#fff",
                       display: "flex", alignItems: "center", justifyContent: "center",
                       fontSize: "0.68rem", fontWeight: 700, flexShrink: 0,
                     }}>
-                      {getInitials(userId)}
+                      {getInitials(displayName)}
                     </div>
                     <div>
-                      <div className="reviewer-name" style={{ fontSize: "0.83rem", color: "#2d2420", fontWeight: 500, marginBottom: 3 }}>{userId}</div>
+                      <div className="reviewer-name" style={{ fontSize: "0.83rem", color: "#2d2420", fontWeight: 500, marginBottom: 3 }}>{displayName}</div>
                       <Badge rating={rating} />
                     </div>
                   </div>
@@ -580,6 +544,7 @@ export default function Reviews() {
         <ReviewDrawer
           review={selected.review}
           task={selected.task}
+          userName={userNames[selected.review.user_id]}
           onClose={() => setSelected(null)}
           onReplySubmit={handleReplySubmit}
         />

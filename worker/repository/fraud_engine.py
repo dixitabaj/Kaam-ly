@@ -23,7 +23,7 @@ class FraudScorer:
     def __init__(self, db):
         self.db = db
 
-    async def score(self, user_id: str) -> FraudResult:  # ← now async
+    async def score(self, user_id: str) -> FraudResult:
         signals: List[FraudSignal] = []
 
         signals += await self._check_cancellations(user_id)
@@ -45,7 +45,6 @@ class FraudScorer:
             signals=signals,
         )
 
-        # ← await the Motor upsert so reports actually get saved
         await self.db.fraud_reports.update_one(
             {"user_id": user_id},
             {"$set": {
@@ -91,11 +90,9 @@ class FraudScorer:
     async def _check_review_spam(self, user_id: str) -> List[FraudSignal]:
         signals = []
         since = datetime.utcnow() - timedelta(hours=24)
-        
-        # Use your schema names
         count = await self.db.reviews.count_documents({
             "user_id": user_id,
-            "createdAt": {"$gte": since},   # was created_at
+            "createdAt": {"$gte": since},
         })
         if count >= 8:
             signals.append(FraudSignal("review_spam", 30, f"{count} reviews in 24 hours"))
@@ -111,20 +108,19 @@ class FraudScorer:
             since = datetime.utcnow() - timedelta(hours=window_hours)
             burst = await self.db.reviews.count_documents({
                 "target_user_id": user_id,
-                "stars": 5,                     # was rating
-                "createdAt": {"$gte": since},   # was created_at
+                "stars": 5,
+                "createdAt": {"$gte": since},
             })
             if burst >= threshold:
                 signals.append(FraudSignal("rating_spike_received", score,
                     f"{burst} five-star reviews received in {label}"))
                 break
 
-        # Reviews submitted
         since_24h = datetime.utcnow() - timedelta(hours=24)
         given = await self.db.reviews.count_documents({
             "user_id": user_id,
-            "stars": 5,                        # was rating
-            "createdAt": {"$gte": since_24h},  # was created_at
+            "stars": 5,
+            "createdAt": {"$gte": since_24h},
         })
         if given >= 10:
             signals.append(FraudSignal("rating_spike_given", 35,
@@ -133,8 +129,9 @@ class FraudScorer:
             signals.append(FraudSignal("rating_spike_given", 20,
                 f"{given} five-star reviews submitted in 24h"))
 
-        # Unverified reviews (if field exists in your DB, otherwise skip)
-        if "verified_purchase" in (await self.db.reviews.find_one({})):
+        # Only check verified_purchase if the field exists in the collection
+        sample = await self.db.reviews.find_one({})
+        if sample and "verified_purchase" in sample:
             unverified = await self.db.reviews.count_documents({
                 "user_id": user_id,
                 "verified_purchase": False,
@@ -148,10 +145,17 @@ class FraudScorer:
 
     async def _check_rapid_signups(self, user_id: str) -> List[FraudSignal]:
         signals = []
-        user = await self.db.users.find_one({"user_id": user_id})
+        # Check both customers and workers collections
+        user = await self.db.customers.find_one({"_id": user_id}) \
+            or await self.db.workers.find_one({"_id": user_id})
         if not user:
             return signals
-        account_age = datetime.utcnow() - user["created_at"]
+
+        created_at = user.get("createdAt") or user.get("created_at")
+        if not created_at:
+            return signals
+
+        account_age = datetime.utcnow() - created_at
         if account_age.total_seconds() < 7200:
             task_count = await self.db.tasks.count_documents({"user_id": user_id})
             if task_count >= 5:
@@ -171,7 +175,7 @@ class FraudScorer:
         recent_ips = [
             entry["ip"]
             for entry in record.get("ip_log", [])
-            if entry["at"] >= since
+            if entry.get("at") and entry["at"] >= since
         ]
         unique_recent = len(set(recent_ips))
         if unique_recent >= 5:
@@ -195,17 +199,24 @@ class FraudScorer:
 
         return signals
 
-
     async def _check_fraud_ring(self, user_id: str) -> List[FraudSignal]:
         signals = []
 
-        user = await self.db.users.find_one({"user_id": user_id}, {"device_id": 1})
+        # Check customers and workers for device_id
+        user = await self.db.customers.find_one({"_id": user_id}, {"device_id": 1}) \
+            or await self.db.workers.find_one({"_id": user_id}, {"device_id": 1})
+
         device_id = user.get("device_id") if user else None
         if device_id:
-            same_device = await self.db.users.count_documents({
+            same_device_customers = await self.db.customers.count_documents({
                 "device_id": device_id,
-                "user_id": {"$ne": user_id},
+                "_id": {"$ne": user_id},
             })
+            same_device_workers = await self.db.workers.count_documents({
+                "device_id": device_id,
+                "_id": {"$ne": user_id},
+            })
+            same_device = same_device_customers + same_device_workers
             if same_device >= 3:
                 signals.append(FraudSignal("shared_device", 40,
                     f"Device fingerprint shared with {same_device} other accounts"))
@@ -225,19 +236,27 @@ class FraudScorer:
                 signals.append(FraudSignal("review_ring", 45,
                     f"{mutual_reviewers} accounts have mutually reviewed each other"))
 
-        user_record = await self.db.users.find_one({"user_id": user_id}, {"created_at": 1})
+        user_record = await self.db.customers.find_one({"_id": user_id}, {"createdAt": 1}) \
+            or await self.db.workers.find_one({"_id": user_id}, {"createdAt": 1})
         ip_record = await self.db.user_ips.find_one({"user_id": user_id}, {"last_ip": 1})
+
         if user_record and ip_record:
             signup_ip = ip_record.get("last_ip")
-            created_at = user_record.get("created_at")
+            created_at = user_record.get("createdAt") or user_record.get("created_at")
             if signup_ip and created_at:
                 window_start = created_at - timedelta(minutes=30)
                 window_end = created_at + timedelta(minutes=30)
-                nearby_signups = await self.db.users.count_documents({
+                nearby_customers = await self.db.customers.count_documents({
                     "signup_ip": signup_ip,
-                    "user_id": {"$ne": user_id},
-                    "created_at": {"$gte": window_start, "$lte": window_end},
+                    "_id": {"$ne": user_id},
+                    "createdAt": {"$gte": window_start, "$lte": window_end},
                 })
+                nearby_workers = await self.db.workers.count_documents({
+                    "signup_ip": signup_ip,
+                    "_id": {"$ne": user_id},
+                    "createdAt": {"$gte": window_start, "$lte": window_end},
+                })
+                nearby_signups = nearby_customers + nearby_workers
                 if nearby_signups >= 3:
                     signals.append(FraudSignal("coordinated_signup", 35,
                         f"{nearby_signups} accounts created from same IP within 30 min"))
@@ -247,11 +266,9 @@ class FraudScorer:
     async def _check_refund_abuse(self, user_id: str) -> List[FraudSignal]:
         signals = []
 
-        # Last 90 days
         since_90d = datetime.utcnow() - timedelta(days=90)
         since_7d = datetime.utcnow() - timedelta(days=7)
 
-        # 1️⃣ High refund rate based on reports/refunds
         total_refunds_90d = await self.db.refunds.count_documents({
             "requester_id": user_id,
             "created_at": {"$gte": since_90d},
@@ -277,7 +294,6 @@ class FraudScorer:
                     f"{refund_rate:.0%} refund rate over 90 days ({total_refunds_90d}/{total_actions_90d})"
                 ))
 
-        # 2️⃣ Refund velocity in last 7 days
         recent_refunds = await self.db.refunds.count_documents({
             "requester_id": user_id,
             "created_at": {"$gte": since_7d},
@@ -288,7 +304,6 @@ class FraudScorer:
                 f"{recent_refunds} refunds in the last 7 days"
             ))
 
-        # 3️⃣ Repeat refunds for same task/item
         pipeline = [
             {"$match": {
                 "requester_id": user_id,

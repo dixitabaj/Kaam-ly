@@ -23,8 +23,8 @@ const LOCAL_RESPONSES = {
   __contact_support__: {
     text: "Need help? Reach our support team directly and we'll get back to you as soon as possible.",
     buttons: [
-      { label: "📧 Email us", href: "mailto:support@kaam-ly.com" },
-      { label: "📞 Call us",  href: "tel:+977-XXXXXXXX" },
+      { label: "📧 Email us", href: "mailto:kaamly7@gmail.com" },
+      { label: "📞 Call us",  href: "tel:+977-9742893770" },
     ],
   },
 };

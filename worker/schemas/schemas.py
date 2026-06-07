@@ -24,18 +24,6 @@ class SkillSchema(BaseModel):
     subSkills: Optional[List[SubSkillSchema]] = None
     price:     Optional[float]                = None   # legacy flat format
 
-class WorkerProfileUpdateSchema(BaseModel):
-    firstName:   Optional[str]              = None
-    lastName:    Optional[str]              = None
-    address:     Optional[str]              = None
-    description: Optional[str]             = None
-    basePrice:   Optional[float]           = None
-    serviceAreas:Optional[List[str]]       = None
-    minHours:    Optional[int]             = None
-    skills:      Optional[List[Any]]       = None   # accepts both formats
-    profilePhoto:Optional[str]             = None
-    taskType:    Optional[str]             = None
-
 
 class Availability(BaseModel):
     monday: Dict[str, bool]
@@ -63,6 +51,18 @@ class Skill(BaseModel):
     name: str
     price: Optional[float] = 0
     subSkills: List[SubSkill] = []
+from pydantic import BaseModel
+from typing import List, Optional
+
+class CoordinatesSchema(BaseModel):
+    lat: float
+    lng: float
+
+class ServiceAreaSchema(BaseModel):
+    primaryCity: str
+    coordinates: CoordinatesSchema
+    cities: List[str]
+
 
 class WorkerCreateSchema(BaseModel):
     firstName:      str
@@ -70,15 +70,17 @@ class WorkerCreateSchema(BaseModel):
     phoneNo:        str
     email:          str
     password:       str
-    taskType:       str
+    taskType:        Union[List[str], str]
     skills:         List[Skill]
     minHours:       Optional[int]                        = 1
     isAvailable:    Optional[bool]                       = True
     profilePhoto:   Optional[str]                        = ""
     description:    Optional[str]                        = ""
-    serviceAreas:   List[str]                            = []
+    serviceArea: Optional[ServiceAreaSchema] = None 
     face_verified:  Optional[bool]                       = False
     skill_verified: Optional[Union[bool, str]]           = False
+    paymentMethod: Optional[Union[str, Literal["eSewa", "Khalti"]]] = None
+    paymentId: Optional[str] = None
     role:           Optional[Literal["worker", "admin"]] = "worker"
     hours:          Optional[Dict[str, List[SlotSchema]]] = Field(
         default_factory=lambda: {
@@ -142,6 +144,26 @@ class TaskResponse(BaseModel):
     createdAt: float
     status: str
 
+class CoordinatesSchema(BaseModel):
+    lat: float
+    lng: float
+
+class ServiceAreaSchema(BaseModel):
+    primaryCity: str
+    coordinates: CoordinatesSchema
+    cities: List[str]
+
+class WorkerProfileUpdateSchema(BaseModel):
+    firstName: Optional[str] = None
+    lastName: Optional[str] = None
+    address: Optional[str] = None
+    description: Optional[str] = None
+    basePrice: Optional[float] = None
+    serviceArea: Optional[ServiceAreaSchema] = None
+    minHours: Optional[int] = None
+    skills: Optional[List[dict]] = None
+    profilePhoto: Optional[str] = None
+    taskType: Optional[str] = None
 class DuplicateCheck(BaseModel):
     emailExists: bool
     phoneExists: Optional[bool] = None

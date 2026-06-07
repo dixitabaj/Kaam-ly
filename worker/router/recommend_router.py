@@ -30,6 +30,7 @@ TASK_CATEGORIES = [
 ]
 
 CATEGORY_ALIAS = {
+    # existing
     "plumbing":         "Plumbing",
     "moving":           "Moving",
     "cleaning":         "Cleaning",
@@ -40,6 +41,18 @@ CATEGORY_ALIAS = {
     "electrical":       "Electrical",
     "hvac":             "HVAC",
     "assembly":         "Assembly",
+
+    # ── add these for model's general- labels ──
+    "general-plumbing":         "Plumbing",
+    "general-moving":           "Moving",
+    "general-cleaning":         "Cleaning",
+    "general-gardening":        "Gardening",
+    "general-painting":         "Painting",
+    "general-carpentry":        "Carpentry",
+    "general-appliance repair": "Appliance Repair",
+    "general-electrical":       "Electrical",
+    "general-hvac":             "HVAC",
+    "general-assembly":         "Assembly",
 }
 
 # ── Subcategory definitions ───────────────────────────────────────────────────

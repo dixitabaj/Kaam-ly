@@ -317,10 +317,13 @@ const styles = {
     overflow: 'hidden',
     border: '2px solid #e5e7eb',
     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+    zIndex: '0'
+
   },
   map: {
     width: '100%',
     height: '100%',
+    zIndex: '0'
   },
   instructions: {
     marginTop: '16px',

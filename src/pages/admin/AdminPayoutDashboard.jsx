@@ -89,7 +89,6 @@ const StatCard = ({ label, value, sub, accent }) => (
   <div style={{
     background: C.surface, borderRadius: 16, padding: "20px 24px",
     border: `1px solid ${C.border}`, flex: 1, minWidth: 150,
-    borderLeft: accent ? `4px solid ${accent}` : `1px solid ${C.border}`,
   }}>
     <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
       {label}
@@ -200,6 +199,7 @@ export default function AdminPayoutDashboard() {
       setProcessing(false);
     }
   };
+  console.log("Pending payouts:", pending);
 
   // ── Mark single refund as processed ────────────────────────────────────────
   const markRefundProcessed = async (refundId) => {
@@ -223,15 +223,15 @@ export default function AdminPayoutDashboard() {
 
   // ── Derived stats ───────────────────────────────────────────────────────────
   const totalPending       = pending.reduce((s, p) => s + (p.worker_payout || 0), 0);
-  const totalPaid          = history.reduce((s, h) => s + (h.worker_payout || 0), 0);
-  const missingEsewa       = pending.filter(p => !p.worker_esewa).length;
+  const totalPaid = history.reduce((s, h) => s + (h.amount || 0), 0);
+  const missingEsewa       = pending.filter(p => !p.worker_payment_id).length;
   const pendingRefunds     = refunds.filter(r => r.refund_status === "pending");
   const pendingRefundTotal = pendingRefunds.reduce((s, r) => s + (r.refund_amount || 0), 0);
-
+  
   const TABS = [
     { id: "pending", label: "Pending Payouts", count: pending.length },
     { id: "history", label: "Payout History",  count: history.length },
-    { id: "refunds", label: "Refunds",          count: pendingRefunds.length, dot: pendingRefunds.length > 0 },
+    
   ];
 
   return (
@@ -244,10 +244,9 @@ export default function AdminPayoutDashboard() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28, flexWrap: "wrap", gap: 16 }}>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                <div style={{ width: 36, height: 36, background: C.amberLight, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>💰</div>
-                <h1 style={{ fontSize: 24, fontWeight: 800, color: C.amber, margin: 0 }}>Finance Dashboard</h1>
+                 <h1 style={{ fontSize: 24, fontWeight: 800, color: C.amber, margin: 0 }}>Finance Dashboard</h1>
               </div>
-              <p style={{ color: C.muted, margin: 0, fontSize: 13, paddingLeft: 46 }}>Manage worker payouts & customer refunds</p>
+              <p style={{ color: C.muted, margin: 0, fontSize: 13 }}>Manage worker payouts & customer refunds</p>
             </div>
 
             {tab === "pending" && (
@@ -281,24 +280,12 @@ export default function AdminPayoutDashboard() {
           {/* ── Banners ── */}
           {missingEsewa > 0 && (
             <Banner type="warn">
-              ⚠️ <span>
+              ⚠️<span>
                 <strong>{missingEsewa} worker{missingEsewa > 1 ? "s" : ""}</strong> have no eSewa/Khalti ID and will be skipped during bulk payout.
               </span>
             </Banner>
           )}
-          {pendingRefunds.length > 0 && tab !== "refunds" && (
-            <Banner type="info">
-              🔔 <span>
-                <strong>{pendingRefunds.length} refund{pendingRefunds.length > 1 ? "s" : ""}</strong> need attention —{" "}
-                <button
-                  onClick={() => setTab("refunds")}
-                  style={{ background: "none", border: "none", color: C.amber, fontWeight: 700, cursor: "pointer", fontSize: 13, padding: 0, textDecoration: "underline" }}
-                >
-                  view refunds →
-                </button>
-              </span>
-            </Banner>
-          )}
+         
           {result && (
             <Banner type="success">
               <div>
@@ -370,7 +357,7 @@ export default function AdminPayoutDashboard() {
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr>
-                      {["Task", "Worker", "eSewa / Khalti ID", "Payout (NPR)", "Platform Fee", "Released At", "Status"].map(h => (
+                      {["Task", "Worker", "Payment Method", "eSewa / Khalti ID", "Payout (NPR)", "Platform Fee", "Released At", "Status"].map(h => (
                         <th key={h} style={th}>{h}</th>
                       ))}
                     </tr>
@@ -391,8 +378,13 @@ export default function AdminPayoutDashboard() {
                           <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{p.worker_email}</div>
                         </td>
                         <td style={td}>
-                          {p.worker_esewa
-                            ? <span style={{ fontFamily: "monospace", fontSize: 12 }}>{p.worker_esewa}</span>
+                          {p.worker_payment_method
+                            ? <span style={{ fontFamily: "monospace", fontSize: 12 }}>{p.worker_payment_method}</span>
+                            : <span style={{ color: C.red, fontSize: 11, fontWeight: 700 }}>Not set</span>}
+                        </td>
+                        <td style={td}>
+                          {p.worker_payment_id
+                            ? <span style={{ fontFamily: "monospace", fontSize: 12 }}>{p.worker_payment_id}</span>
                             : <span style={{ color: C.red, fontSize: 11, fontWeight: 700 }}>Not set</span>}
                         </td>
                         <td style={{ ...td, fontWeight: 800, color: C.text, fontSize: 15 }}>
@@ -400,7 +392,7 @@ export default function AdminPayoutDashboard() {
                         </td>
                         <td style={{ ...td, color: C.muted }}>NPR {Number(p.platform_fee).toFixed(2)}</td>
                         <td style={{ ...td, color: C.muted, fontSize: 12 }}>{fmt(p.released_at)}</td>
-                        <td style={td}><Pill status={p.worker_esewa ? "pending" : "skipped"} /></td>
+                       <td style={td}><Pill status={p.worker_payment_id ? "pending" : "skipped"} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -408,67 +400,75 @@ export default function AdminPayoutDashboard() {
               )}
 
               {/* ══ PAYOUT HISTORY ══ */}
-              {tab === "history" && (
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr>
-                      {[
-                        "Task",
-                        "Worker",
-                        "Customer Paid Via",  // how customer paid the platform
-                        "Worker Paid Via",    // how platform paid the worker
-                        "Payout (NPR)",
-                        "Platform Fee",
-                        "Transaction",
-                        "Paid At",
-                        "Status",
-                      ].map(h => <th key={h} style={th}>{h}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {history.length === 0 ? (
-                      <EmptyRow cols={9} msg="No payout history yet" />
-                    ) : history.map(h => (
-                      <tr
-                        key={h.task_id}
-                        style={{ borderBottom: `1px solid ${C.border}` }}
-                        onMouseEnter={e => e.currentTarget.style.background = C.grayLight}
-                        onMouseLeave={e => e.currentTarget.style.background = C.surface}
-                      >
-                        <td style={{ ...td, fontWeight: 700, color: C.text }}>{h.task_name}</td>
-                        <td style={td}>
-                          <div style={{ fontWeight: 700, color: C.text }}>{h.worker_name}</div>
-                          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{h.worker_email}</div>
-                        </td>
+              {/* ══ PAYOUT HISTORY ══ */}
+{tab === "history" && (
+  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+    <thead>
+      <tr>
+        {[
+          "Task",
+          "Worker",
+          "Worker Paid Via",
+          "Payout (NPR)",
+          "Platform Fee",
+          "Transaction",
+          "Paid At",
+          "Status",
+        ].map(h => <th key={h} style={th}>{h}</th>)}
+      </tr>
+    </thead>
+    <tbody>
+      {history.length === 0 ? (
+        <EmptyRow cols={9} msg="No payout history yet" />
+      ) : history.map(h => (
+        <tr
+          key={h.payment_id || h.task_id}
+          style={{ borderBottom: `1px solid ${C.border}` }}
+          onMouseEnter={e => e.currentTarget.style.background = C.grayLight}
+          onMouseLeave={e => e.currentTarget.style.background = C.surface}
+        >
+          <td style={{ ...td, fontWeight: 700, color: C.text }}>{h.task_name}</td>
+          <td style={td}>
+            <div style={{ fontWeight: 700, color: C.text }}>{h.worker_name}</div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{h.worker_email}</div>
+          </td>
 
-                        {/* Customer → Platform: payment_method (khalti/esewa) */}
-                        <td style={td}>
-                          <MethodBadge method={h.payment_method} />
-                        </td>
+         
 
-                        {/* Platform → Worker: payout_method (may differ from above) */}
-                        <td style={td}>
-                          {h.payout_method
-                            ? <MethodBadge method={h.payout_method} />
-                            : <span style={{ color: C.muted, fontSize: 12 }}>Pending</span>}
-                        </td>
+          {/* Platform → Worker: Use the 'method' field from API */}
+          <td style={td}>
+            {h.method ? <MethodBadge method={h.method} /> : <span style={{ color: C.muted, fontSize: 12 }}>—</span>}
+           </td>
 
-                        <td style={{ ...td, fontWeight: 800, color: C.text, fontSize: 15 }}>
-                          NPR {Number(h.worker_payout).toFixed(2)}
-                        </td>
-                        <td style={{ ...td, color: C.muted }}>
-                          NPR {Number(h.platform_fee).toFixed(2)}
-                        </td>
-                        <td style={{ ...td, fontSize: 11, color: C.muted, fontFamily: "monospace" }}>
-                          {h.transaction_uuid ? h.transaction_uuid.slice(0, 12) + "…" : "—"}
-                        </td>
-                        <td style={{ ...td, color: C.muted, fontSize: 12 }}>{fmt(h.payout_at)}</td>
-                        <td style={td}><Pill status={h.payout_status || "pending"} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+          {/* Amount - using 'amount' field from API (not worker_payout) */}
+          <td style={{ ...td, fontWeight: 800, color: C.text, fontSize: 15 }}>
+            NPR {Number(h.amount || 0).toFixed(2)}
+           </td>
+
+          {/* Platform Fee */}
+          <td style={{ ...td, color: C.muted }}>
+            NPR {h.platform_fee ? Number(h.platform_fee).toFixed(2) : "0.00"}
+           </td>
+
+          {/* Transaction UUID */}
+          <td style={{ ...td, fontSize: 11, color: C.muted, fontFamily: "monospace" }}>
+            {h.transaction_uuid ? h.transaction_uuid.slice(0, 12) + "…" : "—"}
+           </td>
+
+          {/* Paid At - using 'paid_at' field */}
+          <td style={{ ...td, color: C.muted, fontSize: 12 }}>
+            {h.paid_at && h.paid_at !== "" ? fmt(h.paid_at) : "—"}
+           </td>
+
+          {/* Status - using 'status' field */}
+          <td style={td}>
+            <Pill status={h.status || "pending"} />
+           </td>
+         </tr>
+      ))}
+    </tbody>
+  </table>
+)}
 
               {/* ══ REFUNDS ══ */}
               {tab === "refunds" && (
@@ -561,37 +561,10 @@ export default function AdminPayoutDashboard() {
             </div>
           )}
 
-          {/* ── Refund legend ── */}
-          {tab === "refunds" && refunds.length > 0 && (
-            <div style={{
-              marginTop: 14, padding: "12px 16px",
-              background: C.amberLight, borderRadius: 10, border: `1px solid ${C.amberBorder}`,
-              fontSize: 12, color: "#92400e", display: "flex", gap: 24, flexWrap: "wrap",
-            }}>
-              <span>📋 <strong>How it works:</strong></span>
-              <span>• Cancelled &lt;3hrs before task → customer gets <strong>75% refund</strong>, worker keeps <strong>25% penalty</strong></span>
-              <span>• Cancelled ≥3hrs before task → customer gets <strong>full refund</strong></span>
-              <span>• Click <strong>"Mark Refunded"</strong> after processing — customer will be notified automatically</span>
-            </div>
-          )}
+         
+       
 
-          {/* ── Payment method legend (history tab only) ── */}
-          {tab === "history" && history.length > 0 && (
-            <div style={{
-              marginTop: 14, padding: "12px 16px",
-              background: C.grayLight, borderRadius: 10, border: `1px solid ${C.border}`,
-              fontSize: 12, color: C.muted, display: "flex", gap: 20, flexWrap: "wrap", alignItems: "center",
-            }}>
-              <span style={{ fontWeight: 700, color: C.text }}>Legend:</span>
-              <span><MethodBadge method="khalti" /> Khalti</span>
-              <span><MethodBadge method="esewa"  /> eSewa</span>
-              <span><MethodBadge method="manual" /> Manual transfer</span>
-              <span style={{ borderLeft: `1px solid ${C.border}`, paddingLeft: 20 }}>
-                <strong style={{ color: C.text }}>Customer Paid Via</strong> = how the customer paid the platform &nbsp;·&nbsp;
-                <strong style={{ color: C.text }}>Worker Paid Via</strong> = how the platform paid the worker
-              </span>
-            </div>
-          )}
+         
 
         </div>
       </div>

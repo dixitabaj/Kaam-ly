@@ -86,9 +86,28 @@ const ConfirmDialog = ({ message, onConfirm, onCancel, danger = false }) => (
 );
 
 const StatCard = ({ label, value, color, bgColor }) => (
-  <div style={{ background: bgColor, borderRadius: "16px", padding: "20px", border: `1px solid ${color}20` }}>
-    <div style={{ fontSize: "13px", color, fontWeight: "500", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
-    <div style={{ fontSize: "32px", fontWeight: "600", color, lineHeight: 1 }}>{value}</div>
+  <div style={{ 
+    background: "white", 
+    borderRadius: "16px", 
+    padding: "20px", 
+    border: "1px solid #fed7aa",
+    borderLeft: "4px solid rgb(215, 125, 67)",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.06)"
+  }}>
+    <div style={{ 
+      fontSize: "12px", 
+      color: "#9ca3af", 
+      fontWeight: "600", 
+      marginBottom: "8px", 
+      textTransform: "uppercase", 
+      letterSpacing: "0.5px" 
+    }}>{label}</div>
+    <div style={{ 
+      fontSize: "32px", 
+      fontWeight: "600", 
+      color: "#111827", 
+      lineHeight: 1 
+    }}>{value}</div>
   </div>
 );
 
@@ -106,7 +125,6 @@ const ContextMenu = ({ onAction, onClose }) => {
         { label: "View Details",   icon: Eye,       action: "view",     color: "#3b82f6" },
         { label: "Activate",       icon: UserCheck,  action: "activate", color: "#059669" },
         { label: "Suspend",        icon: UserX,      action: "suspend",  color: "#dc2626" },
-        { label: "Reset Password", icon: KeyRound,   action: "reset",    color: "#d97706" },
         { label: "Delete",         icon: Trash2,     action: "delete",   color: "#dc2626" },
       ].map(({ label, icon: Icon, action, color }) => (
         <button key={action} onClick={() => { onAction(action); onClose(); }} style={{ width: "100%", padding: "12px 16px", border: "none", background: "white", cursor: "pointer", display: "flex", alignItems: "center", gap: "12px", fontSize: "13px", fontWeight: "500", color, textAlign: "left", borderBottom: "1px solid #f3f4f6" }}
@@ -141,7 +159,6 @@ const UserDetailModal = ({ user, onClose, onDelete, onStatusUpdate, onResetPassw
       delete:   `Delete ${fullName}? This cannot be undone.`,
       suspend:  `Suspend ${fullName}? They won't be able to access their account.`,
       activate: `Activate ${fullName}?`,
-      reset:    `Reset password for ${fullName}?`,
     };
     setConfirm({ type, message: msgs[type] });
   };
@@ -247,7 +264,7 @@ const UserDetailModal = ({ user, onClose, onDelete, onStatusUpdate, onResetPassw
                     {user.status === "active"
                       ? <button onClick={() => handleAction("suspend")}  style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid #e5e7eb", background: "white", color: "#374151", fontWeight: "500", fontSize: "13px", cursor: "pointer", transition: "background 0.15s" }} onMouseEnter={e => e.currentTarget.style.background="#f9fafb"} onMouseLeave={e => e.currentTarget.style.background="white"}>Suspend</button>
                       : <button onClick={() => handleAction("activate")} style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid #e5e7eb", background: "white", color: "#374151", fontWeight: "500", fontSize: "13px", cursor: "pointer", transition: "background 0.15s" }} onMouseEnter={e => e.currentTarget.style.background="#f9fafb"} onMouseLeave={e => e.currentTarget.style.background="white"}>Activate</button>}
-                    <button onClick={() => handleAction("reset")}  style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid #e5e7eb", background: "white", color: "#374151", fontWeight: "500", fontSize: "13px", cursor: "pointer", transition: "background 0.15s" }} onMouseEnter={e => e.currentTarget.style.background="#f9fafb"} onMouseLeave={e => e.currentTarget.style.background="white"}>Reset Password</button>
+  
                     <button onClick={() => handleAction("delete")} style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid #fecaca", background: "white", color: "#dc2626", fontWeight: "500", fontSize: "13px", cursor: "pointer", transition: "background 0.15s" }} onMouseEnter={e => e.currentTarget.style.background="#fff5f5"} onMouseLeave={e => e.currentTarget.style.background="white"}>Delete</button>
                   </div>
                 </div>
@@ -275,7 +292,9 @@ const UserDetailModal = ({ user, onClose, onDelete, onStatusUpdate, onResetPassw
                         <span style={{ padding: "2px 10px", borderRadius: "100px", fontSize: "12px", fontWeight: "500", background: r.status === "resolved" ? O[100] : r.status === "pending" ? O[50] : "#fee2e2", color: r.status === "resolved" ? O[700] : r.status === "pending" ? O[600] : "#b91c1c" }}>{r.status ?? "pending"}</span>
                       </div>
                       <p style={{ margin: "0 0 8px", fontSize: "13px", color: "#4b5563", lineHeight: "1.5" }}>{r.description ?? r.message ?? "No description"}</p>
-                      <span style={{ fontSize: "11px", color: "#9ca3af" }}>{r.date ?? r.createdAt ?? ""}</span>
+<span style={{ fontSize: "11px", color: "#9ca3af" }}>
+  {r.date || r.createdAt ? new Date(r.date ?? r.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
+</span>
                     </div>
                   ))}
                 </div>
@@ -300,7 +319,7 @@ const UserRow = ({ user, onSelect, onStatusUpdate, onDelete, onResetPassword, on
     const msgs = {
       activate: `Activate ${fullName}?`,
       suspend:  `Suspend ${fullName}? They won't be able to log in.`,
-      reset:    `Reset password for ${fullName}?`,
+
       delete:   `Permanently delete ${fullName}? This cannot be undone.`,
     };
     onConfirmRequest({ type: action, message: msgs[action], userId: user.id });
@@ -433,7 +452,12 @@ export default function CustomerManagement() {
       <div style={{ marginBottom: "28px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
           <div>
-            <h1 style={{ margin: "0 0 8px", fontSize: "28px", fontWeight: "600", color: "#111827" }}>Customer Management</h1>
+            <h1 style={{ 
+  margin: "0 0 8px", 
+  fontSize: "28px", 
+  fontWeight: "600", 
+  color: "rgb(215, 125, 67)"
+}}>Customer Management</h1>
             <p style={{ margin: 0, fontSize: "14px", color: "#6b7280" }}>Manage and monitor all customer accounts</p>
           </div>
           <button onClick={() => setShowF(v => !v)} style={{ padding: "10px 20px", borderRadius: "12px", border: "1px solid #e5e7eb", background: "white", cursor: "pointer", fontSize: "14px", fontWeight: "500", color: "#374151", display: "flex", alignItems: "center", gap: "8px" }}
@@ -445,11 +469,10 @@ export default function CustomerManagement() {
           </button>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", marginBottom: "24px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "24px" }}>
           <StatCard label="Total Users" value={stats.total}     color="#080808" bgColor="#ffffff" />
           <StatCard label="Active"      value={stats.active}    color="#080808" bgColor="#ffffff" />
           <StatCard label="Suspended"   value={stats.suspended} color="#080808" bgColor="#ffffff" />
-          <StatCard label="Pending"     value={stats.pending}   color="#080808" bgColor="#ffffff" />
         </div>
 
         <div style={{ background: "white", borderRadius: "16px", border: "1px solid #e5e7eb", padding: "16px" }}>

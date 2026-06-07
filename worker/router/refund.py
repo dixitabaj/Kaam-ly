@@ -238,194 +238,194 @@ async def list_in_progress_refunds():
 # ─────────────────────────────────────────────────────────────
 # PATCH /api/update-status/{refund_id}
 # ─────────────────────────────────────────────────────────────
-@router.patch("/update-status/{refund_id}")
-async def update_refund_status(
-    refund_id:       str,
-    status:          str           = Form(...),
-    amount_customer: float | None  = Form(None),
-    amount_worker:   float | None  = Form(None),
-    admin_note:      str           = Form(""),
-    sandbox:         bool          = Form(True),
-):
-    """
-    Admin sets status + amounts.
+# @router.patch("/update-status/{refund_id}")
+# async def update_refund_status(
+#     refund_id:       str,
+#     status:          str           = Form(...),
+#     amount_customer: float | None  = Form(None),
+#     amount_worker:   float | None  = Form(None),
+#     admin_note:      str           = Form(""),
+#     sandbox:         bool          = Form(True),
+# ):
+#     """
+#     Admin sets status + amounts.
 
-    Lifecycle:
-      pending → (admin reviews & sets amounts) → refund_in_progress
-      refund_in_progress → (eSewa succeeds) → refunded
-      refund_in_progress → (eSewa fails)    → refund_in_progress (stays, retry via pay-all)
-      pending → (admin declines)            → declined
+#     Lifecycle:
+#       pending → (admin reviews & sets amounts) → refund_in_progress
+#       refund_in_progress → (eSewa succeeds) → refunded
+#       refund_in_progress → (eSewa fails)    → refund_in_progress (stays, retry via pay-all)
+#       pending → (admin declines)            → declined
 
-    - "approved"  → sets refundStatus to "refund_in_progress", then attempts eSewa.
-                    If eSewa succeeds → status "refunded", refundStatus "refunded"
-                    If eSewa fails    → status "refund_failed", refundStatus "refund_in_progress"
-                    With sandbox=True: Mocks eSewa response, always marks as refunded
-    - "declined"  → sets status to "declined". No eSewa.
-    """
-    if status not in ("approved", "declined"):
-        raise HTTPException(status_code=400, detail="Invalid status. Use 'approved' or 'declined'.")
+#     - "approved"  → sets refundStatus to "refund_in_progress", then attempts eSewa.
+#                     If eSewa succeeds → status "refunded", refundStatus "refunded"
+#                     If eSewa fails    → status "refund_failed", refundStatus "refund_in_progress"
+#                     With sandbox=True: Mocks eSewa response, always marks as refunded
+#     - "declined"  → sets status to "declined". No eSewa.
+#     """
+#     if status not in ("approved", "declined"):
+#         raise HTTPException(status_code=400, detail="Invalid status. Use 'approved' or 'declined'.")
 
-    try:
-        obj_id = ObjectId(refund_id)
-    except bson_errors.InvalidId:
-        raise HTTPException(status_code=400, detail="Invalid refund ID")
+#     try:
+#         obj_id = ObjectId(refund_id)
+#     except bson_errors.InvalidId:
+#         raise HTTPException(status_code=400, detail="Invalid refund ID")
 
-    refund = database.refund_collection.find_one({"_id": obj_id})
-    if not refund:
-        raise HTTPException(status_code=404, detail="Refund not found")
+#     refund = database.refund_collection.find_one({"_id": obj_id})
+#     if not refund:
+#         raise HTTPException(status_code=404, detail="Refund not found")
 
-    if status == "approved" and amount_customer is None:
-        raise HTTPException(status_code=400, detail="Customer refund amount is required for approval.")
+#     if status == "approved" and amount_customer is None:
+#         raise HTTPException(status_code=400, detail="Customer refund amount is required for approval.")
 
-    task_id = refund.get("task_id")
-    esewa_refund_result = None
+#     task_id = refund.get("task_id")
+#     esewa_refund_result = None
 
-    if status == "approved":
-        if not task_id:
-            raise HTTPException(status_code=400, detail="No task associated with this refund.")
+#     if status == "approved":
+#         if not task_id:
+#             raise HTTPException(status_code=400, detail="No task associated with this refund.")
 
-        try:
-            task = database.collection_task.find_one({"_id": ObjectId(task_id)})
-        except bson_errors.InvalidId:
-            raise HTTPException(status_code=400, detail="Invalid task ID on refund.")
+#         try:
+#             task = database.collection_task.find_one({"_id": ObjectId(task_id)})
+#         except bson_errors.InvalidId:
+#             raise HTTPException(status_code=400, detail="Invalid task ID on refund.")
 
-        total_paid = float(task.get("totalCost") or task.get("basePrice") or 0)
-        if amount_customer > total_paid:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Refund amount ({amount_customer}) exceeds what the customer paid ({total_paid})."
-            )
+#         total_paid = float(task.get("totalCost") or task.get("basePrice") or 0)
+#         if amount_customer > total_paid:
+#             raise HTTPException(
+#                 status_code=400,
+#                 detail=f"Refund amount ({amount_customer}) exceeds what the customer paid ({total_paid})."
+#             )
 
-        customer_esewa_id = None
-        customer_id = refund.get("requester_id")
+#         customer_esewa_id = None
+#         customer_id = refund.get("requester_id")
 
-        if customer_id:
-            try:
-                from ..config import database as db
-                customer = db.collection.find_one({"_id": ObjectId(customer_id)})
-                if customer:
-                    customer_esewa_id = customer.get("phoneNo") or customer.get("esewaId") or customer.get("phone")
-            except Exception as e:
-                print(f"[REFUND] Customer lookup failed: {e}")
+#         if customer_id:
+#             try:
+#                 from ..config import database as db
+#                 customer = db.collection.find_one({"_id": ObjectId(customer_id)})
+#                 if customer:
+#                     customer_esewa_id = customer.get("phoneNo") or customer.get("esewaId") or customer.get("phone")
+#             except Exception as e:
+#                 print(f"[REFUND] Customer lookup failed: {e}")
 
-        transaction_uuid = str(uuid.uuid4())
+#         transaction_uuid = str(uuid.uuid4())
 
-        # Mark as refund_in_progress immediately on approval
-        database.refund_collection.update_one(
-            {"_id": obj_id},
-            {"$set": {"refundStatus": "refund_in_progress"}}
-        )
+#         # Mark as refund_in_progress immediately on approval
+#         database.refund_collection.update_one(
+#             {"_id": obj_id},
+#             {"$set": {"refundStatus": "refund_in_progress"}}
+#         )
 
-        if sandbox:
-            esewa_refund_result = {
-                "status":           "mock_success",
-                "transaction_uuid": transaction_uuid,
-                "esewa_id":         customer_esewa_id,
-                "note":             "MOCK refund - sandbox mode (no actual money transferred)",
-                "timestamp":        datetime.utcnow().isoformat(),
-            }
-            refund_success = True
-        else:
-            if customer_esewa_id:
-                try:
-                    esewa_ref_id = refund.get("esewa_ref_id") or task.get("esewa_ref_id")
+#         if sandbox:
+#             esewa_refund_result = {
+#                 "status":           "mock_success",
+#                 "transaction_uuid": transaction_uuid,
+#                 "esewa_id":         customer_esewa_id,
+#                 "note":             "MOCK refund - sandbox mode (no actual money transferred)",
+#                 "timestamp":        datetime.utcnow().isoformat(),
+#             }
+#             refund_success = True
+#         else:
+#             if customer_esewa_id:
+#                 try:
+#                     esewa_ref_id = refund.get("esewa_ref_id") or task.get("esewa_ref_id")
 
-                    if esewa_ref_id:
-                        esewa_ok, api_resp = await refund_to_customer(
-                            esewa_id=customer_esewa_id,
-                            amount=amount_customer,
-                            esewa_ref_id=esewa_ref_id,
-                            remarks=f"Refund: {refund.get('reason', 'task dispute')[:50]}",
-                            idempotency_key=f"refund-{refund_id}",
-                        )
+#                     if esewa_ref_id:
+#                         esewa_ok, api_resp = await refund_to_customer(
+#                             esewa_id=customer_esewa_id,
+#                             amount=amount_customer,
+#                             esewa_ref_id=esewa_ref_id,
+#                             remarks=f"Refund: {refund.get('reason', 'task dispute')[:50]}",
+#                             idempotency_key=f"refund-{refund_id}",
+#                         )
 
-                        if esewa_ok:
-                            esewa_refund_result = {
-                                "status":           "sent",
-                                "transaction_uuid": api_resp.get("transaction_uuid"),
-                                "esewa_id":         customer_esewa_id,
-                                "timestamp":        datetime.utcnow().isoformat(),
-                            }
-                            refund_success = True
-                        else:
-                            esewa_refund_result = {
-                                "status":    "failed",
-                                "error":     api_resp.get("message", "Unknown error"),
-                                "esewa_id":  customer_esewa_id,
-                                "timestamp": datetime.utcnow().isoformat(),
-                            }
-                            refund_success = False
-                    else:
-                        esewa_refund_result = {
-                            "status":    "no_ref_id",
-                            "error":     "No eSewa transaction reference found",
-                            "timestamp": datetime.utcnow().isoformat(),
-                        }
-                        refund_success = False
-                except Exception as e:
-                    esewa_refund_result = {
-                        "status":    "error",
-                        "error":     str(e),
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-                    refund_success = False
-            else:
-                esewa_refund_result = {
-                    "status":    "no_esewa_id",
-                    "note":      "Customer has no eSewa ID. Process refund manually.",
-                    "timestamp": datetime.utcnow().isoformat(),
-                }
-                refund_success = False
+#                         if esewa_ok:
+#                             esewa_refund_result = {
+#                                 "status":           "sent",
+#                                 "transaction_uuid": api_resp.get("transaction_uuid"),
+#                                 "esewa_id":         customer_esewa_id,
+#                                 "timestamp":        datetime.utcnow().isoformat(),
+#                             }
+#                             refund_success = True
+#                         else:
+#                             esewa_refund_result = {
+#                                 "status":    "failed",
+#                                 "error":     api_resp.get("message", "Unknown error"),
+#                                 "esewa_id":  customer_esewa_id,
+#                                 "timestamp": datetime.utcnow().isoformat(),
+#                             }
+#                             refund_success = False
+#                     else:
+#                         esewa_refund_result = {
+#                             "status":    "no_ref_id",
+#                             "error":     "No eSewa transaction reference found",
+#                             "timestamp": datetime.utcnow().isoformat(),
+#                         }
+#                         refund_success = False
+#                 except Exception as e:
+#                     esewa_refund_result = {
+#                         "status":    "error",
+#                         "error":     str(e),
+#                         "timestamp": datetime.utcnow().isoformat(),
+#                     }
+#                     refund_success = False
+#             else:
+#                 esewa_refund_result = {
+#                     "status":    "no_esewa_id",
+#                     "note":      "Customer has no eSewa ID. Process refund manually.",
+#                     "timestamp": datetime.utcnow().isoformat(),
+#                 }
+#                 refund_success = False
 
-        if sandbox or refund_success:
-            update_fields = {
-                "status":                "refunded",
-                "refundStatus":          "refunded",        # ← lifecycle: money released
-                "amount_customer":       amount_customer,
-                "amount_worker":         amount_worker or 0.0,
-                "admin_note":            admin_note,
-                "approved_at":           datetime.utcnow(),
-                "resolved_at":           datetime.utcnow(),
-                "sandbox_mode":          sandbox,
-                "refund_transaction":    transaction_uuid if sandbox else (esewa_refund_result.get("transaction_uuid") if esewa_refund_result else None),
-                "esewa_refund_response": esewa_refund_result,
-            }
-        else:
-            update_fields = {
-                "status":                "refund_failed",
-                "refundStatus":          "refund_in_progress",  # ← stays in_progress so pay-all can retry
-                "amount_customer":       amount_customer,
-                "amount_worker":         amount_worker or 0.0,
-                "admin_note":            admin_note,
-                "approved_at":           datetime.utcnow(),
-                "resolved_at":           datetime.utcnow(),
-                "sandbox_mode":          sandbox,
-                "esewa_refund_response": esewa_refund_result,
-            }
+#         if sandbox or refund_success:
+#             update_fields = {
+#                 "status":                "refunded",
+#                 "refundStatus":          "refunded",        # ← lifecycle: money released
+#                 "amount_customer":       amount_customer,
+#                 "amount_worker":         amount_worker or 0.0,
+#                 "admin_note":            admin_note,
+#                 "approved_at":           datetime.utcnow(),
+#                 "resolved_at":           datetime.utcnow(),
+#                 "sandbox_mode":          sandbox,
+#                 "refund_transaction":    transaction_uuid if sandbox else (esewa_refund_result.get("transaction_uuid") if esewa_refund_result else None),
+#                 "esewa_refund_response": esewa_refund_result,
+#             }
+#         else:
+#             update_fields = {
+#                 "status":                "refund_failed",
+#                 "refundStatus":          "refund_in_progress",  # ← stays in_progress so pay-all can retry
+#                 "amount_customer":       amount_customer,
+#                 "amount_worker":         amount_worker or 0.0,
+#                 "admin_note":            admin_note,
+#                 "approved_at":           datetime.utcnow(),
+#                 "resolved_at":           datetime.utcnow(),
+#                 "sandbox_mode":          sandbox,
+#                 "esewa_refund_response": esewa_refund_result,
+#             }
 
-    else:
-        # declined
-        update_fields = {
-            "status":      "declined",
-            "refundStatus": "declined",
-            "admin_note":  admin_note,
-            "resolved_at": datetime.utcnow(),
-        }
+#     else:
+#         # declined
+#         update_fields = {
+#             "status":      "declined",
+#             "refundStatus": "declined",
+#             "admin_note":  admin_note,
+#             "resolved_at": datetime.utcnow(),
+#         }
 
-    database.refund_collection.update_one({"_id": obj_id}, {"$set": update_fields})
+#     database.refund_collection.update_one({"_id": obj_id}, {"$set": update_fields})
 
-    return {
-        "message":         f"Refund {status} successfully. Status set to '{update_fields['status']}'.{' (MOCK MODE)' if sandbox and status == 'approved' else ''}",
-        "refund_id":       refund_id,
-        "status":          update_fields["status"],
-        "refundStatus":    update_fields["refundStatus"],
-        "amount_customer": update_fields.get("amount_customer"),
-        "amount_worker":   update_fields.get("amount_worker"),
-        "admin_note":      admin_note,
-        "resolved_at":     update_fields.get("resolved_at"),
-        "sandbox_mode":    sandbox if status == "approved" else None,
-        "esewa_refund":    esewa_refund_result if status == "approved" else None,
-    }
+#     return {
+#         "message":         f"Refund {status} successfully. Status set to '{update_fields['status']}'.{' (MOCK MODE)' if sandbox and status == 'approved' else ''}",
+#         "refund_id":       refund_id,
+#         "status":          update_fields["status"],
+#         "refundStatus":    update_fields["refundStatus"],
+#         "amount_customer": update_fields.get("amount_customer"),
+#         "amount_worker":   update_fields.get("amount_worker"),
+#         "admin_note":      admin_note,
+#         "resolved_at":     update_fields.get("resolved_at"),
+#         "sandbox_mode":    sandbox if status == "approved" else None,
+#         "esewa_refund":    esewa_refund_result if status == "approved" else None,
+#     }
 
 
 # ─────────────────────────────────────────────────────────────
@@ -511,18 +511,24 @@ async def pay_all_in_progress_refunds(sandbox: bool = True):
             if reported_id:
                 try:
                     worker = database.collection_worker.find_one(
-    {"$or": [
-        {"email": reported_id},
-        {"phoneNo": reported_id},
-        {"phone": reported_id},
-    ]}
-)
+                        {"$or": [
+                            {"_id":     reported_id},
+                            {"email":   reported_id},
+                            {"phoneNo": reported_id},
+                            {"phone":   reported_id},
+                        ]}
+                    )
                     if worker:
                         worker_esewa_id = (
-                            worker.get("phoneNo")
+                            worker.get("paymentId")
+                            or worker.get("payment_id")
+                            or worker.get("phoneNo")
                             or worker.get("phone")
                             or worker.get("mobile")
                         )
+                        print(f"[pay-all] ✅ Worker found: {worker.get('email')}, paymentId={worker_esewa_id}")
+                    else:
+                        print(f"[pay-all] ❌ Worker NOT found for reported_id={reported_id}")
                 except Exception as e:
                     print(f"[pay-all] Error fetching worker: {e}")
 
@@ -660,10 +666,10 @@ async def pay_all_in_progress_refunds(sandbox: bool = True):
         "failed":               failed,
         "total_processed":      len(in_progress),
         "total_amount":         total_amount,
-        "total_success_amount": sum(s.get("amount", 0) for s in success),
+        "total_success_amount": sum(s.get("amount_customer", 0) for s in success),  # ✅ correct field
+        "total_worker_amount":  sum(s.get("amount_worker", 0)  for s in success),   # ✅ ADD worker total
         "sandbox_mode":         sandbox,
     }
-
 
 # ── Kept for compatibility ──
 @router.post("/refunds/bulk-process")

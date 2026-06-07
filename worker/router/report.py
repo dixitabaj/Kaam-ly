@@ -6,7 +6,12 @@ from typing import Optional
 from fastapi import APIRouter, Form, File, UploadFile, HTTPException, Query
 from bson import ObjectId, errors as bson_errors
 from ..repository.reportRepo import ReportRepo, _serialize
-from ..config.database import collection_reports, collection_task, refund_collection, collection_payment
+from ..config.database import (
+    collection_reports, collection_task, refund_collection,
+    collection_payment, collection_worker, collection,
+)
+from .notifications import notify_with_fallback
+from ..services.emailUtil import send_refund_email, send_declined_refund_email
 
 router = APIRouter(tags=["reports"])
 reportRepo = ReportRepo(collection_reports)
@@ -18,6 +23,25 @@ MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
 ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 VALID_PAYMENT_METHODS = {"khalti", "esewa"}
+
+
+def _find_customer(customer_id: str):
+    """Look up a customer by ObjectId or email."""
+    try:
+        doc = collection.find_one({"_id": ObjectId(customer_id)})
+        if doc:
+            return doc
+    except Exception:
+        pass
+    return collection.find_one({"email": customer_id})
+
+
+def _find_worker(worker_id: str):
+    """Look up a worker by string _id or email (workers use email as _id)."""
+    doc = collection_worker.find_one({"_id": worker_id})
+    if doc:
+        return doc
+    return collection_worker.find_one({"email": worker_id})
 
 
 # ─────────────────────────────────────────────────────────────
@@ -55,7 +79,7 @@ async def create_report(
         with open(file_path, "wb") as buffer:
             buffer.write(contents)
 
-        evidence_url = f"/static/reports/{unique_filename}"
+        evidence_url = f"/uploads/reports/{unique_filename}"
 
     # ── 2. Prepare report data ─────────────────────────────────────────────────
     data = {
@@ -67,7 +91,7 @@ async def create_report(
         "description":      description,
         "requestForRefund": requestForRefund,
         "status":           "pending",
-        "refundStatus":     "pending",   # ← lifecycle starts here
+        "refundStatus":     "pending",
         "createdAt":        datetime.utcnow(),
         "refund_id":        None,
     }
@@ -80,6 +104,7 @@ async def create_report(
     task              = None
     payment_method    = None
     payment_ref       = None
+    payment_tx        = None
 
     if taskId:
         try:
@@ -110,8 +135,8 @@ async def create_report(
 
                 if payment_method not in VALID_PAYMENT_METHODS:
                     payment_tx = collection_payment.find_one(
-                        {"task_id": str(taskId), "type": "customer_payment", "status": "success"},
-                        sort=[("paid_at", -1)],
+                        {"task_id": str(taskId), "type": "customer_payment", "status": {"$in": ["success", "paid", "pending"]}},
+                        sort=[("created_at", -1)],
                     )
                     if payment_tx:
                         payment_method = (payment_tx.get("method") or "").lower()
@@ -127,18 +152,33 @@ async def create_report(
                     payment_ref = task.get("khalti_pidx") or task.get("khalti_txn_id")
 
                 elif payment_method == "esewa":
-                    if not esewaId:
+                    payment_tx = collection_payment.find_one(
+                        {"task_id": str(taskId), "type": "customer_payment", "status": {"$in": ["success", "paid", "pending"]}},
+                        sort=[("created_at", -1)],
+                    )
+                    if payment_tx:
+                        payment_ref = payment_tx.get("transaction_uuid") or payment_tx.get("gateway_ref")
+
+                    if not payment_ref and esewaId:
+                        payment_ref = esewaId
+
+                    if not payment_ref:
                         raise HTTPException(
                             status_code=400,
-                            detail="eSewa transaction ID is required for refund — "
-                                   "this task was paid via eSewa.",
+                            detail="Could not find eSewa transaction reference for this task. "
+                                   "Please provide the eSewa transaction ID manually.",
                         )
-                    payment_ref = esewaId
 
                 collection_task.update_one(
                     {"_id": obj_id},
-                    {"$set": {"taskStatus": "dispute", "disputedAt": datetime.utcnow()}},
+                    {"$set": {"dispute": "true", "disputedAt": datetime.utcnow()}},
                 )
+
+                if payment_tx is None:
+                    payment_tx = collection_payment.find_one(
+                        {"task_id": str(taskId), "type": "customer_payment", "status": {"$in": ["success", "paid", "pending"]}},
+                        sort=[("created_at", -1)],
+                    )
 
         except bson_errors.InvalidId:
             raise HTTPException(status_code=400, detail="Invalid taskId")
@@ -147,36 +187,36 @@ async def create_report(
     report    = reportRepo.createReport(data, evidence_url)
     report_id = report.get("id") or report.get("_id")
 
-    if taskId and report_id:
-        collection_task.update_one(
-            {"_id": ObjectId(taskId)},
-            {"$set": {"report_id": str(report_id)}},
-        )
+    worker_id = task.get("assignedWorkerId") if task else None
+    worker    = _find_worker(worker_id) if worker_id else None
 
     # ── 5. Create refund if needed ─────────────────────────────────────────────
     refund_id = None
 
     if create_refund_doc:
+        worker_payment_method = worker.get("payment_method") if worker else None
+
         refund_doc = {
-            "task_id":         taskId,
-            "report_id":       str(report_id),
-            "requester_id":    str(task.get("userId")),
-            "reported_id":     str(task.get("assignedWorkerId")) if task.get("assignedWorkerId") else None,
-            "requester_type":  "customer",
-            "reported_type":   "worker",
-            "amount_customer": None,
-            "amount_worker":   None,
-            "reason":          reason,
-            "total_amount":    task.get("totalCost"),
-            "status":          "pending",
-            "refundStatus":    "pending",   # ← starts as pending
-            "created_at":      datetime.utcnow(),
-            "evidence_files":  [evidence_url] if evidence_url else [],
-            "payment_method":  payment_method,
-            "payment_ref":     payment_ref,
-            "esewa_id":        payment_ref             if payment_method == "esewa"  else None,
-            "khalti_pidx":     task.get("khalti_pidx") if payment_method == "khalti" else None,
-            "khalti_txn_id":   task.get("khalti_txn_id") if payment_method == "khalti" else None,
+            "task_id":                         taskId,
+            "report_id":                       str(report_id),
+            "requester_id":                    str(task.get("userId")),
+            "reported_id":                     str(task.get("assignedWorkerId")) if task.get("assignedWorkerId") else None,
+            "requester_type":                  "customer",
+            "reported_type":                   "worker",
+            "amount_customer":                 None,
+            "amount_worker":                   None,
+            "reason":                          reason,
+            "total_amount":                    task.get("totalCost"),
+            "status":                          "pending",
+            "refundStatus":                    "pending",
+            "created_at":                      datetime.utcnow(),
+            "evidence_files":                  [evidence_url] if evidence_url else [],
+            "payment_method_worker":           worker_payment_method,
+            "esewa_transaction_uuid_worker":   worker.get("payment_id") if worker_payment_method == "esewa" else None,
+            "khalti_worker":                   worker.get("payment_id") if worker_payment_method == "khalti" else None,
+            "payment_method_customer":         payment_tx.get("method") if payment_tx else None,
+            "esewa_transaction_uuid_customer": payment_tx.get("transaction_uuid") if payment_method == "esewa" else None,
+            "khalti_customer":                 payment_tx.get("khalti_pidx") if payment_method == "khalti" else None,
         }
 
         refund_result = refund_collection.insert_one(refund_doc)
@@ -204,7 +244,7 @@ async def create_report(
 
 
 # ─────────────────────────────────────────────────────────────
-# GET /reports/stats          ← MUST come before /reports/{id}
+# GET /reports/stats
 # ─────────────────────────────────────────────────────────────
 @router.get("/reports/stats")
 def get_report_stats():
@@ -212,7 +252,7 @@ def get_report_stats():
 
 
 # ─────────────────────────────────────────────────────────────
-# GET /reports/user/{userId}  ← MUST come before /reports/{id}
+# GET /reports/user/{userId}
 # ─────────────────────────────────────────────────────────────
 @router.get("/reports/user/{userId}")
 def get_reports_by_user(userId: str):
@@ -224,7 +264,7 @@ def get_reports_by_user(userId: str):
 
 
 # ─────────────────────────────────────────────────────────────
-# GET /reports/reported/{userId} ← MUST come before /reports/{id}
+# GET /reports/reported/{userId}
 # ─────────────────────────────────────────────────────────────
 @router.get("/reports/reported/{userId}")
 def get_reports_against_user(userId: str):
@@ -241,7 +281,7 @@ def get_reports_against_user(userId: str):
 
 
 # ─────────────────────────────────────────────────────────────
-# GET /reports/count/{userId} ← MUST come before /reports/{id}
+# GET /reports/count/{userId}
 # ─────────────────────────────────────────────────────────────
 @router.get("/reports/count/{userId}")
 def get_report_count_for_user(userId: str):
@@ -280,12 +320,12 @@ def get_reports(
 # PATCH /reports/{id}/status
 # ─────────────────────────────────────────────────────────────
 @router.patch("/reports/{id}/status")
-def update_status(
-    id:        str,
-    status:    str = Form(...),
-    adminNote: str = Form(""),
+async def update_status(
+    id:                   str,
+    status:               str             = Form(...),
+    adminNote:            str             = Form(""),
     customerRefundAmount: Optional[float] = Form(None),
-    workerRefundAmount: Optional[float] = Form(None),
+    workerRefundAmount:   Optional[float] = Form(None),
 ):
     VALID_STATUS = {"resolved", "declined"}
 
@@ -308,6 +348,7 @@ def update_status(
     refund_id = report.get("refund_id")
     task_id   = report.get("taskId")
 
+    # ── Resolve refund doc ─────────────────────────────────────────────────────
     refund_doc = None
     if refund_id:
         try:
@@ -321,28 +362,94 @@ def update_status(
     new_refund_status = None
 
     if refund_doc:
+        # ── Resolve IDs once ───────────────────────────────────────────────────
+        customer_id = report.get("reporterId") or refund_doc.get("requester_id")
+        worker_id   = report.get("reportedId") or refund_doc.get("reported_id")
+
         if status == "resolved":
             new_refund_status = "refund_in_progress"
 
-            # Use existing DB values, fall back to what was passed in, then 0
-            amount_customer = refund_doc.get("amount_customer") or customerRefundAmount or 0
-            amount_worker   = refund_doc.get("amount_worker")   or workerRefundAmount   or 0
+            # Read amounts from DB — only fall back if truly None
+            # ADD THIS
+            amount_customer = customerRefundAmount if customerRefundAmount is not None else (refund_doc.get("amount_customer") or 0)
+            amount_worker   = workerRefundAmount   if workerRefundAmount   is not None else (refund_doc.get("amount_worker")   or 0)
 
+            # ── Update refund doc ──────────────────────────────────────────────
             refund_collection.update_one(
                 {"_id": refund_doc["_id"]},
                 {"$set": {
                     "refundStatus":       new_refund_status,
                     "report_resolved_at": datetime.utcnow(),
-                    "amount_customer":    amount_customer,   # ✅ actually persisted
-                    "amount_worker":      amount_worker,     # ✅ actually persisted
+                    "amount_customer":    amount_customer,
+                    "amount_worker":      amount_worker,
                 }}
             )
 
+            # ── Notify customer ────────────────────────────────────────────────
+            if customer_id:
+                await notify_with_fallback(
+                    userId=customer_id,
+                    title="Refund Approved",
+                    body=f"Your refund request has been approved. NPR {amount_customer:,.0f} will be refunded to your account.",
+                    is_worker=False,
+                )
+
+            # ── Notify worker ──────────────────────────────────────────────────
+            if worker_id and amount_worker > 0:
+                await notify_with_fallback(
+                    userId=worker_id,
+                    title="Payment Adjustment",
+                    body=f"A refund has been processed for this task. You will receive NPR {amount_worker:,.0f} as your payment.",
+                    is_worker=True,
+                )
+            elif worker_id and amount_worker == 0:
+                await notify_with_fallback(
+                    userId=worker_id,
+                    title="Task Refund Issued",
+                    body="A full refund has been issued for this task. No payment will be released.",
+                    is_worker=True,
+                )
+
+            # ── Email customer ─────────────────────────────────────────────────
+            if customer_id:
+                try:
+                    customer = _find_customer(customer_id)
+                    if customer and customer.get("email"):
+                        send_refund_email(
+                            to_email=customer["email"],
+                            user_name=f"{customer.get('first_name', '')} {customer.get('last_name', '')}".strip() or "Customer",
+                            subject="Refund Approved - Your Request Has Been Processed",
+                            amount=amount_customer,
+                            is_customer=True,
+                            task_id=task_id,
+                            admin_note=adminNote,
+                        )
+                except Exception as e:
+                    print(f"Failed to send customer email: {e}")
+
+            # ── Email worker ───────────────────────────────────────────────────
+            if worker_id:
+                try:
+                    worker = _find_worker(worker_id)
+                    if worker and worker.get("email"):
+                        send_refund_email(
+                            to_email=worker["email"],
+                            user_name=f"{worker.get('firstName', '')} {worker.get('lastName', '')}".strip() or "Worker",
+                            subject="Payment Adjustment Notification",
+                            amount=amount_worker,
+                            is_customer=False,
+                            task_id=task_id,
+                            admin_note=adminNote,
+                        )
+                except Exception as e:
+                    print(f"Failed to send worker email: {e}")
+
+            # ── Update task status ─────────────────────────────────────────────
             if task_id:
                 try:
                     collection_task.update_one(
                         {"_id": ObjectId(str(task_id))},
-                        {"$set": {"taskStatus": "refund_in_progress"}}
+                        {"$set": {"taskStatus": "refund_in_progress"}},
                     )
                 except Exception:
                     pass
@@ -357,10 +464,46 @@ def update_status(
                     "report_resolved_at": datetime.utcnow(),
                 }}
             )
+            if task_id:
+                try:
+                    result = collection_task.update_one(
+                        {"_id": ObjectId(str(task_id))},
+                        {"$set": {
+                            "dispute":           "rejected",
+                            "disputeResolvedAt": datetime.utcnow(),
+                        }}
+                    )
+                    print(f"[DISPUTE REJECT] task_id={task_id}, matched={result.matched_count}, modified={result.modified_count}")
+                except Exception as e:
+                    print(f"[DISPUTE REJECT ERROR] task_id={task_id}, error={e}")
 
+            # ── Notify customer ────────────────────────────────────────────────
+            if customer_id:
+                await notify_with_fallback(
+                    userId=customer_id,
+                    title="Refund Request Declined",
+                    body=f"Your refund request has been declined. {adminNote or 'Please contact support for details.'}",
+                    is_worker=False,
+                )
+
+            # ── Email customer ─────────────────────────────────────────────────
+            if customer_id:
+                try:
+                    customer = _find_customer(customer_id)
+                    if customer and customer.get("email"):
+                        send_declined_refund_email(
+                            to_email=customer["email"],
+                            user_name=f"{customer.get('first_name', '')} {customer.get('last_name', '')}".strip() or "Customer",
+                            task_id=task_id,
+                            admin_note=adminNote,
+                        )
+                except Exception as e:
+                    print(f"Failed to send declined email: {e}")
+
+        # ── Update report refund status ────────────────────────────────────────
         collection_reports.update_one(
             {"_id": obj_id},
-            {"$set": {"refundStatus": new_refund_status}}
+            {"$set": {"refundStatus": new_refund_status}},
         )
 
     return {
@@ -368,6 +511,8 @@ def update_status(
         "status":       status,
         "refundStatus": new_refund_status,
     }
+
+
 # ─────────────────────────────────────────────────────────────
 # GET /reports/{id}           ← Catch-all — keep at the bottom
 # ─────────────────────────────────────────────────────────────

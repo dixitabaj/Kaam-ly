@@ -71,6 +71,7 @@ const Login = () => {
   const [showResetForm,      setShowResetForm]      = useState(false);
   const [showResetSuccess,   setShowResetSuccess]   = useState(false);
   const [error,              setError]              = useState('');
+  const [suspendedError,     setSuspendedError]     = useState(null); // Add suspended error state
   const [showPassword,        setShowPassword]        = useState(false);
   const [showNewPassword,     setShowNewPassword]     = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -78,6 +79,8 @@ const Login = () => {
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+    // Clear suspended error when user starts typing
+    if (suspendedError) setSuspendedError(null);
   };
 
   const resetForgotFlow = () => {
@@ -86,6 +89,7 @@ const Login = () => {
     setShowResetForm(false);
     setShowResetSuccess(false);
     setError('');
+    setSuspendedError(null);
   };
 
   // ── Google login ────────────────────────────────────────────────────────────
@@ -93,6 +97,15 @@ const Login = () => {
     try {
       const decoded = jwtDecode(credentialResponse.credential);
       const result  = await loginUsingGoogle(decoded);
+
+      // Check if worker account is suspended
+      if (result.role === 'worker' && result.status === 'suspended') {
+        setSuspendedError({
+          message: result.suspension_reason || "Your worker account has been suspended.",
+          email: result.email
+        });
+        return;
+      }
 
       const storage = sessionStorage;
       const firstName = result.first_name ?? result.firstName ?? "";
@@ -107,15 +120,16 @@ const Login = () => {
         picture: result.picture || decoded.picture,
         id: result._id || result.id,
         phoneNo: result.phoneNo || null,
+        status: result.status,
       };
       console.log("RESULT:", result);
       console.log("DECODED:", decoded);
-
 
       storage.setItem('access_token', result.access_token);
       storage.setItem('user', JSON.stringify(user));
 
       await registerFCMToken(user.id);
+      window.dispatchEvent(new Event("storage"));
 
       // ── Route based on role first, then phone check for customers only ──
       if (result.role === 'admin') {
@@ -139,55 +153,97 @@ const Login = () => {
   };
 
   // ── Email / password login ──────────────────────────────────────────────────
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setError('');
-    try {
-      const res  = await fetch("http://localhost:8000/api/login", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({
-          email:       formData.email,
-          password:    formData.password,
-          remember_me: formData.rememberMe,
-        }),
-      });
-      const data = await res.json();
+  // ── Email / password login ──────────────────────────────────────────────────
+const handleLogin = async (e) => {
+  e.preventDefault();
+  setError('');
+  setSuspendedError(null);
+  try {
+    const res = await fetch("http://localhost:8000/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: formData.email,
+        password: formData.password,
+        remember_me: formData.rememberMe,
+      }),
+    });
+    
+    const data = await res.json();
+    
+    // Log the response for debugging
+    console.log("Login response status:", res.status);
+    console.log("Login response data:", data);
 
-      if (res.ok) {
-        const storage = formData.rememberMe ? localStorage : sessionStorage;
-
-        storage.setItem('access_token', data.access_token);
-        storage.setItem('user', JSON.stringify({
-          id:        data._id,
-          token:     data.access_token,
-          role:      data.role,
-          firstName: data.first_name ?? data.firstName ?? "",
-          lastName:  data.last_name  ?? data.lastName ?? '',
-          name:      `${data.first_name || ''} ${data.last_name || ''}`.trim(),
-          email:     data.email,
-          phoneNo:   data.phoneNo || null,
-        }));
-
-        console.log(data);
-
-        await registerFCMToken(data._id);
-
-        if      (data.role === "worker")   navigate(`/worker/dashboard/overview/${encodeURIComponent(data._id)}`);
-        else if (data.role === "customer") navigate("/home");
-        else if (data.role === "admin")    navigate("/admin/dashboard");
+    // Handle 403 Forbidden - Suspended account
+    if (res.status === 403) {
+      // Check if it's a suspended account response
+      if (data.status === 'suspended' || (data.detail && typeof data.detail === 'object' && data.detail.status === 'suspended')) {
+        const errorDetail = data.detail || data;
+        setSuspendedError({
+          message: errorDetail.message || errorDetail.suspension_reason || "Your worker account has been suspended.",
+          email: formData.email,
+          reason: errorDetail.suspension_reason || errorDetail.message
+        });
+        return;
       } else {
-        setError("The email or password you entered is incorrect.");
+        // Other 403 errors
+        setError(data.detail || "Access forbidden. Please contact support.");
+        return;
       }
-    } catch (err) {
-      setError("Something went wrong. Please try again.");
     }
-  };
+
+    if (res.ok) {
+      // Check if worker account is suspended from response body
+      if (data.role === 'worker' && data.status === 'suspended') {
+        setSuspendedError({
+          message: data.suspension_reason || "Your worker account has been suspended.",
+          email: data.email
+        });
+        return;
+      }
+
+      const storage = formData.rememberMe ? localStorage : sessionStorage;
+
+      storage.setItem('access_token', data.access_token);
+      storage.setItem('user', JSON.stringify({
+        id: data._id,
+        token: data.access_token,
+        role: data.role,
+        firstName: data.first_name ?? data.firstName ?? "",
+        lastName: data.last_name ?? data.lastName ?? '',
+        name: `${data.first_name || ''} ${data.last_name || ''}`.trim(),
+        email: data.email,
+        phoneNo: data.phoneNo || null,
+        status: data.status,
+      }));
+
+      await registerFCMToken(data._id);
+      window.dispatchEvent(new Event("storage"));
+
+      if (data.role === "worker") {
+        navigate(`/worker/dashboard/overview/${encodeURIComponent(data._id)}`);
+      } else if (data.role === "customer") {
+        navigate("/home");
+      } else if (data.role === "admin") {
+        navigate("/admin/dashboard");
+      }
+    } else if (res.status === 401) {
+      setError("The email or password you entered is incorrect.");
+    } else {
+      setError(data.detail || "Something went wrong. Please try again.");
+    }
+  } catch (err) {
+    console.error("Login error:", err);
+    setError("Something went wrong. Please try again.");
+  }
+};
 
   // ── Forgot password ─────────────────────────────────────────────────────────
   const handleRequestOtp = async (e) => {
     e.preventDefault();
     setError('');
+    setSuspendedError(null);
     try {
       const res  = await fetch("http://localhost:8000/api/send-otp", {
         method:  "POST",
@@ -258,7 +314,40 @@ const Login = () => {
     setShowResetSuccess(false);
     setShowForgotPassword(true);
     setError('');
+    setSuspendedError(null);
   };
+
+  // ── Suspended Error Component ───────────────────────────────────────────────
+  // ── Suspended Error Component ───────────────────────────────────────────────
+  const SuspendedErrorCard = ({ error, onClose }) => (
+    <div className="suspended-error-card">
+      <div className="suspended-error-icon">⚠️</div>
+      <div className="suspended-error-content">
+        <div className="suspended-error-title">Account Suspended</div>
+        <div className="suspended-error-message">{error.message}</div>
+        <div className="suspended-error-email">Email: {error.email}</div>
+        {error.reason && (
+          <div className="suspended-error-reason">Reason: {error.reason}</div>
+        )}
+        <div className="suspended-error-actions">
+          <button
+            className="suspended-error-btn primary"
+            onClick={() =>
+              window.location.href = `mailto:support@kaamly.com?subject=Suspended Account&body=Hello, my account (${error.email}) has been suspended. I would like to appeal this decision.`
+            }
+          >
+            Contact Support
+          </button>
+          <button
+            className="suspended-error-btn secondary"
+            onClick={onClose}
+          >
+            Try Different Account
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
@@ -297,8 +386,19 @@ const Login = () => {
             </p>
           </div>
 
+          {/* ── Suspended Error Display ── */}
+          {suspendedError && (
+            <SuspendedErrorCard 
+              error={suspendedError} 
+              onClose={() => {
+                setSuspendedError(null);
+                setFormData(prev => ({ ...prev, email: '', password: '' }));
+              }}
+            />
+          )}
+
           {/* ── Sign In ── */}
-          {!showForgotPassword && (
+          {!showForgotPassword && !suspendedError && (
             <form onSubmit={handleLogin} className="auth-form">
               <div className="form-group-login">
                 <label className="form-label-login">Email Address</label>

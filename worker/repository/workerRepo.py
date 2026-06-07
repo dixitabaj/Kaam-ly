@@ -5,26 +5,25 @@ from ..schemas.schemas import WorkerCreateSchema, WorkerResponseSchema
 from datetime import datetime
 from bson import ObjectId
 
+VALID_DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
+
 # -----------------------------
 # 1️⃣ Add a worker
 # -----------------------------
-VALID_DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
- 
 def addWorker(request: WorkerCreateSchema):
     if collection_worker.find_one({"_id": request.email}):
         raise HTTPException(status_code=400, detail="Worker email already registered")
- 
-    # Build hours from request — convert SlotSchema objects to plain dicts
+
+    # Build hours from request
     incoming = request.hours or {}
     hours = {}
     for day in VALID_DAYS:
         slots = incoming.get(day, [])
-        # slots may be SlotSchema instances or already dicts
         hours[day] = [
             s.dict() if hasattr(s, "dict") else s
             for s in slots
         ]
- 
+
     worker_doc = {
         "_id":               request.email,
         "firstName":         request.firstName,
@@ -32,11 +31,11 @@ def addWorker(request: WorkerCreateSchema):
         "phoneNo":           request.phoneNo,
         "email":             request.email,
         "password":          Hash.bcrypt(request.password),
-        "taskType":          request.taskType,
+        "taskType": ", ".join(request.taskType) if isinstance(request.taskType, list) else request.taskType,
         "skills":            [skill.dict() for skill in request.skills],
         "description":       request.description,
         "profilePhoto":      request.profilePhoto,
-        "serviceAreas":      request.serviceAreas,
+        "serviceArea":       request.serviceArea.dict() if request.serviceArea else {},
         "noOfCompletedTask": 0,
         "total_cancelled":   0,
         "ratings":           0.0,
@@ -48,12 +47,16 @@ def addWorker(request: WorkerCreateSchema):
         "skill_verified":    request.skill_verified,
         "role":              request.role,
         "minHours":          request.minHours,
-        "hours":             hours,          # ← now populated from request
+        "hours":             hours,
         "registeredAt":      datetime.utcnow(),
+        "paymentMethod":     request.paymentMethod,
+        "paymentId":         request.paymentId,
     }
- 
+
     result = collection_worker.insert_one(worker_doc)
     return {"id": str(result.inserted_id), "message": "Worker created successfully"}
+
+
 # -----------------------------
 # 2️⃣ Show all workers
 # -----------------------------
@@ -76,8 +79,6 @@ def showWorkerByID(worker_id: str):
     worker = collection_worker.find_one({"_id": worker_id}, {"password": 0})
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
-
-    service_area = worker.get("serviceArea", {})
     return worker
 
 
@@ -114,10 +115,16 @@ def updateWorkerAccountStatus(id: str, status: str):
 # 7️⃣ Toggle availability
 # -----------------------------
 def toggleWorkerAvailability(id: str, isAvailable: bool):
-    return collection_worker.update_one(
+    result = collection_worker.update_one(
         {"_id": id},
         {"$set": {"isAvailable": isAvailable, "availability_updated_at": datetime.utcnow()}},
     )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    return {
+        "message": f"Worker marked as {'available' if isAvailable else 'unavailable'}",
+        "isAvailable": isAvailable
+    }
 
 
 # -----------------------------
@@ -164,7 +171,6 @@ def getPopularServices(limit_per_category: int = 8):
                         "rating":          "$ratings",
                         "review_count":    "$reviewCount",
                         "completed_tasks": "$noOfCompletedTask",
-                      
                         "profile_pic":     "$profilePhoto",
                         "is_available":    "$isAvailable",
                         "response_time":   "$responseTime",
@@ -248,6 +254,7 @@ def getHomeData(limit: int = 8):
 # 🔧 Format helper
 # -----------------------------
 def _format_worker(w: dict) -> dict:
+    service_area = w.get("serviceArea", {})
     return {
         "id":              w.get("email") or str(w["_id"]),
         "name":            f"{w.get('firstName', '')} {w.get('lastName', '')}".strip(),
@@ -255,7 +262,6 @@ def _format_worker(w: dict) -> dict:
         "rating":          w.get("ratings", None),
         "review_count":    w.get("reviewCount", 0),
         "completed_tasks": w.get("noOfCompletedTask", 0),
-       
         "profile_pic":     w.get("profilePhoto", ""),
         "is_available":    w.get("isAvailable", False),
         "response_time":   w.get("responseTime", None),
@@ -263,9 +269,9 @@ def _format_worker(w: dict) -> dict:
         "skill_verified":  w.get("skill_verified", False),
         "description":     w.get("description", ""),
         "area": (
-            w.get("serviceArea", {}).get("primaryCity")
-            or w.get("serviceArea", {}).get("city")
-            or w.get("serviceArea", {}).get("district")
+            service_area.get("primaryCity")
+            or service_area.get("city")
+            or service_area.get("district")
             or "Nepal"
         ),
     }
@@ -276,30 +282,35 @@ def _format_worker(w: dict) -> dict:
 # -----------------------------
 def getPriceByTask(task: str, worker_id: str):
     worker = collection_worker.find_one(
-        {
-            "email":       worker_id,
-            "skills.name": {"$regex": task.strip(), "$options": "i"},
-        },
-        {"firstName": 1, "lastName": 1, "skills": 1, "serviceArea.primaryCity": 1, "_id": 0},
+        {"email": worker_id},
+        {"firstName": 1, "lastName": 1, "skills": 1, "_id": 0},
     )
     if not worker:
-        raise HTTPException(status_code=404, detail="Worker or task not found")
+        raise HTTPException(status_code=404, detail="Worker not found")
 
-    target_skill = next(
-        (s for s in worker["skills"] if s["name"].lower() == task.lower().strip()), None
-    )
-    return {
-        "worker_name": f"{worker['firstName']} {worker['lastName']}",
-        "city":        worker.get("serviceArea", {}).get("primaryCity"),
-        "task_name":   target_skill["name"],
-        "price":       target_skill["price"],
-        "rating":      target_skill.get("ratings"),
-    }
+    task_lower = task.lower().strip()
+
+    for skill in worker.get("skills", []):
+        if skill.get("name", "").lower() == task_lower:
+            return {
+                "worker_name": f"{worker['firstName']} {worker['lastName']}",
+                "task_name":   skill["name"],
+                "price":       skill.get("price", 0),
+            }
+        for sub in skill.get("subSkills", []):
+            if sub.get("name", "").lower() == task_lower:
+                return {
+                    "worker_name": f"{worker['firstName']} {worker['lastName']}",
+                    "task_name":   sub["name"],
+                    "price":       sub.get("price", 0),
+                }
+
+    raise HTTPException(status_code=404, detail="Task not found")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # AVAILABILITY
-# Hours are stored as arrays of {start, end} objects per day, e.g.:
+# Hours stored as arrays of {start, end} objects per day:
 #   "Monday": [{"start": "09:00", "end": "12:00"}, {"start": "14:00", "end": "17:00"}]
 #   "Tuesday": []   ← means unavailable that day
 # ══════════════════════════════════════════════════════════════════════════════
@@ -324,13 +335,6 @@ def getAvailability(worker_id: str) -> dict:
 # 📅 Update full weekly hours
 # -----------------------------
 def updateWeeklyHours(worker_id: str, hours: dict) -> dict:
-    """
-    hours = {
-        "Monday":    [{"start": "09:00", "end": "17:00"}],
-        "Tuesday":   [],   <- empty = unavailable
-        ...
-    }
-    """
     result = collection_worker.update_one(
         {"_id": worker_id},
         {"$set": {"hours": hours, "availability_updated_at": datetime.utcnow()}},
@@ -344,18 +348,15 @@ def updateWeeklyHours(worker_id: str, hours: dict) -> dict:
 # 📅 Update a single day
 # -----------------------------
 def updateDayHours(worker_id: str, day: str, slots: list) -> dict:
-    """
-    day   = "Monday"
-    slots = [{"start": "09:00", "end": "17:00"}]  or [] to clear
-    """
-    VALID_DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
     if day not in VALID_DAYS:
-        raise HTTPException(status_code=400, detail=f"Invalid day '{day}'. Must be one of {VALID_DAYS}")
-
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid day '{day}'. Must be one of {VALID_DAYS}"
+        )
     result = collection_worker.update_one(
         {"_id": worker_id},
         {"$set": {
-            f"hours.{day}":          slots,
+            f"hours.{day}":            slots,
             "availability_updated_at": datetime.utcnow(),
         }},
     )
@@ -372,8 +373,10 @@ def addUnavailableDates(worker_id: str, dates: list[str]) -> dict:
         try:
             datetime.strptime(d, "%Y-%m-%d")
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid date format '{d}'. Use YYYY-MM-DD.")
-
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid date format '{d}'. Use YYYY-MM-DD."
+            )
     result = collection_worker.update_one(
         {"_id": worker_id},
         {
@@ -416,49 +419,69 @@ def checkAvailabilityOnDate(worker_id: str, check_date: str) -> dict:
         raise HTTPException(status_code=404, detail="Worker not found")
 
     if not w.get("isAvailable", True):
-        return {"worker_id": worker_id, "date": check_date, "available": False,
-                "reason": "Worker is globally unavailable", "slots": None}
+        return {
+            "worker_id": worker_id,
+            "date":      check_date,
+            "available": False,
+            "reason":    "Worker is globally unavailable",
+            "slots":     None,
+        }
 
     if check_date in w.get("unavailable_dates", []):
-        return {"worker_id": worker_id, "date": check_date, "available": False,
-                "reason": "Worker marked this date as unavailable", "slots": None}
+        return {
+            "worker_id": worker_id,
+            "date":      check_date,
+            "available": False,
+            "reason":    "Worker marked this date as unavailable",
+            "slots":     None,
+        }
 
-    day_name = parsed.strftime("%A")   # e.g. "Monday"
+    day_name = parsed.strftime("%A")
     slots    = w.get("hours", {}).get(day_name, [])
 
     if not slots:
-        return {"worker_id": worker_id, "date": check_date, "available": False,
-                "reason": f"Worker does not work on {day_name}s", "slots": None}
+        return {
+            "worker_id": worker_id,
+            "date":      check_date,
+            "available": False,
+            "reason":    f"Worker does not work on {day_name}s",
+            "slots":     None,
+        }
 
-    return {"worker_id": worker_id, "date": check_date, "day": day_name,
-            "available": True, "slots": slots}
+    return {
+        "worker_id": worker_id,
+        "date":      check_date,
+        "day":       day_name,
+        "available": True,
+        "slots":     slots,
+    }
 
-def toggleWorkerAvailability(id: str, isAvailable: bool):
-    result = collection_worker.update_one(
-        {"_id": id},
-        {"$set": {"isAvailable": isAvailable, "availability_updated_at": datetime.utcnow()}},
-    )
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Worker not found")
-    return {"message": f"Worker marked as {'available' if isAvailable else 'unavailable'}", "isAvailable": isAvailable}
 
+# -----------------------------
+# ✏️ Update worker profile
+# -----------------------------
 def updateWorkerProfile(worker_id: str, update_data: dict) -> dict:
+    # No need for allowed_fields anymore - Pydantic already validated!
+    # But keep it for safety
     allowed_fields = {
         "firstName", "lastName", "address", "description",
-        "basePrice", "serviceAreas", "minHours", "skills",
+        "basePrice", "serviceArea", "minHours", "skills",
         "profilePhoto", "taskType",
     }
-    filtered = {k: v for k, v in update_data.items() if k in allowed_fields and v is not None}
+    
+    filtered = {k: v for k, v in update_data.items() if k in allowed_fields}
 
     if not filtered:
         raise HTTPException(status_code=400, detail="No valid fields to update")
 
+    # serviceArea is already a dict from Pydantic - no conversion needed!
     filtered["updatedAt"] = datetime.utcnow()
 
     result = collection_worker.update_one(
         {"_id": worker_id},
         {"$set": filtered},
     )
+    
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Worker not found")
 

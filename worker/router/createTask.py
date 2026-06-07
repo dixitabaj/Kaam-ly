@@ -13,7 +13,10 @@ from bson import ObjectId
 from ..router import notifications
 from ..config.database import collection_worker, db, worker_calendar
 from pydantic import BaseModel
-
+import cloudinary.uploader
+from ..config.cloudinary_config import cloudinary  # This imports the configured cloudinary
+import base64
+from io import BytesIO
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -245,7 +248,8 @@ async def _payment_reminder(task_id: str, userId: str, taskName: str, customer: 
     }))
 
 
-# ── Create Task ───────────────────────────────────────────────────────────────
+
+ 
 @router.post("/task")
 async def create_task(
     taskName:        str                        = Form(...),
@@ -263,23 +267,42 @@ async def create_task(
     note:            str                        = Form(...),
     serviceTime:     str                        = Form(...),
 ):
-    saved_files = []
+    # ── Upload images to Cloudinary ───────────────────────────────────────────
+    uploaded_image_urls: list[str] = []
     if taskImg:
-        for file in taskImg:
-            if hasattr(file, "filename") and file.filename:
-                file_path = os.path.join(UPLOAD_DIR, file.filename)
-                contents  = await file.read()
-                with open(file_path, "wb") as f:
-                    f.write(contents)
-                saved_files.append(file.filename)
-
+        for idx, file in enumerate(taskImg):
+            try:
+                contents = await file.read()
+                if not contents:
+                    continue
+                result = cloudinary.uploader.upload(
+                    contents,
+                    folder=f"tasks/{taskName}_{userId}",
+                    public_id=f"task_{int(datetime.now().timestamp())}_{idx}",
+                    resource_type="auto",
+                )
+                url = (result or {}).get("secure_url")
+                if url:
+                    uploaded_image_urls.append(url)
+                    print(f"[CLOUDINARY] Uploaded file {idx} → {url}")
+                else:
+                    print(f"[CLOUDINARY] No URL returned for file {idx}")
+            except Exception as e:
+                print(f"[CLOUDINARY] Error on file {idx}: {e}")
+                traceback.print_exc()
+ 
+    print(f"[CREATE_TASK] uploaded_image_urls = {uploaded_image_urls}")
+ 
+    # ── Validate worker ───────────────────────────────────────────────────────
     worker = workerRepo.showWorkerByID(assignedWorker)
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
-
-    best_prices   = []
-    selected_name = (selectedService or taskType or "").strip().lower()
-
+ 
+    # ── Resolve base price ────────────────────────────────────────────────────
+    best_prices:   list[float] = []
+    selected_name              = (selectedService or taskType or "").strip().lower()
+    base_price:    float | None = None
+ 
     for skill in getattr(worker, "skills", []) or []:
         if isinstance(skill, dict):
             price = skill.get("price") or skill.get("basePrice")
@@ -291,13 +314,14 @@ async def create_task(
             price = float(price) if price is not None else None
         except (TypeError, ValueError):
             price = None
+ 
         if price is not None:
             best_prices.append(price)
             if selected_name and name == selected_name:
                 base_price = price
                 break
-
-    if "base_price" not in locals():
+ 
+    if base_price is None:
         if best_prices:
             base_price = min(best_prices)
         else:
@@ -305,9 +329,10 @@ async def create_task(
                 price_data = workerRepo.getPriceByTask(taskType, assignedWorker)
                 base_price = float(price_data.get("price", 0) if price_data else 0)
             except Exception:
-                base_price = 0
-
-    task = {
+                base_price = 0.0
+ 
+    # ── Build task document ───────────────────────────────────────────────────
+    task_doc = {
         "taskName":         taskName,
         "taskType":         taskType,
         "taskDescrip":      taskDescrip,
@@ -316,19 +341,18 @@ async def create_task(
         "lat":              lat or "",
         "lng":              lng or "",
         "userId":           userId,
-        "taskImg":          saved_files or None,
+        "taskImg":          uploaded_image_urls,   # always a list, never None
         "status":           status.lower(),
         "assignedWorkerId": assignedWorker,
         "serviceDate":      serviceDate,
         "note":             note,
         "serviceTime":      serviceTime,
         "basePrice":        base_price,
-        # ID references — populated later when reports/refunds are created
         "report_id":        None,
         "refund_id":        None,
     }
-
-    task_id = await taskRepo.insert_task(task)
+ 
+    task_id = await taskRepo.insert_task(task_doc)
     if serviceDate and serviceTime:
         start_dt = datetime.combine(serviceDate.date(), datetime.strptime(serviceTime, "%H:%M").time())
         end_dt = start_dt + timedelta(hours=2)
@@ -763,44 +787,43 @@ def _create_cancellation_review_entry(
     total_cost:    float,
     now:           datetime,
 ) -> str | None:
+    """
+    Instead of inserting a new cancelled_tasks doc, we embed the review
+    data directly onto the task via a $set update.
+    Returns the task_id as the 'review id' (since data lives on the task).
+    """
     try:
-        doc = {
-            "taskId":        task_id,
-            "taskName":      task.get("taskName", ""),
-            "taskType":      task.get("taskType", ""),
-            "customerId":    str(task.get("userId", "")),
-            "workerId":      str(task.get("assignedWorkerId", "")),
-            "cancelledBy":   cancelled_by,
-            "cancelReason":  reason,
-            "cancelledAt":   now,
-            "totalCost":       total_cost,
-            "refundStatus":    refund["refund_status"],
-            "refundAmount":    refund["refund_amount"],
-            "penaltyAmount":   refund["penalty_amount"],
-            "surchargeApplied": refund.get("surcharge_pct", 0) > 0,
-            "surchargePct":    refund.get("surcharge_pct", 0),
-            "serviceDate":   task.get("serviceDate"),
-            "serviceTime":   task.get("serviceTime"),
-            "address":       task.get("address", ""),
-            "reviewStatus":  "pending" if refund["refund_status"] == "dispute" else "reviewed",
-            "adminNote":     None,
-            "reviewedBy":    None,
-            "reviewedAt":    None,
-            "isDispute":     refund["refund_status"] == "dispute",
-            "hasSurcharge":  refund.get("surcharge_pct", 0) > 0,
+        embedded = {
+            "cancellationReview": {
+                "cancelledBy":      cancelled_by,
+                "cancelReason":     reason,
+                "cancelledAt":      now,
+                "totalCost":        total_cost,
+                "refundStatus":     refund["refund_status"],
+                "refundAmount":     refund["refund_amount"],
+                "penaltyAmount":    refund["penalty_amount"],
+                "surchargeApplied": refund.get("surcharge_pct", 0) > 0,
+                "surchargePct":     refund.get("surcharge_pct", 0),
+                "reviewStatus":     "pending" if refund["refund_status"] == "dispute" else "reviewed",
+                "isDispute":        refund["refund_status"] == "dispute",
+                "hasSurcharge":     refund.get("surcharge_pct", 0) > 0,
+                "adminNote":        None,
+                "reviewedBy":       None,
+                "reviewedAt":       None,
+            }
         }
-
-        result = database.db["cancelled_tasks"].insert_one(doc)
-        inserted_id = str(result.inserted_id)
-        print(f"[CANCEL_REVIEW] Entry created: {inserted_id}")
-        return inserted_id
+        database.collection_task.update_one(
+            {"_id": ObjectId(task_id)},
+            {"$set": embedded},
+        )
+        print(f"[CANCEL_REVIEW] Embedded cancellationReview into task {task_id}")
+        # Return task_id so callers still get a non-None 'review id'
+        return task_id
 
     except Exception as e:
-        print(f"[CANCEL_REVIEW] Failed to create review entry (non-critical): {e}")
+        print(f"[CANCEL_REVIEW] Failed to embed review (non-critical): {e}")
         traceback.print_exc()
         return None
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # ADMIN ENDPOINTS — Cancelled Tasks Review Queue
 # ─────────────────────────────────────────────────────────────────────────────
@@ -892,7 +915,13 @@ async def get_worker_cancellation_stats(worker_id: str):
         "flagThreshold":       WORKER_FLAG_THRESHOLD,
     }
 
-
+@router.post("/task/{task_id}/decline")
+def decline_task_route(task_id: str, body: dict):
+    reason = body.get("reason", "")
+    success = taskRepo.decline_task(task_id, reason)
+    if not success:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return { "message": "Task declined", "task_id": task_id }
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN CANCEL ENDPOINT
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1171,29 +1200,64 @@ async def cancel_task(task_id: str, body: CancelRequest):
             print(f"[REPORT] Failed to create auto-report (non-critical): {e}")
             traceback.print_exc()
     # ── 11b. Create entry in refunds collection ─────────────────────────────
+        # ── 11b. Create entry in refunds collection ─────────────────────────────
         try:
+            # Fetch payment transaction for customer
+            payment_tx = database.collection_payment.find_one(
+                {"task_id": str(task_id), "type": "customer_payment", "status": {"$in": ["success", "paid", "pending"]}},
+                sort=[("created_at", -1)],
+            )
+            print("payment", payment_tx)
+
+
+            # Fetch worker doc for payment details
+            worker_doc = None
+            if worker_id:
+                try:
+                    worker_doc = database.collection_worker.find_one({"_id": ObjectId(str(worker_id))})
+                except Exception:
+                    worker_doc = database.collection_worker.find_one({"email": str(worker_id)})
+
+            # Resolve payment method
+            payment_method = (task.get("payment_method") or "").lower()
+            if payment_method not in ("khalti", "esewa") and payment_tx:
+                payment_method = (payment_tx.get("method") or "").lower()
+
+            worker_payment_method = (worker_doc.get("payment_method") or "").lower() if worker_doc else None
+            worker_payment_method = (worker_doc.get("paymentMethod") or "").lower() if worker_doc else None
+
+            print(f"[REFUND] worker_doc={worker_doc}")
+            print(f"[REFUND] worker_payment_method={worker_payment_method}")
+            print(f"[REFUND] worker paymentId={worker_doc.get('paymentId') if worker_doc else None}")
             refund_doc = {
-                "taskId":         task_id,
-                "userId":         user_id, # Customer being refunded
-                "workerId":       str(worker_id) if worker_id else None,
-                "amount":         refund_amount,
-                "currency":       "NPR",
-                "status":         "pending" if refund_status == "dispute" else "queued",
-                "reason":         body.reason,
-                "refundType":     refund_status, # e.g., "approved", "dispute"
-                "processedAt":    None,
-                "createdAt":      now,
-                "metadata": {
-                    "totalTaskCost": total_cost,
-                    "penaltyApplied": penalty_amount,
-                    "cancelledBy":    body.cancelled_by
-                }
+                "task_id":        task_id,
+                "report_id":      report_id,
+                "requester_id":   user_id,
+                "reported_id":    str(worker_id) if worker_id else None,
+                "requester_type": "customer",
+                "reported_type":  "worker",
+                "amount_customer": refund_amount,
+                "amount_worker":   penalty_amount,
+                "reason":          body.reason,
+                "total_amount":    total_cost,
+                "status":          "pending" if refund_status == "dispute" else "queued",
+                "refundStatus":    "pending" if refund_status == "dispute" else "queued",
+                "created_at":      now,
+                "evidence_files":  [],
+
+                # Customer payment details
+                "payment_method_customer":           payment_tx.get("method") if payment_tx else None,
+                "esewa_transaction_uuid_customer":   payment_tx.get("transaction_uuid") if payment_method == "esewa" else None,
+                "khalti_customer":                   payment_tx.get("transaction_uuid") if payment_method == "khalti" else None,
+
+                # Worker payment details
+                "payment_method_worker":             worker_doc.get("paymentMethod") if worker_doc else None,
+                "esewa_transaction_uuid_worker":     worker_doc.get("paymentId") if worker_doc and worker_payment_method == "esewa" else None,
+                "khalti_worker":                     worker_doc.get("paymentId") if worker_doc and worker_payment_method == "khalti" else None,
             }
-            
+
             refund_result = database.refund_collection.insert_one(refund_doc)
             refund_record_id = str(refund_result.inserted_id)
-            
-            # Store this ID on the task as well in Section 12
             id_refs["refund_id"] = refund_record_id
 
         except Exception as e:

@@ -4,6 +4,7 @@ import { fetchCustomerById, createTask } from '../../api/api';
 import { Camera, Upload } from "lucide-react";
 import BookingNavbar from '../../components/Navbar/Navbar';
 import Timer from '../../images/image.png';
+import ChatWidget from '../../components/HelpSection/HelpSection'
 
 // ── Toast System ──────────────────────────────────────────────────────────────
 const TOAST_DURATION = 5000;
@@ -388,6 +389,7 @@ const TaskDescriptionPage = ({ worker }) => {
   const [slotsError,   setSlotsError]   = useState(null);
 
   const noWorker = !selectedTasker;
+  console.log(selectedTasker);
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -664,7 +666,7 @@ const TaskDescriptionPage = ({ worker }) => {
       formData.append('serviceDate',     bookingDetails.date || '');
       formData.append('serviceTime',     bookingDetails.time || '');
       formData.append('note',            note || '');
-      photos.forEach((photo, i) => formData.append(`photo_${i}`, photo));
+      photos.forEach((photo, i) => formData.append(`taskImg`, photo));
 
       // ✅ Create task and capture the ID
       const createdTask = await createTask(formData);
@@ -877,8 +879,16 @@ const TaskDescriptionPage = ({ worker }) => {
       {/* Tasker Summary */}
       <div style={styles.taskerSummary}>
         <div style={styles.taskerAvatar}>
-          {selectedTasker.avatar || selectedTasker.name?.charAt(0) || 'W'}
-        </div>
+  {selectedTasker.profilePhoto ? (
+    <img 
+      src={selectedTasker.profilePhoto} 
+      alt={selectedTasker.name}
+      style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+    />
+  ) : (
+    selectedTasker.name?.charAt(0) || 'W'
+  )}
+</div>
         <div style={styles.taskerInfo}>
           <h3 style={styles.taskerName}>{selectedTasker.name}</h3>
           <div style={styles.taskerMeta}>
@@ -945,13 +955,7 @@ const TaskDescriptionPage = ({ worker }) => {
           <span style={{ fontWeight: 400, fontSize: 14, color: '#9ca3af' }}>(optional — max 5, 5MB each)</span>
         </h3>
         <div style={styles.photoOptions}>
-          <label style={{ ...styles.photoOption, opacity: photos.length >= 5 ? 0.5 : 1, cursor: photos.length >= 5 ? 'not-allowed' : 'pointer' }}>
-            <input type="file" accept="image/*" capture="environment"
-              onChange={handlePhotoUpload} style={styles.hiddenInput}
-              disabled={photos.length >= 5} />
-            <Camera size={24} />
-            <span>Take Photo</span>
-          </label>
+         
           <label style={{ ...styles.photoOption, opacity: photos.length >= 5 ? 0.5 : 1, cursor: photos.length >= 5 ? 'not-allowed' : 'pointer' }}>
             <input type="file" accept="image/*" multiple
               onChange={handlePhotoUpload} style={styles.hiddenInput}
@@ -1058,9 +1062,15 @@ const TaskDescriptionPage = ({ worker }) => {
           />
           <span style={styles.checkboxText}>
             I agree to pay the final amount as <strong>agreed with the worker</strong> and accept the{' '}
-            <span style={{ color: '#f6ad56', textDecoration: 'underline', cursor: 'pointer' }}>
-              terms and conditions
-            </span>
+           <span
+  style={{ color: '#f6ad56', textDecoration: 'underline', cursor: 'pointer' }}
+  onClick={(e) => {
+    e.preventDefault();
+    navigate('/terms');
+  }}
+>
+  terms and conditions
+</span>
           </span>
         </label>
         <FieldError field="terms" errors={errors} touched={touched} submitted={submitted} />
@@ -1181,6 +1191,7 @@ const TaskDescriptionPage = ({ worker }) => {
     <div style={styles.container}>
       <ToastContainer toasts={toasts} removeToast={removeToast} />
       <BookingNavbar />
+      <ChatWidget/>
       <span style={styles.backButton} onClick={() => navigate(-1)}></span>
       <div style={styles.contentWrapper}>
         <div style={styles.content}>
@@ -1260,7 +1271,7 @@ const styles = {
   },
   contentWrapper: {
     maxWidth: '1200px', padding: '20px',
-    marginTop: '0px', marginLeft: '120px',
+    marginTop: '0px', margin: '0 auto',
   },
   backButton: {
     position: 'sticky', top: '120px',

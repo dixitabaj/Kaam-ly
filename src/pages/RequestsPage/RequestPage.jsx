@@ -9,6 +9,8 @@ import { useNavigate } from "react-router-dom";
 import ReportModal from "../../components/Report/ReportSection";
 import { autoCancelExpiredTasks, autoCancelConfirmedUnpaidTasks } from "../../api/api";
 import PaymentFlow from "../../components/payment/Payment";
+import ChatWidget from '../../components/HelpSection/HelpSection'
+
 
 const API_BASE = "http://127.0.0.1:8000/api";
 const WS_BASE  = "ws://127.0.0.1:8000";
@@ -53,7 +55,7 @@ const useToast = () => {
 
   const add = useCallback((toast, dedupeKey) => {
     if (dedupeKey) {
-      if (shownRef.current.has(dedupeKey)) return; // already shown, skip
+      if (shownRef.current.has(dedupeKey)) return;
       shownRef.current.add(dedupeKey);
       setTimeout(() => shownRef.current.delete(dedupeKey), 15000);
     }
@@ -207,8 +209,6 @@ const PaymentDeadlineBadge = ({ confirmedAt }) => {
   );
 };
 
-
-
 // ── Worker/Admin Payment Release Deadline ──────────────────────────────────
 export const ReleaseDeadlineBadge = ({ completedAt }) => {
   const [timeLeft, setTimeLeft] = useState("");
@@ -229,12 +229,11 @@ export const ReleaseDeadlineBadge = ({ completedAt }) => {
     };
 
     tick();
-    const iv = setInterval(tick, 60000); // update every 1 min for efficiency
+    const iv = setInterval(tick, 60000);
     return () => clearInterval(iv);
   }, [completedAt]);
 
   if (!timeLeft) return null;
-  
 
   const overdue = timeLeft === "Release overdue";
   return (
@@ -295,7 +294,6 @@ const ChatPanel = ({ task, worker, customerId, onClose }) => {
   const workerId = task?.assignedWorkerId;
   const taskId   = task?._id;
 
-  // Fetch history
   useEffect(() => {
     if (!taskId || !workerId) return;
     setLoading(true);
@@ -306,7 +304,6 @@ const ChatPanel = ({ task, worker, customerId, onClose }) => {
       .finally(() => setLoading(false));
   }, [taskId, workerId]);
 
-  // Live WS
   useEffect(() => {
     if (!customerId || !taskId) return;
     const ws = new WebSocket(`${WS_BASE}/ws/chat/${taskId}/${customerId}`);
@@ -343,7 +340,6 @@ const ChatPanel = ({ task, worker, customerId, onClose }) => {
     try { return new Date(d).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" }); } catch { return ""; }
   };
 
-  // Group messages by date
   const grouped = messages.reduce((acc, msg) => {
     const date = msg.createdAt
       ? new Date(msg.createdAt).toLocaleDateString("en-US", { month:"short", day:"numeric" })
@@ -504,30 +500,29 @@ const RateReviewModal = ({ task, worker, customerId, onClose, onSubmitted }) => 
   const [error, setError]           = useState(null);
 
   const handleSubmit = async () => {
-  if (!rating) { setError("Please select a rating."); return; }
-  setSubmitting(true); setError(null);
-  try {
-    const res = await fetch(`${API_BASE}/reviews`, {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ taskId:task._id, workerId:task.assignedWorkerId, customerId, rating, comment }),
-    });
+    if (!rating) { setError("Please select a rating."); return; }
+    setSubmitting(true); setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/reviews`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ taskId:task._id, workerId:task.assignedWorkerId, customerId, rating, comment }),
+      });
 
-    // ADD THIS:
-    if (res.status === 409 || res.status === 400) {
-      const data = await res.json();
-      const msg = data.detail || data.message || "";
-      if (msg.toLowerCase().includes("already") || msg.toLowerCase().includes("exist")) {
-        onClose();
-        onSubmitted("already_reviewed"); // pass signal up
-        return;
+      if (res.status === 409 || res.status === 400) {
+        const data = await res.json();
+        const msg = data.detail || data.message || "";
+        if (msg.toLowerCase().includes("already") || msg.toLowerCase().includes("exist")) {
+          onClose();
+          onSubmitted("already_reviewed");
+          return;
+        }
       }
-    }
 
-    if (!res.ok) throw new Error("Failed to submit review");
-    onSubmitted("success");
-    onClose();
-  } catch(e) { setError(e.message); } finally { setSubmitting(false); }
-};
+      if (!res.ok) throw new Error("Failed to submit review");
+      onSubmitted("success");
+      onClose();
+    } catch(e) { setError(e.message); } finally { setSubmitting(false); }
+  };
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:2000, backdropFilter:"blur(4px)" }} onClick={onClose}>
@@ -537,7 +532,13 @@ const RateReviewModal = ({ task, worker, customerId, onClose, onSubmitted }) => 
           <button onClick={onClose} style={{ background:"#f5efe6", border:"none", width:"30px", height:"30px", borderRadius:"50%", cursor:"pointer", color:"#78716c", display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:"10px", padding:"12px", background:"#fffbf2", borderRadius:"12px", marginBottom:"1.25rem", border:"1px solid #fde68a" }}>
-          <div style={{ width:"38px", height:"38px", background:"linear-gradient(135deg,#f6a623,#e8890c)", borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", color:"white", fontWeight:"800", fontSize:"16px", flexShrink:0 }}>{worker?.firstName?.charAt(0)||"W"}</div>
+          <div style={{ width:"46px", height:"46px", background:"linear-gradient(135deg,#f6a623,#e8890c)", borderRadius:"50%", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"18px", color:"white", fontWeight:"800", boxShadow:"0 2px 8px rgba(246,166,35,0.3)", overflow:"hidden" }}>
+            {worker?.profilePhoto ? (
+              <img src={worker.profilePhoto} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", objectPosition:"center top", borderRadius:"50%", display:"block" }}/>
+            ) : (
+              worker?.firstName?.charAt(0) || <User size={16} color="white"/>
+            )}
+          </div>
           <div>
             <div style={{ fontWeight:"700", fontSize:"14px", color:"#1c1008" }}>{worker?.firstName} {worker?.lastName}</div>
             <div style={{ fontSize:"12px", color:"#a8601a" }}>{task.taskName}</div>
@@ -652,20 +653,31 @@ const CancelTaskModal = ({ task, onClose, onSubmit }) => {
 // ── Task Detail Modal ─────────────────────────────────────────────────────────
 const TaskModal = ({ task, worker, setShowDetailsModal }) => {
   const navigate = useNavigate();
-  const released = isReleased(task);
+  const released       = isReleased(task);
   const hourlyRate     = worker?.basePrice ?? worker?.hourlyRate ?? worker?.skills?.[0]?.price ?? null;
   const estimatedHours = task.estimatedHours || task.completionTime;
 
+  // ── UPDATED: full timeline with all timestamp fields ──────────────────────
   const timelineSteps = [
     { label:"Created",   field:"createdAt",   color:"#a8a29e" },
     { label:"Accepted",  field:"acceptedAt",  color:"#b45309" },
     { label:"Confirmed", field:"confirmedAt", color:"#6d28d9" },
+    { label:"Paid",      field:"paid_at",     color:"#059669" },
     { label:"Started",   field:"startedAt",   color:"#1e40af" },
     { label:"Completed", field:"completedAt", color:"#065f46" },
-    { label:"Released",  field:"releasedAt",  color:"#0369a1" },
+    { label:"Released",  field:"released_at", color:"#0891b2" },
+    { label:"Disputed",  field:"disputedAt",  color:"#dc2626" },
+    { label:"Dispute Resolved",  field:"disputeResolvedAt",  color:"#059669" },
     { label:"Declined",  field:"declinedAt",  color:"#991b1b" },
     { label:"Cancelled", field:"cancelledAt", color:"#991b1b" },
-  ].filter(s => task[s.field]);
+  ].filter(s => {
+    const v = task[s.field];
+    return v && v !== "null" && v !== "undefined" && v !== "";
+  });
+
+  const disputeVal = task.dispute;
+  const isDisputeOpen     = disputeVal === true || disputeVal === "true";
+  const isDisputeRejected = disputeVal === "rejected";
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000, backdropFilter:"blur(4px)" }} onClick={()=>setShowDetailsModal(false)}>
@@ -676,8 +688,12 @@ const TaskModal = ({ task, worker, setShowDetailsModal }) => {
         </div>
 
         <div style={{ display:"flex", alignItems:"flex-start", gap:"12px", marginBottom:"1.25rem" }}>
-          <div style={{ width:"48px", height:"48px", background:"linear-gradient(135deg,#f6a623,#e8890c)", borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"18px", color:"white", fontWeight:"800", flexShrink:0 }}>
-            {worker?.firstName?.charAt(0)||"W"}
+          <div style={{ width:"46px", height:"46px", background:"linear-gradient(135deg,#f6a623,#e8890c)", borderRadius:"50%", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"18px", color:"white", fontWeight:"800", boxShadow:"0 2px 8px rgba(246,166,35,0.3)", overflow:"hidden" }}>
+            {worker?.profilePhoto ? (
+              <img src={worker.profilePhoto} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", objectPosition:"center top", borderRadius:"50%", display:"block" }}/>
+            ) : (
+              worker?.firstName?.charAt(0) || <User size={16} color="white"/>
+            )}
           </div>
           <div style={{ flex:1 }}>
             <div style={{ fontWeight:"800", fontSize:"16px", color:"#1c1008" }}>{worker?`${worker.firstName} ${worker.lastName}`:"Worker"}</div>
@@ -686,12 +702,39 @@ const TaskModal = ({ task, worker, setShowDetailsModal }) => {
               <span style={{ fontSize:"12px", fontWeight:"700", color:"#1c1008" }}>{worker?.ratings??0}</span>
               <span style={{ fontSize:"12px", color:"#a8a29e" }}>· {worker?.noOfCompletedTask||0} jobs</span>
             </div>
-            {worker&&<button onClick={()=>{setShowDetailsModal(false);navigate(`/worker/${worker._id||worker.id}`);}} style={{ marginTop:"4px", fontSize:"11px", color:"#f6a623", background:"none", border:"none", cursor:"pointer", fontWeight:"700", padding:0, textDecoration:"underline" }}>View Profile →</button>}
+            {worker&&<button onClick={()=>{setShowDetailsModal(false);navigate(`/workers/${worker._id||worker.id}`);}} style={{ marginTop:"4px", fontSize:"11px", color:"#f6a623", background:"none", border:"none", cursor:"pointer", fontWeight:"700", padding:0, textDecoration:"underline" }}>View Profile →</button>}
           </div>
           <StatusPill status={task.status} released={released}/>
         </div>
 
-        {(task.taskDescrip||task.taskName)&&<p style={{ fontSize:"13px", color:"#57534e", lineHeight:"1.7", margin:"0 0 1.25rem", fontStyle:"italic" }}>{task.taskDescrip||task.taskName}</p>}
+        {/* ── Dispute banners ── */}
+        {isDisputeOpen && (
+          <div style={{ display:"flex", alignItems:"flex-start", gap:"8px", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:"10px", padding:"10px 14px", marginBottom:"1.25rem", fontSize:"12px", color:"#991b1b" }}>
+            <Flag size={14} color="#ef4444" style={{ flexShrink:0, marginTop:"1px" }}/>
+            <div>
+              <span style={{ fontWeight:"700", display:"block", marginBottom:"2px" }}>Dispute Open 🔍</span>
+              <span style={{ color:"#7f1d1d" }}>This task has an open dispute currently under admin review.</span>
+            </div>
+          </div>
+        )}
+        {isDisputeRejected && (
+          <div style={{ display:"flex", alignItems:"flex-start", gap:"8px", background:"#f0fdf4", border:"1px solid #a7f3d0", borderRadius:"10px", padding:"10px 14px", marginBottom:"1.25rem", fontSize:"12px", color:"#065f46" }}>
+            <CheckCircle size={14} color="#10b981" style={{ flexShrink:0, marginTop:"1px" }}/>
+            <div>
+              <span style={{ fontWeight:"700", display:"block", marginBottom:"2px" }}>Dispute Resolved</span>
+              <span>The dispute for this task was reviewed and declined by admin.</span>
+            </div>
+          </div>
+        )}
+
+        <div style={{ fontSize:"14px", color:"#1c1008", fontWeight:"600", marginBottom:"14px" }}>
+          <span style={{ color:"#a8a29e", fontWeight:"500" }}>Task details: </span>
+          {task.taskName||task.taskDescrip||"—"}
+        </div>
+        <div style={{ fontSize:"14px", color:"#1c1008", fontWeight:"600", marginBottom:"14px" }}>
+          <span style={{ color:"#a8a29e", fontWeight:"500" }}>Notes: </span>
+          {task.taskDescrip||"—"}
+        </div>
 
         <div style={{ display:"flex", flexDirection:"column", marginBottom:"1.25rem", background:"#faf7f2", borderRadius:"12px", overflow:"hidden" }}>
           {[
@@ -711,25 +754,52 @@ const TaskModal = ({ task, worker, setShowDetailsModal }) => {
 
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 16px", background:"#fffbf2", borderRadius:"10px", border:"1px solid #fde68a", marginBottom:"1.25rem" }}>
           <span style={{ fontSize:"12px", fontWeight:"700", color:"#a8601a" }}>Total Amount</span>
-          <span style={{ fontSize:"20px", fontWeight:"900", color:"#f6a623" }}>{task.totalCost?`NPR ${task.totalCost}`:"NPR —"}</span>
+          <div>
+            <span style={{ fontSize:"20px", fontWeight:"900", color:"#f6a623" }}>{task.totalCost?`NPR ${task.totalCost} `:"NPR —"}</span>
+            <span style={{ fontSize:"14px", fontWeight:"900", color:"#f0ac3d" }}>{task.totalCost?`including Rs.${task.platformFee}`:"NPR —"}</span>
+          </div>
         </div>
 
-        {task.actualHours&&<div style={{ display:"flex", justifyContent:"space-between", marginBottom:"1.25rem" }}><span style={{ fontSize:"13px", fontWeight:"700", color:"#065f46" }}>Actual Hours</span><span style={{ fontSize:"14px", fontWeight:"800", color:"#065f46" }}>{task.actualHours} hrs</span></div>}
-
-        {timelineSteps.length>0&&(
+        {/* ── UPDATED: Full timeline ── */}
+        {timelineSteps.length > 0 && (
           <div style={{ marginBottom:"1.5rem" }}>
             <p style={{ fontSize:"10px", fontWeight:"700", color:"#a8a29e", textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 12px" }}>Timeline</p>
             <div style={{ position:"relative" }}>
-              {timelineSteps.length>1&&<div style={{ position:"absolute", left:"5px", top:"10px", bottom:"10px", width:"2px", background:"#f5efe6", borderRadius:"2px" }}/>}
-              {timelineSteps.map((step,i)=>(
+              {timelineSteps.length > 1 && (
+                <div style={{ position:"absolute", left:"5px", top:"10px", bottom:"10px", width:"2px", background:"#f5efe6", borderRadius:"2px" }}/>
+              )}
+              {timelineSteps.map((step, i) => (
                 <div key={i} style={{ position:"relative", display:"flex", alignItems:"flex-start", gap:"14px", paddingLeft:"22px", marginBottom:i<timelineSteps.length-1?"12px":0 }}>
                   <div style={{ position:"absolute", left:0, top:"4px", width:"12px", height:"12px", borderRadius:"50%", background:step.color, border:"2px solid white", boxShadow:`0 0 0 2px ${step.color}` }}/>
                   <div>
                     <div style={{ display:"flex", alignItems:"baseline", gap:"8px", flexWrap:"wrap" }}>
                       <span style={{ fontSize:"12px", fontWeight:"700", color:step.color }}>{step.label}</span>
-                      <span style={{ fontSize:"11px", color:"#a8a29e" }}>{new Date(task[step.field]).toLocaleString("en-US",{month:"short",day:"numeric",year:"numeric",hour:"2-digit",minute:"2-digit"})}</span>
+                      <span style={{ fontSize:"11px", color:"#a8a29e" }}>
+                       {(() => {
+  const raw = task[step.field];
+  const utc = typeof raw === "string" && !raw.endsWith("Z") && !raw.includes("+") ? raw + "Z" : raw;
+  return new Date(utc).toLocaleString("en-US", {
+    month:"short", day:"numeric", year:"numeric",
+    hour:"2-digit", minute:"2-digit", timeZone:"Asia/Kathmandu",
+  });
+})()}
+                       </span>
                     </div>
-                    {step.field==="cancelledAt"&&task.cancelReason&&<span style={{ fontSize:"11px", color:"#991b1b", background:"#fef2f2", padding:"3px 8px", borderRadius:"6px", border:"1px solid #fecaca", fontStyle:"italic", display:"block", marginTop:"4px" }}>{task.cancelReason}</span>}
+                    {step.field === "cancelledAt" && task.cancelReason && (
+                      <span style={{ fontSize:"11px", color:"#991b1b", background:"#fef2f2", padding:"3px 8px", borderRadius:"6px", border:"1px solid #fecaca", fontStyle:"italic", display:"block", marginTop:"4px" }}>
+                        {task.cancelReason}
+                      </span>
+                    )}
+                    {step.field === "disputedAt" && (
+                      <span style={{ fontSize:"11px", color:"#dc2626", background:"#fef2f2", padding:"3px 8px", borderRadius:"6px", border:"1px solid #fecaca", display:"block", marginTop:"4px" }}>
+                        {isDisputeRejected ? "Dispute rejected by admin" : "Dispute under review"}
+                      </span>
+                    )}
+                    {step.field === "resolvedAt" && (
+  <span style={{ fontSize: "11px", color: "#0891b2", background: "#e0f2fe", padding: "3px 8px", borderRadius: "6px", border: "1px solid #bae6fd", display: "block", marginTop: "4px" }}>
+    Dispute resolved — payment released
+  </span>
+)}
                   </div>
                 </div>
               ))}
@@ -755,11 +825,11 @@ const TaskCard = ({
   const paid           = isPaid(task);
   const estimatedHours = task.estimatedHours || task.completionTime;
   const showDeadline   = task.status === "confirmed" && !paid && task.confirmedAt;
-  console.log(showDeadline, task.status, paid, task.confirmedAt);
-  console.log(task);
-  // CHANGE:
-  console.log("completedAt raw:", task.completedAt);
-  console.log("completedAt parsed:", new Date(task.completedAt).toLocaleString());
+
+  const disputeVal        = task.dispute;
+  const isDisputeOpen     = disputeVal === true || disputeVal === "true";
+  const isDisputeRejected = disputeVal === "rejected";
+
   return (
     <div
       onClick={() => handleViewDetails(task)}
@@ -782,8 +852,12 @@ const TaskCard = ({
         {/* Left: Worker */}
         <div style={{ width:"200px", flexShrink:0, paddingRight:"24px", borderRight:"1px solid #f0ebe2" }}>
           <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"10px" }}>
-            <div style={{ width:"46px", height:"46px", background:"linear-gradient(135deg,#f6a623,#e8890c)", borderRadius:"50%", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"18px", color:"white", fontWeight:"800", boxShadow:"0 2px 8px rgba(246,166,35,0.3)" }}>
-              {worker?.firstName?.charAt(0)||<User size={16} color="white"/>}
+            <div style={{ width:"46px", height:"46px", background:"linear-gradient(135deg,#f6a623,#e8890c)", borderRadius:"50%", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"18px", color:"white", fontWeight:"800", boxShadow:"0 2px 8px rgba(246,166,35,0.3)", overflow:"hidden" }}>
+              {worker?.profilePhoto ? (
+                <img src={worker.profilePhoto} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", objectPosition:"center top", borderRadius:"50%", display:"block" }}/>
+              ) : (
+                worker?.firstName?.charAt(0) || <User size={16} color="white"/>
+              )}
             </div>
             <div style={{ minWidth:0 }}>
               <div style={{ fontWeight:"700", fontSize:"14px", color:"#1c1008", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -801,27 +875,27 @@ const TaskCard = ({
 
           {worker&&(
             <button
-              onClick={e=>{e.stopPropagation();navigate(`/worker/${worker._id||worker.id}`);}}
+              onClick={e=>{e.stopPropagation();navigate(`/workers/${worker._id||worker.id}`);}}
               style={{ fontSize:"11px", color:"#f6a623", background:"none", border:"none", cursor:"pointer", fontWeight:"700", padding:0, textDecoration:"underline", marginBottom:"10px", display:"block" }}
             >View Profile</button>
           )}
-
 
           {showDeadline&&(
             <div style={{ marginTop:"8px" }}>
               <PaymentDeadlineBadge confirmedAt={task.confirmedAt}/>
             </div>
           )}
-          {task.status === "completed" && !isReleased(task) && task.completedAt && (
-  <div style={{ marginTop:"8px" }}>
-    <ReleaseDeadlineBadge completedAt={task.completedAt}/>
-  </div>
-)}
-           
+          {task.status === "completed" && !isReleased(task) && task.completedAt &&
+            !isDisputeOpen && !isDisputeRejected && (
+            <div style={{ marginTop:"8px" }}>
+              <ReleaseDeadlineBadge completedAt={task.completedAt}/>
+            </div>
+          )}
         </div>
 
         {/* Middle: Details */}
         <div style={{ flex:1, paddingLeft:"24px", paddingRight:"24px", borderRight:"1px solid #f0ebe2" }}>
+
           <div style={{ fontSize:"14px", color:"#1c1008", fontWeight:"600", marginBottom:"14px" }}>
             <span style={{ color:"#a8a29e", fontWeight:"500" }}>Task details: </span>
             {task.taskName||task.taskDescrip||"—"}
@@ -862,6 +936,24 @@ const TaskCard = ({
             )}
           </div>
 
+          {/* Dispute banners on card */}
+          {isDisputeOpen && (
+            <div style={{ display:"flex", alignItems:"center", gap:"8px", padding:"8px 12px", borderRadius:"8px", marginBottom:"10px", background:"#fef2f2", border:"1px solid #fecaca" }}>
+              <Flag size={12} color="#991b1b"/>
+              <span style={{ fontSize:"12px", fontWeight:"700", color:"#991b1b" }}>
+                Disputed — payment release blocked until resolved by admin
+              </span>
+            </div>
+          )}
+          {isDisputeRejected && (
+            <div style={{ display:"flex", alignItems:"center", gap:"8px", padding:"8px 12px", borderRadius:"8px", marginBottom:"10px", background:"#f0fdf4", border:"1px solid #a7f3d0" }}>
+              <CheckCircle size={12} color="#065f46"/>
+              <span style={{ fontSize:"12px", fontWeight:"700", color:"#065f46" }}>
+                Dispute rejected — payment can now be released
+              </span>
+            </div>
+          )}
+
           {/* Action buttons */}
           <div style={{ display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap" }}>
             {activeTab==="confirmed"&&(
@@ -875,18 +967,13 @@ const TaskCard = ({
                 </Btn>
               </>
             )}
-             {activeTab==="pending"&&(
+            {activeTab==="pending"&&(
               <>
-                {paid
-                  ? <Btn variant="blue" onClick={e=>{e.stopPropagation();openPaymentModal(task._id,task.assignedWorkerId,customerId);}}>View Payment</Btn>
-                  : <Btn variant="primary" onClick={e=>{e.stopPropagation();openPaymentModal(task._id,task.assignedWorkerId,customerId);}}>Make Payment</Btn>
-                }
                 <Btn variant="primary" onClick={e=>{e.stopPropagation();openChat(task);}}>
                   <MessageCircle size={12}/> Chat
                 </Btn>
               </>
             )}
-
             {activeTab==="in_progress"&&(
               <>
                 <Btn variant="blue" onClick={e=>{e.stopPropagation();openPaymentModal(task._id,task.assignedWorkerId,customerId);}}>View Payment</Btn>
@@ -895,7 +982,6 @@ const TaskCard = ({
                 </Btn>
               </>
             )}
-
             {activeTab==="declined"&&(
               <>
                 <Btn variant="red" onClick={e=>{e.stopPropagation();onReport(task);}}>
@@ -903,8 +989,7 @@ const TaskCard = ({
                 </Btn>
               </>
             )}
-
-             {activeTab==="cancelled"&&(
+            {activeTab==="cancelled"&&(
               <>
                 <Btn variant="red" onClick={e=>{e.stopPropagation();onReport(task);}}>
                   <Flag size={11}/> Report
@@ -912,13 +997,21 @@ const TaskCard = ({
               </>
             )}
 
-            {activeTab==="completed"&&(
+            {activeTab === "completed" && (
               <>
-                {released?(
+                {released ? (
                   <span style={{ display:"inline-flex", alignItems:"center", gap:"4px", padding:"6px 13px", borderRadius:"9999px", fontSize:"12px", fontWeight:"700", color:"#0369a1", background:"#e0f2fe", border:"1px solid #bae6fd" }}>
                     <CheckCircle size={11}/> Released
                   </span>
-                ):(
+                ) : isDisputeOpen ? (
+                  // Open dispute — blocked
+                  <span style={{ display:"inline-flex", alignItems:"center", gap:"4px", padding:"6px 13px", borderRadius:"9999px", fontSize:"12px", fontWeight:"700", color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca" }}>
+                    <Flag size={11}/> Disputed
+                  </span>
+                ) : isDisputeRejected ? (
+                  // Dispute was rejected — allow release
+                  <Btn variant="green" onClick={e=>{e.stopPropagation();releasePayment(task._id,task);}}>Release Payment</Btn>
+                ) : (
                   <Btn variant="green" onClick={e=>{e.stopPropagation();releasePayment(task._id,task);}}>Release Payment</Btn>
                 )}
                 <Btn variant="amber" onClick={e=>{e.stopPropagation();onRateReview(task);}}>
@@ -955,7 +1048,7 @@ const TaskCard = ({
         <div style={{ width:"160px", flexShrink:0, paddingLeft:"24px", display:"flex", flexDirection:"column" }}>
           <div style={{ marginBottom:"12px" }}>
             <div style={{ fontSize:"10px", color:"#9ca3af", textTransform:"uppercase", letterSpacing:"0.6px", marginBottom:"2px" }}>Estimated price</div>
-            <div style={{ fontSize:"15px", fontWeight:"700", color:"#111827" }}>{formatCurrency(task.workerEarnings||task.totalCost)}</div>
+            <div style={{ fontSize:"15px", fontWeight:"700", color:"#111827" }}>{formatCurrency(task.totalCost)}</div>
           </div>
           <div style={{ marginBottom:"12px" }}>
             <div style={{ fontSize:"10px", color:"#9ca3af", textTransform:"uppercase", letterSpacing:"0.6px", marginBottom:"2px" }}>Estimated hours</div>
@@ -1011,11 +1104,11 @@ const CustomerTaskPage = () => {
 
   const openPaymentModal = (taskId, workerId, cid) => setPaymentModal({ taskId, userId: cid, role: "customer" });
   const openChat = (task) => {
-  const workerId = task.assignedWorkerId;
-  if (workerId && customerId) {
-    navigate(`/chat/${customerId}/${workerId}`);
-  }
-};
+    const workerId = task.assignedWorkerId;
+    if (workerId && customerId) {
+      navigate(`/chat/${customerId}/${workerId}`);
+    }
+  };
 
   const fetchTasks = useCallback(async (opts = {}) => {
     if (!customerId) return;
@@ -1029,7 +1122,6 @@ const CustomerTaskPage = () => {
 
       if (opts.syncSelected) {
         setSelectedTask(prev => prev ? (fetched.find(t => t._id === prev._id) || prev) : prev);
-        setChatTask(prev => prev ? (fetched.find(t => t._id === prev._id) || prev) : prev);
       }
 
       const ids = [...new Set(fetched.map(t => t.assignedWorkerId).filter(Boolean))];
@@ -1054,12 +1146,11 @@ const CustomerTaskPage = () => {
   }, [fetchTasks]);
 
   const handleWsMessage = useCallback((data) => {
-  if (data.type !== "task_status") return;
-  console.log("WS MESSAGE:", data); // check what fields exist
-  fetchTasks({ syncSelected: true });
-  const toast = makeToast(data.status, data.taskName || null);
-  if (toast) addToast(toast, `${data.taskId}-${data.status}`);
-}, [fetchTasks]);
+    if (data.type !== "task_status") return;
+    fetchTasks({ syncSelected: true });
+    const toast = makeToast(data.status, data.taskName || null);
+    if (toast) addToast(toast, `${data.taskId}-${data.status}`);
+  }, [fetchTasks]);
 
   const wsUrl = customerId ? `${WS_BASE}/ws/task-updates/${customerId}` : null;
   useReconnectingWebSocket(wsUrl, handleWsMessage);
@@ -1070,12 +1161,9 @@ const CustomerTaskPage = () => {
       try {
         const { initMessaging } = await import("../../api/firebase");
         const { onMessage }     = await import("firebase/messaging");
-        
         const messaging = await initMessaging();
         if (!messaging) return;
-        unsubscribe = onMessage(messaging, (payload) => {
-  fetchTasks({ syncSelected: true });
-});
+        unsubscribe = onMessage(messaging, () => { fetchTasks({ syncSelected: true }); });
       } catch {}
     };
     setup();
@@ -1088,15 +1176,12 @@ const CustomerTaskPage = () => {
   const confirmReleasePayment = async () => {
     if (!releaseTaskData) return;
     setReleasing(true);
-    console.log("Releasing payment for task:", releaseTaskData);
-    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token"); 
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
     try {
       const res  = await fetch(`http://localhost:8000/customer/release/${releaseTaskData._id}`, {
         method: "PATCH",
-        headers: { "Content-Type":"application/json", 
-          "Authorization":`Bearer ${token}` },
+        headers: { "Content-Type":"application/json", "Authorization":`Bearer ${token}` },
       });
-      console.log("Release response:", res);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to release payment");
       setReleaseTaskData(null);
@@ -1296,24 +1381,27 @@ const CustomerTaskPage = () => {
           customerId={customerId}
           onClose={()=>setRateReviewTask(null)}
           onSubmitted={(result) => {
-  if (result === "already_reviewed") {
-    addToast({ color: "#b45309", message: "You've already reviewed this worker." });
-  } else {
-    showSuccess("Review submitted!");
-  }
-}}
+            if (result === "already_reviewed") {
+              addToast({ color: "#b45309", message: "You've already reviewed this worker." });
+            } else {
+              addToast({ color: "#065f46", message: "Review submitted successfully!" });
+            }
+          }}
         />
       )}
       {reportTask&&(
-  <ReportModal
-    taskId={reportTask._id || reportTask.id}
-    task={reportTask}
-    worker={workers[reportTask.assignedWorkerId]}
-    customerId={customerId}
-    onClose={()=>setReportTask(null)}
-    onSubmitted={()=>showSuccess("Report submitted. We'll review it.")}
-  />
-)}
+        <ReportModal
+          taskId={reportTask._id || reportTask.id}
+          task={reportTask}
+          worker={workers[reportTask.assignedWorkerId]}
+          customerId={customerId}
+          onClose={()=>setReportTask(null)}
+          onSubmitted={()=>{
+            setReportTask(null);
+            addToast({ color: "#059669", message: "Report submitted. We'll review it." });
+          }}
+        />
+      )}
       {cancelTaskData&&(
         <CancelTaskModal
           task={cancelTaskData}
@@ -1331,6 +1419,7 @@ const CustomerTaskPage = () => {
       )}
 
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <ChatWidget/>
     </div>
   );
 };

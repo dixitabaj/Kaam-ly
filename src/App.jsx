@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { initForegroundListener } from './api/firebase'; 
 import Login from './pages/Login/Login';
 import ServiceRegistration from './pages/ServiceRegistration/ServiceRegistration';
 import CustomerRegistration from './pages/CustomerRegistration/CustomerRegistration';
@@ -33,6 +34,11 @@ import CompleteProfile from './components/CompleteProfile/CompleteProfile';
 import RefundManagement from './pages/admin/RefundManagement';
 import WorkerSettings from './pages-worker/workerProfile';
 import FraudDashboard from './pages/admin/FraudDetectionBoard';
+import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute';
+import SenderProtectedRoute from './components/ProtectedRoute/SenderProtectedRoute';
+import TermsAndCondition from './components/TermsAndCondition/TermsAndCondition'
+
+initForegroundListener();
 function App() {
   return (
     <div>
@@ -43,45 +49,129 @@ function App() {
         <Routes>
 
           <Route path="/" element={<LandingPage />} />
-          <Route path="/customer/pay/:taskId/:userId/:role" element={<PaymentFlow />} />
+          <Route path="/customer/pay/:taskId/:userId/:role" element={
+    <ProtectedRoute allowedRoles={["customer"]}>
+      <PaymentFlow />
+    </ProtectedRoute>
+  } />
+  <Route path="/terms" element={<TermsAndCondition/>}/>
           <Route path="/login" element={<Login />} />
           <Route path="/register-worker" element={<ServiceRegistration />} />
           <Route path="/register-customer" element={<CustomerRegistration />} />
           <Route path="/home" element={<TaskBookingUI />} />
-          <Route path="/workers/:id" element={<WorkerDescription />} />
-          <Route path="/task/:id" element={<TaskBookingPage/>} />
+          <Route path="/workers/:id" element={
+    <ProtectedRoute allowedRoles={["customer"]}>
+      <WorkerDescription />
+    </ProtectedRoute>
+  }/>
+          <Route path="/task/:id" element={
+    <ProtectedRoute allowedRoles={["customer"]}>
+      <TaskBookingPage />
+    </ProtectedRoute>
+  }/>
           <Route path="/landing" element={<LandingPage />} />
           <Route path="/complete-profile" element={<CompleteProfile/>} />
-<Route path="/chat/:senderId/:recieverId" element={<MessagePage />} />
-<Route path="/fraud" element={<FraudDashboard />} />
+<Route
+  path="/chat/:senderId/:recieverId"
+  element={
+    <SenderProtectedRoute>
+      <MessagePage />
+    </SenderProtectedRoute>
+  }
+/>
 
-          <Route path="/refund" element={<RefundManagement/>}/>
-<Route path="/chat/:senderId" element={<MessagePage />} />
+<Route
+  path="/chat/:senderId"
+  element={
+    <SenderProtectedRoute>
+      <MessagePage />
+    </SenderProtectedRoute>
+  }
+/>
+<Route path="/fraud" element={
+    <ProtectedRoute allowedRoles={["admin"]}>
+      <FraudDashboard />
+    </ProtectedRoute>
+  }/>
+
+          <Route path="/refund" element={
+    <ProtectedRoute allowedRoles={["admin"]}>
+      <RefundManagement />
+    </ProtectedRoute>
+  }/>
          <Route path="/tasks/user/:id" element={<TaskListPage/>} />
          <Route path="/task-request" element={<TaskBookingPage />} />
-         <Route path="/workerList" element={<WorkerList />} />
+         <Route path="/workerList" element={
+    <ProtectedRoute allowedRoles={["customer"]}>
+      <WorkerList />
+    </ProtectedRoute>
+  } />
           <Route path="/helpSection" element={<HelpSection/>}/>
-         <Route path="/taskDescription" element={<TaskDescriptionPage />} />
+         <Route path="/taskDescription"element={
+    <ProtectedRoute allowedRoles={["customer"]}>
+      <TaskDescriptionPage />
+    </ProtectedRoute>
+  } />
          <Route path="/worker/taskDetails" element={<TaskDetails/>}/>
-         <Route path="/workerRequestPage/:workerId" element={<WorkerRequestPage />} />
-         <Route path = "/worker/dashboard/reviews/:workerId" element={<Reviews/>}/>
+         <Route path="/workerRequestPage/:workerId" element={
+    <ProtectedRoute allowedRoles={["worker"]}>
+      <WorkerRequestPage />
+    </ProtectedRoute>
+  } />
+         <Route path = "/worker/dashboard/reviews/:workerId" element={
+    <ProtectedRoute allowedRoles={["worker"]}>
+      <Reviews />
+    </ProtectedRoute>
+  } />
 
-         <Route path="/worker/dashboard/overview/:workerId" element={<DashboardOverview />} />
+         <Route path="/worker/dashboard/overview/:workerId" element={
+    <ProtectedRoute allowedRoles={["worker"]}>
+      <DashboardOverview />
+    </ProtectedRoute>
+  } />
 
-         <Route path="/worker/dashboard/earning/:workerId" element={<EarningDashboard />} />
+         <Route path="/worker/dashboard/earning/:workerId" element={
+    <ProtectedRoute allowedRoles={["worker"]}>
+      <EarningDashboard />
+    </ProtectedRoute>
+  } />
 
-         <Route path="/worker/dashboard/task/:workerId" element={<Tasks/>} />
+         <Route path="/worker/dashboard/task/:workerId" element={
+    <ProtectedRoute allowedRoles={["worker"]}>
+      <Tasks />
+    </ProtectedRoute>
+  } />
 
-         <Route path="/worker/calendar/:workerId" element={<CalendarAvailability/>} />
+         <Route path="/worker/calendar/:workerId" element={
+    <ProtectedRoute allowedRoles={["worker"]}>
+      <CalendarAvailability />
+    </ProtectedRoute>
+  } />
         
 
-<Route path="/admin/payouts" element={<AdminPayoutDashboard />} />
+<Route path="/admin/payouts" element={
+    <ProtectedRoute allowedRoles={["admin"]}>
+      <AdminPayoutDashboard />
+    </ProtectedRoute>
+  }/>
 <Route path="/customer/pay/:taskId/:workerId/:customerId/:role" element={<PaymentFlow />} />
 <Route path="/customer/pay/:taskId" element={<PaymentVerifyRedirect />} />
 <Route path="/workerVerification" element={<WorkerVerification />} />
-         <Route path="/admin/dashboard" element={<AdminDashboard />} />
-<Route path="/profile/:id"                    element={<CustomerProfile />} />
-<Route path="/worker/profile/:id"             element={<WorkerSettings />} />
+         <Route path="/admin/dashboard" element={
+    <ProtectedRoute allowedRoles={["admin"]}>
+      <AdminDashboard />
+    </ProtectedRoute>
+  }/>
+<Route path="/profile/:id"                   element={
+    <ProtectedRoute allowedRoles={["customer"]}>
+      <CustomerProfile />
+    </ProtectedRoute>
+  } />
+<Route path="/worker/profile/:id"            element={
+    <ProtectedRoute allowedRoles={["worker"]}>
+      <WorkerSettings />
+    </ProtectedRoute>
+  }/>
 {/*<Route path="/admin/settings"                 element={<AdminSettings />} /> */}
         </Routes>
       </div>

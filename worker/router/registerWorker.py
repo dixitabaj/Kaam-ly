@@ -30,6 +30,13 @@ def get_workers(
 ):
     return workerRepo.showWorkers(skip=skip, limit=limit, search=search)
 
+@router.get("/all/worker")
+def get_worker(
+    skip:   int = Query(0, ge=0),
+    limit:  Optional[int] = Query(None),
+    search: str = None,
+):
+    return workerRepo.showWorkers(skip=skip, limit=limit, search=search)
 
 @router.get("/worker/{id}")
 def show_worker_by_id(id: str):
@@ -216,21 +223,11 @@ from typing import List
 # PATCH /worker/{id}  — partial profile update
 @router.patch("/worker/{id}")
 def update_worker_profile(id: str, body: schemas.WorkerProfileUpdateSchema):
+    # Convert Pydantic model to dict, excluding None values
     update_data = body.dict(exclude_none=True)
-
-    # Normalise skills: if subSkills format → flatten to [{name, price}] for DB
-    if "skills" in update_data and update_data["skills"]:
-        flat = []
-        for sk in update_data["skills"]:
-            # Already flat format: {"name": "x", "price": 100}
-            if isinstance(sk, dict) and "price" in sk and "subSkills" not in sk:
-                flat.append(sk)
-            # New subSkills format: {"name": "x", "subSkills": [{name, price}]}
-            elif isinstance(sk, dict) and "subSkills" in sk:
-                for sub in sk.get("subSkills", []):
-                    flat.append({"name": sub["name"], "price": sub["price"]})
-        update_data["skills"] = flat
-
+    
+    # Pydantic already validated and converted everything!
+    # Just pass it to the repo
     return workerRepo.updateWorkerProfile(id, update_data)
 
 

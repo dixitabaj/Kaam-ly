@@ -1,6 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect, Request
 
-
+from fastapi.staticfiles import StaticFiles
 
 
 from .router import registerCustomer, chatbot, dashboard, khaltiPayment, esewaPayment, availability,fraud_router, refundCustomer,refund, updateProfile, skillVerification, faceVerify, adminPayout, registerWorker, login, otp, createTask, chat, duplicateCheck, faceVerify, recommend_router, esewaVerify, predictTask, review_route, search_router, image_classify_router, report, adminReviewAI, pendingActivities, notifications
@@ -25,16 +25,17 @@ from .repository.taskRepo import auto_release_job
 
 MONGO_URI = "mongodb+srv://dixita1:Shuvechhya@cluster0.ue3kxzv.mongodb.net/?appName=Cluster0"
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Starting app...")
 
-    # ✅ 1. Initialize DB HERE (not in @on_event)
+    # 1. Initialize DB HERE (not in @on_event)
     app.state.db_client = AsyncIOMotorClient(MONGO_URI)
     app.state.db = app.state.db_client["user"]
-    print("DB initialized ✅")
+    print("DB initialized ")
 
-    # ✅ 2. Start scheduler
+    # 2. Start scheduler
     scheduler = BackgroundScheduler()
     scheduler.add_job(
         auto_release_job,
@@ -44,18 +45,19 @@ async def lifespan(app: FastAPI):
         max_instances=1
     )
     scheduler.start()
-    print("Scheduler started ✅")
+    print("Scheduler started ")
 
-    yield  # 🚀 app runs here
+    yield  # app runs here
 
-    # 🔻 3. Shutdown cleanup
+    # 3. Shutdown cleanup
     print("Shutting down...")
     scheduler.shutdown()
     app.state.db_client.close()
     print("Cleanup done ✅")
 
 app = FastAPI(lifespan=lifespan)
-app = FastAPI(lifespan=lifespan)
+
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 
@@ -132,6 +134,109 @@ async def getRecentReviewsByWorker(worker_id):
     except Exception as e:
         print(f"Error fetching workers: {e}")
         raise HTTPException(status_code=500, detail=str(e))     
+
+# ── Extra Payment Request ──────────────────────────────────────────────────────
+class ExtraPaymentRequest(BaseModel):
+    worker_id: str
+    amount: float
+    reason: str
+
+@app.post("/api/tasks/{task_id}/request-extra", tags=["payment"])
+async def request_extra_payment(task_id: str, body: ExtraPaymentRequest):
+    task = collection_task.find_one({"_id": ObjectId(task_id)})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # Only allow from the assigned worker
+    if task.get("assignedWorkerId") != body.worker_id:
+        raise HTTPException(status_code=403, detail="Not authorized for this task")
+
+    # Only meaningful in confirmed or in_progress
+    if task.get("status") not in ("confirmed", "in_progress"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Extra payment can only be requested for confirmed or in-progress tasks (current: {task.get('status')})"
+        )
+
+    if body.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than 0")
+
+    # Persist the request on the task
+    extra_request = {
+        "amount":     body.amount,
+        "reason":     body.reason,
+        "status":     "pending",    # pending | approved | declined
+        "requested_at": datetime.utcnow(),
+    }
+    collection_task.update_one(
+        {"_id": ObjectId(task_id)},
+        {"$push": {"extra_payment_requests": extra_request}}
+    )
+
+    # Broadcast via WebSocket to customer
+    user_id = task.get("userId")
+    notification = json.dumps({
+        "type":        "extra_payment_request",
+        "taskId":      task_id,
+        "taskName":    task.get("taskName", "Task"),
+        "amount":      body.amount,
+        "reason":      body.reason,
+        "worker_id":   body.worker_id,
+    })
+    await manager.send_to_user(user_id, notification)
+
+    return {"message": "Extra payment request sent", "amount": body.amount, "reason": body.reason}
+
+
+@app.patch("/api/tasks/{task_id}/request-extra/respond", tags=["payment"])
+async def respond_extra_payment(task_id: str, body: dict):
+    """Customer approves or declines the extra payment request."""
+    decision  = body.get("decision")   # "approved" | "declined"
+    user_id   = body.get("user_id")
+    
+    if decision not in ("approved", "declined"):
+        raise HTTPException(status_code=400, detail="decision must be 'approved' or 'declined'")
+
+    task = collection_task.find_one({"_id": ObjectId(task_id)})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.get("userId") != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Update the last pending extra_payment_request
+    requests_list = task.get("extra_payment_requests", [])
+    updated = False
+    for i in range(len(requests_list) - 1, -1, -1):
+        if requests_list[i].get("status") == "pending":
+            requests_list[i]["status"] = decision
+            requests_list[i]["responded_at"] = datetime.utcnow()
+            updated = True
+            break
+
+    if not updated:
+        raise HTTPException(status_code=400, detail="No pending extra payment request found")
+
+    update_fields = {"extra_payment_requests": requests_list}
+
+    # If approved, bump totalCost
+    if decision == "approved":
+        approved_request = requests_list[[i for i, r in enumerate(requests_list) if r.get("responded_at")][-1]]
+        extra_amount = approved_request.get("amount", 0)
+        current_cost = task.get("totalCost", 0)
+        update_fields["totalCost"] = current_cost + extra_amount
+
+    collection_task.update_one({"_id": ObjectId(task_id)}, {"$set": update_fields})
+
+    # Notify worker
+    worker_id = task.get("assignedWorkerId")
+    notification = json.dumps({
+        "type":     "extra_payment_response",
+        "taskId":   task_id,
+        "decision": decision,
+    })
+    await manager.send_to_user(worker_id, notification)
+
+    return {"message": f"Extra payment request {decision}", "decision": decision}
 
 @app.post("/api/updateCompleteedTask/{worker_id}/{task_id}")
 async def updateCompletedTask(worker_id, task_id):
@@ -502,8 +607,26 @@ def get_admin_stats():
         {"$match":  {"status": "completed"}},
         {"$group":  {"_id": None, "totalRevenue": {"$sum": "$totalCost"}}}
     ]))
-    total_revenue = revenue_result[0]["totalRevenue"] if revenue_result else 0
-    platform_fees = round(total_revenue * 0.05, 2)
+    
+    fee_result = list(collection_task.aggregate([
+        {
+            "$match": {
+                "payment_status": "paid",
+                "refundAmount": 0
+            }
+        },
+        {
+            "$group": {
+                "_id": None,
+                "totalFees": {"$sum": "$platformFee"}
+            }
+        }
+    ]))
+
+    platform_fees = (
+        fee_result[0]["totalFees"]
+        if fee_result else 0
+    )
     pending_report=collection_reports.count_documents({"status":"pending"})
     resolved_report=collection_reports.count_documents({"status":"resolved"})
     declined_report=collection_reports.count_documents({"status":"declined"})
@@ -833,19 +956,26 @@ def get_growth_data(period: str = "month"):
                 label = c["registeredAt"].strftime("%a %d")
                 customer_map[label] += 1
 
-    # ── MONTH: last 12 months ──
+    # ── MONTH: last 12 months ──# ── MONTH: last 12 months ──
     elif period == "month":
+        twelve_months_ago = now - timedelta(days=365)
         labels = [(now - timedelta(days=30 * i)).strftime("%b %Y") for i in range(11, -1, -1)]
         worker_map = {l: 0 for l in labels}
         customer_map = {l: 0 for l in labels}
 
-        for w in collection_worker.find({}, {"registeredAt": 1}):
+        for w in collection_worker.find(
+            {"registeredAt": {"$exists": True, "$ne": None, "$gte": twelve_months_ago}}, 
+            {"registeredAt": 1}
+        ):
             if w.get("registeredAt"):
                 label = w["registeredAt"].strftime("%b %Y")
                 if label in worker_map:
                     worker_map[label] += 1
 
-        for c in collection.find({}, {"registeredAt": 1}):
+        for c in collection.find(
+            {"registeredAt": {"$exists": True, "$ne": None, "$gte": twelve_months_ago}}, 
+            {"registeredAt": 1}
+        ):
             if c.get("registeredAt"):
                 label = c["registeredAt"].strftime("%b %Y")
                 if label in customer_map:
@@ -854,24 +984,28 @@ def get_growth_data(period: str = "month"):
     # ── YEAR: last 5 years ──
     elif period == "year":
         current_year = now.year
+        five_years_ago = now - timedelta(days=365 * 5)
         labels = [str(current_year - i) for i in range(4, -1, -1)]  # last 5 years
         worker_map = {l: 0 for l in labels}
         customer_map = {l: 0 for l in labels}
 
-        for w in collection_worker.find({}, {"registeredAt": 1}):
+        for w in collection_worker.find(
+            {"registeredAt": {"$exists": True, "$ne": None, "$gte": five_years_ago}}, 
+            {"registeredAt": 1}
+        ):
             if w.get("registeredAt"):
                 label = str(w["registeredAt"].year)
                 if label in worker_map:
                     worker_map[label] += 1
 
-        for c in collection.find({}, {"registeredAt": 1}):
+        for c in collection.find(
+            {"registeredAt": {"$exists": True, "$ne": None, "$gte": five_years_ago}}, 
+            {"registeredAt": 1}
+        ):
             if c.get("registeredAt"):
                 label = str(c["registeredAt"].year)
                 if label in customer_map:
                     customer_map[label] += 1
-
-    else:
-        return {"error": "Invalid period"}
 
     # ── Prepare final data for chart ──
     return [{"label": l, "workers": worker_map[l], "customers": customer_map[l]} for l in labels]
@@ -1379,6 +1513,13 @@ def get_worker_availability(workerId: str):
     }
 # server.py — Kaam-ly Full Backend
 
+def get_min_price(worker):
+    skills = worker.get("skills", [])
+    if not skills:
+        return None
+    # get all prices and take the minimum
+    prices = [skill.get("price", 0) for skill in skills if "price" in skill]
+    return min(prices) if prices else None
 
 @app.get("/api/workers/search/")
 async def search_workers_by_name(q: str, limit: int = 5):
@@ -1403,13 +1544,23 @@ async def search_workers_by_name(q: str, limit: int = 5):
         
         query = {"$and": token_conditions} if len(token_conditions) > 1 else token_conditions[0]
         
-        results = await workers_collection.find(query).to_list(limit)
+        results = collection_worker.find(query).to_list(limit)
+
+        def get_min_price_from_skills(worker):
+            skills = worker.get("skills", [])
+            if not skills:
+                return None
+            prices = [float(s.get("price", 0)) for s in skills if float(s.get("price") or 0) > 0]
+            return min(prices) if prices else None
 
         return [
             {
-                "id":           w.get("email") or str(w["_id"]),  # worker _id is email string
+                "id":           w.get("email") or str(w["_id"]),
                 "name":         f"{w.get('firstName', '')} {w.get('lastName', '')}".strip(),
+                "firstName":    w.get("firstName", ""),
+                "lastName":     w.get("lastName", ""),
                 "service_type": w.get("taskType", "").capitalize(),
+                "taskType":     w.get("taskType", ""),
                 "area":         (
                     w.get("serviceArea", {}).get("primaryCity")
                     or w.get("serviceArea", {}).get("city")
@@ -1417,16 +1568,25 @@ async def search_workers_by_name(q: str, limit: int = 5):
                     or "Nepal"
                 ),
                 "rating":       w.get("ratings", None),
+                "ratings":      w.get("ratings", None),
                 "profile_pic":  w.get("profilePhoto", ""),
+                "profilePhoto": w.get("profilePhoto", ""),
                 "is_available": w.get("isAvailable", False),
                 "status":       w.get("status", "active"),
+                "skills":       w.get("skills", []),
+                "description":  w.get("description", ""),
+                "minHours":     w.get("minHours", 1),
+                "hours":        w.get("hours", {}),
+                "noOfCompletedTask": w.get("noOfCompletedTask", 0),
+                "serviceArea":  w.get("serviceArea", {}),
+                "priceLabel":   f"Starting from Rs. {get_min_price_from_skills(w)}" if get_min_price_from_skills(w) else "Price N/A",
+                "minPrice":     get_min_price_from_skills(w),
             }
             for w in results
         ]
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
+        raise HTTPException(status_code=500, detail=str(e))   
 
 # ── Register the fraud admin router ────────────────────────────────────
 app.include_router(fraud_router.router, prefix="/api")
@@ -1463,6 +1623,7 @@ app.include_router(notifications_router)
 app.include_router(tasks_router)
 app.include_router(availability.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
-app.include_router(esewaPayment.router)
+
 app.include_router(khaltiPayment.router)
+app.include_router(esewaPayment.router)
 app.include_router(chatbot.router, prefix="/api")

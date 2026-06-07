@@ -23,6 +23,7 @@ const WorkerCard = ({
   profileImage, recentReview, reviewCount, responseTime, serviceArea, skills
 }) => {
   const navigate = useNavigate();
+  const [imgError, setImgError] = useState(false);
   const handleViewProfile = () => navigate(`/workers/${encodeURIComponent(id)}`);
 
   const safeRating = (() => {
@@ -77,12 +78,17 @@ const WorkerCard = ({
   return (
     <div className="worker-card-horizontal-scroll">
       <div className="worker-description">
+        {/* ── Header: avatar + name | price ── */}
         <div className="worker-header">
           <div className="worker-header-left">
-            <div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
               <div className="profile-photo-home">
-                {profileImage ? (
-                  <img src={profileImage} alt={name} />
+                {profileImage && !imgError ? (
+                  <img
+                    src={profileImage}
+                    alt={name}
+                    onError={() => setImgError(true)}
+                  />
                 ) : (
                   <span className="profile-initials">
                     {name?.split(' ').map(n => n[0]).join('') || '?'}
@@ -95,25 +101,22 @@ const WorkerCard = ({
               <div className="worker-name">{name || 'Unknown Worker'}</div>
             </div>
           </div>
-          <div>
-            <div className="priceHome">Rs. {price || 'N/A'}</div>
-          </div>
+          <div className="priceHome">Rs. {price || 'N/A'}</div>
         </div>
 
-        <div className='worker-details'>
+        {/* ── Details: rating + stats ── */}
+        <div className="worker-details">
           <div className="rating-row">
-            <div>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
               <span className="star-icon">★</span>
               <span className="rating-value">{displayRating}</span>
               <span className="reviews-count">
                 ({safeReviewCount} {safeReviewCount === 1 ? 'review' : 'reviews'})
               </span>
             </div>
-            <div>
-              {safeRating >= 4.5 && safeCompletedJobs > 10 && (
-                <div className="elite-badge">ELITE</div>
-              )}
-            </div>
+            {safeRating >= 4.5 && safeCompletedJobs > 10 && (
+              <div className="elite-badge">ELITE</div>
+            )}
           </div>
 
           <div className="tasks-list">
@@ -136,6 +139,7 @@ const WorkerCard = ({
           </div>
         </div>
 
+        {/* ── Review snippet ── */}
         {latestReview ? (
           <div className="review-section">
             <div className="review-header">
@@ -154,7 +158,7 @@ const WorkerCard = ({
       </div>
 
       <div className="divider"></div>
-      <button className="select-btn" onClick={handleViewProfile}>View Profile & Book</button>
+      <button className="select-btn" onClick={handleViewProfile}>View Profile &amp; Book</button>
     </div>
   );
 };
@@ -227,7 +231,7 @@ export default function TaskBookingUI() {
     'Cleaning':        ["House Cleaning", "Deep Cleaning", "Move-in/Move-out Cleaning"],
     'Outdoor Help':    ["Lawn Mowing", "Tree Trimming", "Plant Care", "Weed Control", "Fertilization"],
     'Painting':        ["Interior", "Exterior"],
-    'Trending':        ['Popular Services', 'Emergency Services', 'Top Rated', 'New Services'],
+    'Trending':        ['Emergency Services', 'Top Rated'],
   };
 
   const categories = [
@@ -240,6 +244,7 @@ export default function TaskBookingUI() {
     { id: 'Painting',         label: 'Painting',         image: paintingImg  },
     { id: 'Trending',         label: 'Trending',         image: trendingImg  },
   ];
+
   /* ── Load trending data ── */
   useEffect(() => {
     if (selectedCategory !== 'Trending') return;
@@ -430,7 +435,6 @@ export default function TaskBookingUI() {
             }}
             onImageClassified={(label) => {
               console.log("Image classified as:", label);
-              // optionally do something in the homepage with the label
             }}
           />
         </div>

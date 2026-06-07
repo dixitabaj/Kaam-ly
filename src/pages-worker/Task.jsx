@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Sidebar from "./sidebar";
 import BookingNavbar from "../components/Navbar/Navbar";
+import ChatWidget from "../components/HelpSection/HelpSection";
 
 const FontLink = () => (
   <style>{`
@@ -235,6 +236,7 @@ export default function Tasks() {
     <>
       <FontLink />
       <BookingNavbar />
+              <ChatWidget/>
       <div style={{ display: "flex", minHeight: "100vh", background: "#F7F5EF", fontFamily: "'DM Sans', sans-serif" }}>
         <Sidebar workerId={workerId} />
 

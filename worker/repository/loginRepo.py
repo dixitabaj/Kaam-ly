@@ -46,6 +46,29 @@ async def loginUser(request: schemas.LoginSchema, http_request: Request):
     if not Hash.verify(request.password, user["password"]):
         raise HTTPException(status_code=401, detail="Incorrect password")
 
+    if user_type == "worker" and user.get("status") == "suspended":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "message": "Your worker account has been suspended",
+                "status": "suspended",
+                "suspension_reason": user.get("suspension_reason") or user.get("skillVerifyReason") or "Violation of terms of service",
+                "email": user.get("email"),
+                "role": "worker"
+            }
+        )
+    if user_type == "customer" and user.get("status") == "suspended":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "message": "Your account has been suspended",
+                "status": "suspended",
+                "suspension_reason": user.get("suspension_reason") or "Violation of terms of service",
+                "email": user.get("email"),
+                "role": "customer"
+            }
+        )
+
     # ── Pick expiry based on remember_me flag ─────────────────────────────────
     expiry = REMEMBER_ME_EXPIRY if request.remember_me else DEFAULT_EXPIRY
 

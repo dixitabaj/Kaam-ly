@@ -46,10 +46,10 @@ async def retry_with_backoff(fn, max_retries=3):
 
 
 def sanitize_response(text: str) -> str:
-    text = re.sub(r'\b\d{7,15}\b', '[hidden]', text)
+    support_number = "91283728362"
+    text = re.sub(r'\b(?!' + support_number + r')\d{7,15}\b', '[hidden]', text)
     text = re.sub(r'\S+@\S+\.\S+', '[hidden]', text)
     return text
-
 
 def search_faq(query: str, faq_list: list, n: int = 5):
     query_lower = query.lower()
@@ -122,7 +122,7 @@ async def call_agent(message: str):
 
 STRICT RULES — follow these exactly:
 1. ONLY answer using the FAQ and worker information provided in the context below.
-2. If the answer is NOT in the context, say exactly: "I don't have that information right now. Please contact our support team for help."
+2. If the answer is NOT in the context, say exactly: "I don't have that information right now. Please contact our support team for help at 91283728362."
 3. NEVER make up steps, phone numbers, emails, links, or instructions that aren't in the context.
 4. NEVER tell users to navigate to sections or buttons that you haven't confirmed exist (e.g. don't say "go to Help & Support > Report a User" unless the FAQ says so).
 5. For reporting a user or contacting support, tell the user to use the buttons provided in the chat widget — do not invent a process.

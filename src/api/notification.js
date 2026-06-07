@@ -2,6 +2,7 @@
 import { getToken, onMessage } from "firebase/messaging";
 import { initMessaging }       from "./firebase";
 
+const VAPID_KEY    = "BFID2OKKVjuBAh3Q0DyC8IpdgythnwvDa_55_gZwqGJIJVcufyrLS_zK92bODBdV525zC-C39QCRtU9siSEOVvc";
 const API_BASE_URL = "http://localhost:8000";
 
 // ─── 1. Request Permission & Get FCM Token ────────────────────────────────────
@@ -38,10 +39,22 @@ export const listenForMessages = async (onMessageCallback) => {
 
   const unsubscribe = onMessage(messaging, (payload) => {
     console.log("[FCM] Foreground message:", payload);
+
+    // ✅ Always show native notification for foreground messages
+    const title = payload.notification?.title || payload.data?.title || "Kaam-ly";
+    const body  = payload.notification?.body  || payload.data?.body  || "";
+
+    if (Notification.permission === "granted") {
+      new Notification(title, {
+        body,
+        icon: "/icon-192.png",
+      });
+    }
+
     if (onMessageCallback) onMessageCallback(payload);
   });
 
-  return unsubscribe; // call this to clean up
+  return unsubscribe;
 };
 
 // ─── 3. Internal trigger helper ───────────────────────────────────────────────

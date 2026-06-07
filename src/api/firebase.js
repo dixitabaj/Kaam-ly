@@ -1,7 +1,9 @@
-import { initializeApp }                    from "firebase/app";
-import { getAuth }                          from "firebase/auth";
-import { getFirestore }                     from "firebase/firestore";
-import { getMessaging, isSupported, getToken } from "firebase/messaging";
+import { initializeApp }                       from "firebase/app";
+import { getAuth }                             from "firebase/auth";
+import { getFirestore }                        from "firebase/firestore";
+// firebase.js — top of file
+import { getMessaging, isSupported, getToken, onMessage } from "firebase/messaging";
+
 
 const firebaseConfig = {
   apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
@@ -18,47 +20,59 @@ export const auth = getAuth(app);
 export const db   = getFirestore(app);
 
 let _messaging = null;
+let _swReg     = null;
+let _listenerRegistered = false;
 
 export const initMessaging = async () => {
-  if (_messaging) return _messaging;
+  if (_messaging) return _messaging; // ✅ already initialized, reuse
 
   const supported = await isSupported().catch(() => false);
   if (!supported) return null;
   if (!("serviceWorker" in navigator)) return null;
 
   try {
-    //  Unregister any conflicting SWs first
+    // ✅ Reuse existing SW registration if already registered
     const existingRegs = await navigator.serviceWorker.getRegistrations();
-    for (const reg of existingRegs) {
-      if (!reg.scope.endsWith("/")) {
-        await reg.unregister();
-        console.log("[FCM] Unregistered conflicting SW:", reg.scope);
-      }
-    }
+    _swReg = existingRegs.find(r => r.active?.scriptURL.includes("firebase-messaging-sw.js"));
 
-    //  Register with explicit scope
-    const reg = await navigator.serviceWorker.register(
-      "/firebase-messaging-sw.js",
-      { scope: "/" }
-    );
-    console.log("[FCM] SW registered ✓ scope:", reg.scope);
+    if (!_swReg) {
+      _swReg = await navigator.serviceWorker.register(
+        "/firebase-messaging-sw.js",
+        { scope: "/" }
+      );
+      console.log("[FCM] SW registered ✓ scope:", _swReg.scope);
+    } else {
+      console.log("[FCM] SW reused ✓ scope:", _swReg.scope);
+    }
 
     await navigator.serviceWorker.ready;
     console.log("[FCM] SW ready ✓");
 
-    // ✅ Bind messaging to YOUR registration — prevents Firebase making a second one
     _messaging = getMessaging(app);
-    await getToken(_messaging, {
-      vapidKey: "BFID2OKKVjuBAh3Q0DyC8IpdgythnwvDa_55_gZwqGJIJVcufyrLS_zK92bODBdV525zC-C39QCRtU9siSEOVvc",
-      serviceWorkerRegistration: reg,  // ← THIS is the key fix
-    }).catch(() => null);
-
     console.log("[FCM] Messaging initialized ✓");
     return _messaging;
+
   } catch (err) {
-    console.error("[FCM] SW registration failed:", err);
+    console.error("[FCM] Init failed:", err);
     return null;
   }
+};
+
+export const initForegroundListener = async () => {
+  if (_listenerRegistered) return;
+
+  const messaging = await initMessaging();
+  if (!messaging) return;
+
+  _listenerRegistered = true;
+
+  onMessage(messaging, (payload) => {
+    console.log("[FCM] ✅ Foreground message caught:", payload);
+    // Dispatch event so Notification.jsx can pick it up
+    window.dispatchEvent(new CustomEvent("fcm-message", { detail: payload }));
+  });
+
+  console.log("[FCM] Foreground listener registered ✓");
 };
 
 export default app;

@@ -4,6 +4,8 @@ import BookingNavbar from "../components/Navbar/Navbar";
 import Sidebar from "./sidebar";
 import Badge from "../images/badge.png";
 
+import ChatWidget from "../components/HelpSection/HelpSection";
+
 const FontLink = () => (
   <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&display=swap');`}</style>
 );
@@ -113,13 +115,21 @@ export default function WorkerDashboard() {
       setError("No worker ID found. Please log in again.");
       setLoading(false);
       return;
+      
     }
 
     workerStats(workerId)
       .then((data) => {
         setStats(data);
+        if (data && !data.averageRating && data.worker?.ratings) {
+        setStats(prev => ({
+          ...prev,
+          averageRating: data.worker.ratings
+        }));
+      }
         setWorker(data.worker || {});
       })
+
       .catch(() => setError("Failed to load dashboard. Please try again."))
       .finally(() => setLoading(false));
   }, [workerId]);
@@ -136,12 +146,17 @@ export default function WorkerDashboard() {
   );
 
   /* ── Derived ── */
-  const allTasks      = (stats?.tasksToday || []).map(normaliseTask);
+  const allTasks = [
+    ...(stats?.tasksToday || []),
+    ...(stats?.tasksTomorrow || []),
+    ...(stats?.tasksNextWeek || []),
+  ].map(normaliseTask);
   const tasks         = allTasks.slice(0, 3);
   const totalEarnings = stats?.totalEarnings || 0;
   const monthlyEarning = Math.round(totalEarnings / 12);
   const todayEarning  = allTasks.filter(t => t.status === "completed").reduce((s, t) => s + t.amount, 0);
-  const stars         = Math.round(stats?.averageRating || 0);
+  const stars         = Math.round(worker.ratings || stats?.averageRating || 0);
+  console.log(stars);
 
   const completed  = stats?.tasksCompleted  ?? 0;
   const pending    = stats?.tasksPending    ?? 0;
@@ -171,6 +186,7 @@ export default function WorkerDashboard() {
       <FontLink />
       <div>
         <BookingNavbar />
+        <ChatWidget/>
         <div style={{ display: "flex", backgroundColor: "rgb(247, 245, 239)", minHeight: "calc(100vh - 89px)" }}>
           <Sidebar workerId={worker} width={320} />
           
@@ -266,7 +282,7 @@ export default function WorkerDashboard() {
                 {/* Task Table */}
                 <div style={{ background: "#ffffff", borderRadius: 16, padding: "1.5rem", border: "1px solid #e8e6df", minHeight: "328px", overflowX: "auto" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-                    <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>Recent Tasks</div>
+                    <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>Upcoming Tasks</div>
                     <span style={{ fontSize: "0.75rem", color: "#aaa", fontFamily: "'inter', sans-serif" }}>Showing latest 3</span>
                   </div>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", minWidth: "600px" }}>
@@ -282,11 +298,11 @@ export default function WorkerDashboard() {
                         <tr><td colSpan={5} style={{ padding: "1.5rem", color: "#aaa", textAlign: "center" }}>No tasks available</td></tr>
                       ) : tasks.map((t, i) => (
                         <tr key={t.id || i} style={{ borderBottom: "1px solid #f0ede4" }}>
-                          <td style={{ padding: "0.75rem" }}>{t.name}</td>
-                          <td style={{ padding: "0.75rem", color: "#666" }}>{t.serviceType}</td>
-                          <td style={{ padding: "0.75rem", color: "#666" }}>{t.date}</td>
-                          <td style={{ padding: "0.75rem" }}><StatusPill status={t.status} /></td>
-                          <td style={{ padding: "0.75rem", fontWeight: 600 }}>Rs. {t.amount.toLocaleString()}</td>
+                          <td style={{ paddingBottom: "1.75rem", paddingTop: "1.75rem" }}>{t.name}</td>
+                          <td style={{ paddingBottom: "1.75rem",  paddingTop: "1.75rem", color: "#666" }}>{t.serviceType}</td>
+                          <td style={{ paddingBottom: "1.75rem" , paddingTop: "1.75rem", color: "#666" }}>{t.date}</td>
+                          <td style={{ ppaddingBottom: "1.75rem",  paddingTop: "0.25rem" }}><StatusPill status={t.status} /></td>
+                          <td style={{ paddingBottom: "1.75rem" , paddingTop: "1.75rem", fontWeight: 600 }}>Rs. {t.amount.toLocaleString()}</td>
                         </tr>
                       ))}
                     </tbody>
