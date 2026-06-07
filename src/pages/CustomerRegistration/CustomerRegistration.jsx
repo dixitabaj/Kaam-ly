@@ -5,7 +5,7 @@ import { registerCustomer, checkEmailExists, checkPhoneExists } from '../../api/
 import eyeOpenIcon from "../../images/open.png";
 import eyeCloseIcon from "../../images/closed.png";
 import logo from "../../images/logo.png";
-import './CustomerRegistration.css';
+import './customerRegistration.css';
 
 const CustomerRegistration = () => {
   const [step, setStep] = useState(1);
