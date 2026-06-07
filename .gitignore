@@ -65,3 +65,4 @@ uv.lock
 # Project-specific
 # =====================
 uploads/worker/router/kaam-ly-firebase.json
+worker/router/kaam-ly-firebase.json
