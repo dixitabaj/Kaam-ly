@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { workerStats } from "../api/api";
 import BookingNavbar from "../components/Navbar/Navbar";
-import Sidebar from "./sidebar";
+
 import Badge from "../images/badge.png";
+import Sidebar from "./Sidebar";
 
 import ChatWidget from "../components/HelpSection/HelpSection";
 
