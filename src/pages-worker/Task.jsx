@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import Sidebar from "./sidebar";
+
 import BookingNavbar from "../components/Navbar/Navbar";
 import ChatWidget from "../components/HelpSection/HelpSection";
+import Sidebar from "./Sidebar";
 
 const FontLink = () => (
   <style>{`
