@@ -3,8 +3,8 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
 import { workerStats, workerEarnings, getRecentPayouts } from "../api/api";
-import Sidebar from "./sidebar";
 import BookingNavbar from "../components/Navbar/Navbar";
+import Sidebar from "./Sidebar";
 
 import ChatWidget from "../components/HelpSection/HelpSection";
 

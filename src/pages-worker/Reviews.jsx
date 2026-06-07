@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import Sidebar from "./sidebar";
 import BookingNavbar from "../components/Navbar/Navbar";
+import Sidebar from "./Sidebar";
 import { getReviewsById, getTaskById, fetchCustomerById } from "../api/api";
 import ChatWidget from "../components/HelpSection/HelpSection";
 
