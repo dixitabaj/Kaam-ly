@@ -12,10 +12,11 @@ import {
   fetchCustomerById, updateOfferDetails, fetchSharedTasks,
 } from '../../api/api';
 import { TaskDetails } from '../../pages-worker/taskDetails';
-import BookingNavbar from '../NavBar/NavBar';
+
 import './MessagesPage.css';
 import ChatWidget from '../HelpSection/HelpSection';
 import { useToast } from "../Toast/ToastContext";
+import BookingNavbar from '../Navbar/Navbar';
 
 // ── Status Badge ──────────────────────────────────────────────────────────────
 const STATUS_MAP = {
