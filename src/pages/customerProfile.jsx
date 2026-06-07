@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import BookingNavbar from "../components/NavBar/NavBar";
+import BookingNavbar from "../components/Navbar/Navbar";
 import {
   getCustomer, getCustomerTasks, getCustomerReports, getCustomerReviews,
   updateName, updateAddress, updateDob, updateGender, updateBio,
