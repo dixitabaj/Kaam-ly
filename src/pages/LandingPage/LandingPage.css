@@ -262,16 +262,18 @@ body {
 .subcategories-bar {
   border-top: 1px solid var(--border); padding: 14px 0;
   overflow-x: auto; scrollbar-width: none; background: white;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, black 20px, black calc(100% - 20px), transparent 100%);
+          mask-image: linear-gradient(to right, transparent 0, black 20px, black calc(100% - 20px), transparent 100%);
 }
 .subcategories-bar::-webkit-scrollbar { display: none; }
 .subcategories-inner {
-  margin: 0 auto;
   padding: 0 clamp(16px, 4vw, 48px);
   display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 10px;
+  flex-wrap: nowrap;
   align-items: center;
-  justify-content: center;
+  width: max-content;
+  min-width: 100%;
 }
 .subcategory-pill {
   padding: 7px 18px; border-radius: 100px;
@@ -290,7 +292,7 @@ body {
   background: var(--cream);
 }
 .workers-inner {
-  max-width: 1400px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 0 clamp(16px, 4vw, 48px);
 }
@@ -363,10 +365,10 @@ body {
 .worker-card {
   background: #ffffff;
   border: 1px solid #f0f0f0;
-  border-radius: 14px;
-  padding: 16px;
-  width: 290px;
-  min-width: 210px;
+  border-radius: 16px;
+  padding: 20px;
+  width: 280px;
+  min-width: 280px;
   flex-shrink: 0;
   position: relative;
   display: flex;
@@ -393,15 +395,15 @@ body {
 }
 
 .worker-card .wc-avatar {
-  width: 44px;
-  height: 44px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 600;
-  font-size: 15px;
-  margin-bottom: 10px;
+  font-size: 17px;
+  margin-bottom: 12px;
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -419,7 +421,7 @@ body {
   margin-bottom: 2px;
 }
 .worker-card .wc-name {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: #111827;
   margin-bottom: 2px;
@@ -437,13 +439,13 @@ body {
 }
 
 .worker-card .wc-price {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
   color: #111827;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 .worker-card .wc-price span {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
   color: #9ca3af;
   margin-left: 2px;
@@ -481,34 +483,34 @@ body {
 .worker-card .wc-stats-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  margin-bottom: 10px;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 .worker-card .wc-stat {
   background: #f9fafb;
   border-radius: 8px;
-  padding: 6px 8px;
+  padding: 8px 10px;
 }
-.worker-card .wc-stat-label { font-size: 10px; color: #9ca3af; margin-bottom: 1px; }
-.worker-card .wc-stat-val { font-size: 12px; font-weight: 600; color: #111827; }
+.worker-card .wc-stat-label { font-size: 11px; color: #9ca3af; margin-bottom: 2px; }
+.worker-card .wc-stat-val { font-size: 13px; font-weight: 600; color: #111827; }
 
 .worker-card .wc-review-box {
   background: #fffbeb;
   border-radius: 8px;
-  padding: 8px 10px;
-  margin-bottom: 12px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
 }
 .worker-card .wc-review-label {
-  font-size: 10px;
+  font-size: 11px;
   color: #d97706;
   font-weight: 500;
-  margin-bottom: 3px;
+  margin-bottom: 4px;
 }
 .worker-card .wc-review-text {
-  font-size: 11px;
+  font-size: 12px;
   color: #6b7280;
   font-style: italic;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 .worker-card .wc-book-btn {
