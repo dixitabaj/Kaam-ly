@@ -139,8 +139,8 @@ const FontLink = () => (
 );
 
 /* ─── Sparkline ──────────────────────────────────────────────── */
-const Sparkline = ({ color = "#22c55e", up = true }) => (
-  <svg width="60" height="28" viewBox="0 0 60 28" fill="none" style={{ flexShrink: 0 }}>
+const Sparkline = ({ color = "#22c55e", up = true,  }) => (
+  <svg width="60" height="28" viewBox="0 0 60 28" fill="none" style={{ flexShrink: 0, marginTop: "5.6rem" }}>
     <polyline
       points={up
         ? "0,22 10,18 20,20 30,12 40,14 50,6 60,4"
@@ -395,13 +395,13 @@ export default function EarningDashboard() {
                       dataKey="date" axisLine={true} tickLine={false}
                       tick={{ fontSize: 10, fill: "#bbb" }}
                       interval="preserveStartEnd"
-                      label={{ value: "Date", position: "insideBottom", offset: -2, fontSize: 11, fill: "#aaa" }}
+                      label={{ value: "Date", position: "insideBottom", offset: -2, fontSize: 11, fill: "#858585" }}
                     />
                     <YAxis
                       axisLine={true} tickLine={false}
                       tick={{ fontSize: 10, fill: "#bbb" }}
                       width={45}
-                      label={{ value: "Income", angle: -90, position: "insideLeft", offset: 10, fontSize: 11, fill: "#aaa" }}
+                      label={{ value: "Income", angle: -90, position: "insideLeft", offset: 0, fontSize: 11, fill: "#858585" }}
                     />
                     <Tooltip content={<CustomTooltip />} cursor={{ fill: "#f7f7f5" }} />
                     <Bar dataKey="income" fill="#1a1a1a" radius={[4, 4, 0, 0]} />

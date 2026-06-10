@@ -7,7 +7,7 @@ from math import radians, sin, cos, sqrt, atan2
 from ..config.database import collection_worker, collection_task
 
 # Fix for LinUCB pickle in FastAPI reload context
-from ..model.LinUCB import LinUCB  # <-- adjust to your actual module path
+from ..model.recommendation_system.LinUCB import LinUCB  # <-- adjust to your actual module path
 import sys
 
 # Inject LinUCB into __main__ so pickle can find it
@@ -141,7 +141,7 @@ class RecommendRequest(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 MODEL_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "model", "linucb_model (5).joblib")
+    os.path.join(os.path.dirname(__file__), "..", "model/recommendation_system", "linucb_model.joblib")
 )
 
 linucb       = None
@@ -694,3 +694,20 @@ def model_status():
         "n_arms":             n_arms,
         "global_theta_ready": global_theta is not None,
     }
+
+def refresh_global_theta():
+    global global_theta
+    trained_mask = linucb.n > 0
+    if trained_mask.any():
+        thetas = []
+        for arm_idx in np.where(trained_mask)[0]:
+            A_inv = np.linalg.inv(linucb.A[arm_idx].astype(np.float64))
+            thetas.append(A_inv @ linucb.b[arm_idx].astype(np.float64))
+        global_theta = np.mean(thetas, axis=0)
+
+def save_model():
+    joblib.dump(
+        {"linucb": linucb, "n_features": n_features, "n_arms": n_arms},
+        MODEL_PATH
+    )
+

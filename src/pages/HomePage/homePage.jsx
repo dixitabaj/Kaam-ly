@@ -76,11 +76,11 @@ const WorkerCard = ({
       : "General";
 
   return (
-    <div className="worker-card-horizontal-scroll">
-      <div className="worker-description">
+    <div className="worker-card-horizontal-scroll-home">
+      <div className="worker-description-home">
         {/* ── Header: avatar + name | price ── */}
-        <div className="worker-header">
-          <div className="worker-header-left">
+        <div className="worker-header-home">
+          <div className="worker-header-left-home">
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
               <div className="profile-photo-home">
                 {profileImage && !imgError ? (
@@ -90,75 +90,76 @@ const WorkerCard = ({
                     onError={() => setImgError(true)}
                   />
                 ) : (
-                  <span className="profile-initials">
+                  <span className="profile-initials-home">
                     {name?.split(' ').map(n => n[0]).join('') || '?'}
                   </span>
                 )}
               </div>
-              <button className="view-profile-btn" onClick={handleViewProfile}>View Profile</button>
+              <button className="view-profile-btn-home" onClick={handleViewProfile}>View Profile</button>
             </div>
-            <div className="worker-name-wrapper">
-              <div className="worker-name">{name || 'Unknown Worker'}</div>
-            </div>
-          </div>
-          <div className="priceHome">Rs. {price || 'N/A'}</div>
-        </div>
-
-        {/* ── Details: rating + stats ── */}
-        <div className="worker-details">
-          <div className="rating-row">
+            <div className="worker-name-wrapper-home">
+              <div className="worker-name-home">{name || 'Unknown Worker'}</div>
+              <div className="rating-row-home">
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              <span className="star-icon">★</span>
-              <span className="rating-value">{displayRating}</span>
-              <span className="reviews-count">
+              <span className="star-icon-home">★</span>
+              <span className="rating-value-home">{displayRating}</span>
+              <span className="reviews-count-home">
                 ({safeReviewCount} {safeReviewCount === 1 ? 'review' : 'reviews'})
               </span>
             </div>
             {safeRating >= 4.5 && safeCompletedJobs > 10 && (
-              <div className="elite-badge">ELITE</div>
+              <div className="elite-badge-home">ELITE</div>
             )}
           </div>
+            </div>
+          </div>
+          <div className="priceHome-home">Rs. {price || 'N/A'}</div>
+        </div>
 
-          <div className="tasks-list">
-            <div className="task-item">
-              <div className="task-label">Jobs Done:</div>
-              <div className="task-number">{safeCompletedJobs}</div>
+        {/* ── Details: rating + stats ── */}
+        <div className="worker-details-home">
+          
+
+          <div className="tasks-list-home">
+            <div className="task-item-home">
+              <div className="task-label-home">Jobs Done:</div>
+              <div className="task-number-home">{safeCompletedJobs}</div>
             </div>
-            <div className="task-item">
-              <div className="task-label">Response Rate:</div>
-              <div className="task-number">{formattedResponseRate}</div>
+            <div className="task-item-home">
+              <div className="task-label-home">Response Rate:</div>
+              <div className="task-number-home">{formattedResponseRate}</div>
             </div>
-            <div className="task-item">
-              <div className="task-label">Service Area:</div>
-              <div className="task-number">{formattedServiceArea}</div>
+            <div className="task-item-home">
+              <div className="task-label-home">Service Area:</div>
+              <div className="task-number-home">{formattedServiceArea}</div>
             </div>
-            <div className="task-item">
-              <div className="task-label">Task Type:</div>
-              <div className="task-number">{formattedServiceTaskType}</div>
+            <div className="task-item-home">
+              <div className="task-label-home">Task Type:</div>
+              <div className="task-number-home">{formattedServiceTaskType}</div>
             </div>
           </div>
         </div>
 
         {/* ── Review snippet ── */}
         {latestReview ? (
-          <div className="review-section">
-            <div className="review-header">
-              <div className="review-icon">
+          <div className="review-section-home">
+            <div className="review-header-home">
+              <div className="review-icon-home">
                 <img src={reviewImg} alt="Review" width="20px" height="20px" />
               </div>
               <span style={{ fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>Recent review:</span>
             </div>
-            <p className="review-text">"{reviewText}"</p>
+            <p className="review-text-home">"{reviewText}"</p>
           </div>
         ) : (
-          <div className="review-section">
-            <p className="review-text">No reviews yet. Be the first to hire!</p>
+          <div className="review-section-home">
+            <p className="review-text-home">No reviews yet. Be the first to hire!</p>
           </div>
         )}
       </div>
 
-      <div className="divider"></div>
-      <button className="select-btn" onClick={handleViewProfile}>View Profile &amp; Book</button>
+      <div className="divider-home"></div>
+      <button className="select-btn-home" onClick={handleViewProfile}>View Profile &amp; Book</button>
     </div>
   );
 };
@@ -167,11 +168,11 @@ const WorkerCard = ({
    Category Icon Component
 ========================= */
 const CategoryIcon = ({ image, label, active, onClick }) => (
-  <div className={`category-icon-item ${active ? 'active' : ''}`} onClick={onClick}>
-    <div className="icon-circle">
-      <img src={image} alt={label} className="category-img" />
+  <div className={`category-icon-item-home ${active ? 'active' : ''}`} onClick={onClick}>
+    <div className="icon-circle-home">
+      <img src={image} alt={label} className="category-img-home" />
     </div>
-    <span className={`icon-label ${active ? 'active' : ''}`}>{label}</span>
+    <span className={`icon-label-home ${active ? 'active' : ''}`}>{label}</span>
   </div>
 );
 
@@ -179,7 +180,7 @@ const CategoryIcon = ({ image, label, active, onClick }) => (
    Subcategory Item Component
 ========================= */
 const SubcategoryItem = ({ label, active, onClick }) => (
-  <div className={`subcategory-item ${active ? 'active' : ''}`} onClick={onClick}>
+  <div className={`subcategory-item-home ${active ? 'active' : ''}`} onClick={onClick}>
     {label}
   </div>
 );
@@ -406,27 +407,27 @@ export default function TaskBookingUI() {
     if (trendingLoading) return <p>Loading...</p>;
 
     if (selectedSubcategory === 'Popular Services') {
-      if (popularWorkers.length === 0) return <p className="no-workers-message">No popular workers found.</p>;
+      if (popularWorkers.length === 0) return <p className="no-workers-message-home">No popular workers found.</p>;
       return popularWorkers.map(worker => <WorkerCard key={worker.id} {...worker} />);
     }
     if (selectedSubcategory === 'Top Rated') {
-      if (topRatedWorkers.length === 0) return <p className="no-workers-message">No top rated workers found.</p>;
+      if (topRatedWorkers.length === 0) return <p className="no-workers-message-home">No top rated workers found.</p>;
       return topRatedWorkers.map(worker => <WorkerCard key={worker.id} {...worker} />);
     }
     if (selectedSubcategory === 'Emergency Services') {
-      if (emergencyWorkers.length === 0) return <p className="no-workers-message">No available emergency workers right now.</p>;
+      if (emergencyWorkers.length === 0) return <p className="no-workers-message-home">No available emergency workers right now.</p>;
       return emergencyWorkers.map(worker => <WorkerCard key={worker.id} {...worker} />);
     }
   };
 
   return (
-    <div className="app-container">
+    <div className="app-container-home">
       <BookingNavbar />
 
       {/* Hero */}
-      <section className="hero-section">
-        <div className="hero-content">
-          <h1 className="hero-title">Book a Trusted Worker for Any Task</h1>
+      <section className="hero-section-home">
+        <div className="hero-content-home">
+          <h1 className="hero-title-home">Book a Trusted Worker for Any Task</h1>
           <SearchBar
             onItemSelect={(item) => {
               navigate("/task-request", {
@@ -441,8 +442,8 @@ export default function TaskBookingUI() {
       </section>
 
       {/* Categories */}
-      <section className="categories-icons-section">
-        <div className="categories-icons-content">
+      <section className="categories-icons-section-home">
+        <div className="categories-icons-content-home">
           {categories.map((category) => (
             <CategoryIcon
               key={category.id}
@@ -454,8 +455,8 @@ export default function TaskBookingUI() {
           ))}
         </div>
         {selectedCategory && categorySubcategories[selectedCategory] && (
-          <section className="subcategories-section">
-            <div className="subcategories-content">
+          <section className="subcategories-section-home">
+            <div className="subcategories-content-home">
               {categorySubcategories[selectedCategory].map((subcategory) => (
                 <SubcategoryItem
                   key={subcategory}
@@ -470,20 +471,20 @@ export default function TaskBookingUI() {
       </section>
 
       {/* Workers */}
-      <section className="workers-section">
-        <div className="workers-content">
-          <h2 className="section-title">{selectedSubcategory || selectedCategory}</h2>
+      <section className="workers-section-home">
+        <div className="workers-content-home">
+          <h2 className="section-title-home">{selectedSubcategory || selectedCategory}</h2>
 
-          <div className="workers-horizontal-scroll">
+          <div className="workers-horizontal-scroll-home">
             {selectedCategory === 'Trending' ? (
               renderTrendingSection()
             ) : (
               <>
                 {loading && <p>Loading workers...</p>}
-                {error   && <p className="error-message">{error}</p>}
+                {error   && <p className="error-message-home">{error}</p>}
                 {!loading && !error && filteredWorkers.length > 0
                   ? filteredWorkers.map(worker => <WorkerCard key={worker.id} {...worker} />)
-                  : !loading && !error && <p className="no-workers-message">No workers found for {selectedSubcategory}</p>
+                  : !loading && !error && <p className="no-workers-message-home">No workers found for {selectedSubcategory}</p>
                 }
               </>
             )}
@@ -492,8 +493,8 @@ export default function TaskBookingUI() {
           {/* Highest Rated — only for non-Trending */}
           {selectedCategory !== 'Trending' && highestRatedWorkers.length > 0 && (
             <>
-              <h2 className="section-title">Highest Rated</h2>
-              <div className="workers-horizontal-scroll">
+              <h2 className="section-title-home">Highest Rated</h2>
+              <div className="workers-horizontal-scroll-home">
                 {highestRatedWorkers.map(worker => (
                   <WorkerCard key={`highest-${worker.id}`} {...worker} />
                 ))}

@@ -151,14 +151,14 @@ body {
   width: 8px; height: 8px; border-radius: 50%; background: var(--orange);
   animation: pulse-ring 2.2s ease-in-out infinite;
 }
-.hero-title {
+.hero-home-title {
   font-family: var(--font-display); font-size: clamp(52px, 6.5vw, 92px);
   font-weight: 800; line-height: 1.0; letter-spacing: -0.03em;
   color: var(--navy); margin-bottom: 24px;
   animation: fadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
 }
-.hero-title-line { display: block; font-size: 4.0rem; }
-.hero-title-accent { color: var(--orange); font-style: italic; font-size: 3.6rem; }
+.hero-home-title-line { display: block; font-size: 4.0rem; }
+.hero-home-title-accent { color: var(--orange); font-style: italic; font-size: 3.6rem; }
 .hero-sub {
   font-size: clamp(16px, 1.6vw, 19px); color: var(--slate);
   font-weight: 400; max-width: 460px; line-height: 1.75;
@@ -304,14 +304,14 @@ body {
   flex-wrap: wrap;
   gap: 8px;
 }
-.section-title {
+.section-landing-title {
   font-family: var(--font-display);
   font-size: clamp(22px, 3vw, 32px);
   font-weight: 800;
   color: var(--navy);
   letter-spacing: -0.02em;
 }
-.section-title span {
+.section-landing-title span {
   color: var(--orange);
   font-style: italic;
 }

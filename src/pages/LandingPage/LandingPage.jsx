@@ -195,9 +195,9 @@ function Hero() {
         <div className="hero-left">
          
 
-          <h1 className="hero-title">
-            <span className="hero-title-line">Every task,</span>
-            <span className="hero-title-line hero-title-accent">a trusted master</span>
+          <h1 className="hero-home-title">
+            <span className="hero-home-title-line">Every task,</span>
+            <span className="hero--hometitle-line hero-home-title-accent">a trusted master</span>
           </h1>
 
           <p className="hero-sub">
@@ -496,7 +496,7 @@ function CategoriesAndWorkers() {
      <div className="workers-section">
   <div className="workers-inner">
     <div className="workers-header reveal" ref={titleRef}>
-      <h2 className="section-title">
+      <h2 className="section-landing-title">
         Top Workers in <span>{selectedSub || selectedCat}</span>
       </h2>
       <div className="scroll-hint">

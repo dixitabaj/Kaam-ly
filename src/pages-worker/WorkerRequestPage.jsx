@@ -481,18 +481,50 @@ const WorkerTaskRequestsPage = () => {
 
   useEffect(() => {
     const fetchRequests = async () => {
-      if (!workerId) { setLoading(false); return; }
+  if (!workerId) { setLoading(false); return; }
+  try {
+    const data = await getTasksByWorker(workerId);
+    const workerData = await fetchWorkerById(workerId);
+    const customerCache = {};
+
+    const enrichTask = async (task) => {
+      let customerData = null, paymentStatus = null;
       try {
-        const data     = await getTasksByWorker(workerId);
-        const enriched = await Promise.all((data.tasks || []).map(enrichTask));
-        enriched.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        setRequests(enriched);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
+        if (!customerCache[task.userId]) customerCache[task.userId] = fetchCustomerById(task.userId);
+        customerData = await customerCache[task.userId];
+        paymentStatus = ["confirmed","in_progress","completed"].includes(task.status)
+          ? await getTaskPaymentStatus(task.id || task._id)
+          : "N/A";
+      } catch (err) { console.error("[enrich] Failed:", err); }
+
+      return {
+        ...task, paymentStatus,
+        customerId:     task.userId,
+        customerName:   customerData?.first_name || "Customer",
+        customerPhone:  customerData?.phoneNo    || "N/A",
+        customerEmail:  customerData?.email      || "N/A",
+        address:        task.address,
+        totalCost:      task.totalCost,
+        workerEarnings: parseInt(workerData?.basePrice || 0) * parseInt(task.completionTime || 0),
+        hourlyRate:     workerData?.basePrice,
+        preferredDate:  task.serviceDate    || "None shown",
+        preferredTime:  task.serviceTime || task.serviceTIme || "Flexible",
+        estimatedHours: task.estimatedHours || task.completionTime || null,
+        declineReason:  task.declineReason  || task.decline_reason  || null,
+        cancelReason:   task.cancelReason   || task.cancel_reason   || null,
+        profile:        customerData?.profile_picture || null,
+      };
     };
+
+    const enriched = await Promise.all((data.tasks || []).map(enrichTask));
+    enriched.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    setRequests(enriched);
+  } catch (err) {
+    setError(err.message);
+  } finally {
+    setLoading(false);
+  }
+};
     fetchRequests();
   }, [workerId]);
 
