@@ -917,6 +917,16 @@ export const fetchSharedTasks = async (customerId, workerId) => {
   }
 };
 
+export const recordWorkerView = (workerId, viewerId = null) =>
+  fetch(`${BASE_URL}/worker/${workerId}/view`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ viewer_id: viewerId }),
+  });
+
+export const getWorkerViewCount = (workerId) =>
+  fetch(`${BASE_URL}/worker/${workerId}/views`).then(res => res.json());
+
 export const closeWebSocket = () => {
   if (ws) { ws.close(); ws = null; }
 };
@@ -943,3 +953,4 @@ export const connectTaskWebSocket = (userId, onMessage) => {
 export const closeTaskWebSocket = () => {
   if (taskWs) { taskWs.close(); taskWs = null; }
 };
+

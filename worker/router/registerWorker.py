@@ -274,3 +274,37 @@ def check_availability_on_date(worker_id: str, date: str):
 @router.patch("/worker/{id}/availability/toggle")
 def toggle_worker_availability(id: str, body: AvailabilityToggleSchema):
     return workerRepo.toggleWorkerAvailability(id, body.isAvailable)
+
+
+
+@router.post("/worker/{id}/view")
+def recordWorkerView(worker_id: str, viewer_id: str = None):
+    if viewer_id and viewer_id == worker_id:
+        return {"message": "Own view not counted"}
+
+    collection_worker.update_one(
+        {"_id": worker_id},
+        {"$inc": {"view_count": 1}}
+    )
+
+    # ── LinUCB: weak interest signal ──
+    try:
+        from ..router.recommend_router import linucb, TASK_CATEGORIES, build_feature_vector, refresh_global_theta, save_model
+        worker = collection_worker.find_one({"_id": worker_id})
+        if worker:
+            task_type  = worker.get("taskType", "")
+            normalized = CATEGORY_ALIAS.get(task_type.lower().strip(), task_type)
+            if linucb and normalized in TASK_CATEGORIES:
+                arm  = TASK_CATEGORIES.index(normalized)
+                x, _ = build_feature_vector(worker, normalized)
+                linucb.update(arm, x, reward=0.05)   # very weak signal
+                refresh_global_theta()
+                save_model()
+    except Exception as e:
+        print(f"⚠️ LinUCB view signal failed: {e}")
+
+    return {"message": "View recorded"}
+
+@router.get("/worker/{id}/views")
+def get_worker_views(id: str):
+    return workerRepo.getWorkerViewCount(id)

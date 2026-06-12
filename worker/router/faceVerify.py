@@ -17,10 +17,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
-try:
-    from deepface import DeepFace
-except ImportError:
-    raise ImportError("Run: pip install deepface")
+
 
 # ── Config ─────────────────────────────────────────────────────────────────
 UPLOAD_DIR   = "uploads"
@@ -152,6 +149,7 @@ def verify_face(request: FaceVerifyRequest):
     Main verification endpoint called by the frontend after liveness check.
     """
     # Print 1: Log the initiation of the request
+    from deepface import DeepFace
     print(f"\n--- [Face Verification Started] ---")
     print(f"Worker ID: {request.worker_id}")
     

@@ -1,25 +1,11 @@
 import torch
 from pathlib import Path
-from transformers import DistilBertTokenizerFast, DistilBertForSequenceClassification
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
+BASE_DIR   = Path(__file__).resolve().parent.parent.parent
 MODEL_PATH = BASE_DIR / "worker" / "model" / "task_classification"
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-tokenizer = DistilBertTokenizerFast.from_pretrained(MODEL_PATH)
-model = DistilBertForSequenceClassification.from_pretrained(MODEL_PATH)
-model.to(device)
-model.eval()
-
-CLASS_LABELS = [model.config.id2label[i] for i in range(len(model.config.id2label))]
-
-# Auto-built from config
-GENERAL_LABEL_MAP = {
-    label: label.replace("general-", "")
-    for label in CLASS_LABELS
-    if label.startswith("general-")
-}
+CLASS_LABELS      = None
+GENERAL_LABEL_MAP = {}
 
 SPECIFIC_TO_CATEGORY = {
     "AC Installation": "Appliance Repair", "AC Repair": "Appliance Repair",
@@ -50,20 +36,54 @@ SPECIFIC_TO_CATEGORY = {
     "Water Heater Repair": "Plumbing", "Pipe Repair": "Plumbing",
 }
 
+# ── Lazy globals ───────────────────────────────────────────────────────────────
+_tokenizer = None
+_model     = None
+_device    = None
+
+
+def _load_model():
+    global _tokenizer, _model, _device, CLASS_LABELS, GENERAL_LABEL_MAP
+
+    if _model is not None:
+        return  # already loaded — do nothing
+
+    print("⏳ Loading task classification model (first request)...")
+
+    from transformers import DistilBertTokenizerFast, DistilBertForSequenceClassification
+
+    _device    = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    _tokenizer = DistilBertTokenizerFast.from_pretrained(str(MODEL_PATH))
+    _model     = DistilBertForSequenceClassification.from_pretrained(str(MODEL_PATH))
+    _model.to(_device)
+    _model.eval()
+
+    CLASS_LABELS = [_model.config.id2label[i] for i in range(len(_model.config.id2label))]
+
+    GENERAL_LABEL_MAP = {
+        label: label.replace("general-", "")
+        for label in CLASS_LABELS
+        if label.startswith("general-")
+    }
+
+    print("✅ Task classification model loaded")
+
 
 def run_prediction(text: str) -> dict:
-    tokens = tokenizer(
+    _load_model()  # loads only on first call, instant on subsequent calls
+
+    tokens = _tokenizer(
         text,
         max_length=128,
         padding="max_length",
         truncation=True,
         return_tensors="pt"
     )
-    tokens = {k: v.to(device) for k, v in tokens.items()}
+    tokens = {k: v.to(_device) for k, v in tokens.items()}
 
     with torch.no_grad():
-        outputs = model(**tokens)
-        probs = torch.softmax(outputs.logits, dim=-1)[0]
+        outputs = _model(**tokens)
+        probs   = torch.softmax(outputs.logits, dim=-1)[0]
 
     predicted_idx    = torch.argmax(probs).item()
     raw_label        = CLASS_LABELS[predicted_idx]
@@ -71,11 +91,9 @@ def run_prediction(text: str) -> dict:
 
     # Resolve taskType and subCategory
     if raw_label in GENERAL_LABEL_MAP:
-        # "general-Carpentry" → taskType: "Carpentry", subCategory: "general-Carpentry"
         task_type    = GENERAL_LABEL_MAP[raw_label]
         sub_category = raw_label
     elif raw_label in SPECIFIC_TO_CATEGORY:
-        # "Furniture Repair" → taskType: "Carpentry", subCategory: "Furniture Repair"
         task_type    = SPECIFIC_TO_CATEGORY[raw_label]
         sub_category = raw_label
     else:

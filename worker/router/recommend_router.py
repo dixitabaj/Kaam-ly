@@ -483,6 +483,34 @@ def get_workers_by_task(task_type: str, target_subcat: Optional[str] = None) -> 
 # MAIN RECOMMEND FUNCTION
 # ═══════════════════════════════════════════════════════════════════════════════
 
+import random
+
+def deduplicate_and_shuffle(workers: list, epsilon_band: float = 0.08) -> list:
+    """Remove duplicates by _id, then shuffle within score bands."""
+    seen = set()
+    unique = []
+    for w in workers:
+        wid = w.get("_id") or w.get("email")
+        if wid not in seen:
+            seen.add(wid)
+            unique.append(w)
+
+    unique.sort(key=lambda w: w.get("_score", 0), reverse=True)
+
+    result = []
+    i = 0
+    while i < len(unique):
+        band_score = unique[i].get("_score", 0)
+        band = []
+        while i < len(unique) and abs(unique[i].get("_score", 0) - band_score) <= epsilon_band:
+            band.append(unique[i])
+            i += 1
+        random.shuffle(band)
+        result.extend(band)
+
+    return result
+
+
 def recommend_workers(
     task_type:     str,
     top_k:         int             = 5,
@@ -505,9 +533,12 @@ def recommend_workers(
 
     quality_pool = []
     cold_pool    = []
+    seen_ids     = set()
 
     for worker in workers:
         try:
+            wid = str(worker.get("_id") or worker.get("email", ""))
+
             if user_lat is not None and user_lon is not None:
                 w_lat = worker.get("latitude") or worker.get("lat")
                 w_lon = worker.get("longitude") or worker.get("lng") or worker.get("lon")
@@ -524,10 +555,7 @@ def recommend_workers(
                 target_subcat = target_subcat,
             )
 
-            if score < 0:
-                continue
-
-            if not worker.get("isAvailable", True):
+            if score < 0 or not worker.get("isAvailable", True):
                 continue
 
             stars, review_count = _get_worker_scalars(worker)
@@ -536,12 +564,14 @@ def recommend_workers(
 
             result = {
                 **{k: str(v) if k == "_id" else v for k, v in worker.items()},
-                "_id":           str(worker["_id"]),
+                "_id":           wid,
                 "_score":        round(score, 4),
                 "_distance_km":  round(dist_km, 2) if dist_km is not None else None,
                 "_is_new":       is_new,
-                "_subcat_match": match,   # "exact" / "partial" / "none" / "n/a"
+                "_subcat_match": match,
             }
+
+            seen_ids.add(wid)
 
             if is_new:
                 cold_pool.append(result)
@@ -552,70 +582,54 @@ def recommend_workers(
             print(f"⚠️  Scoring error for worker {worker.get('_id')}: {e}")
             continue
 
-    quality_pool.sort(key=lambda w: w["_score"], reverse=True)
-    cold_pool.sort(   key=lambda w: w["_score"], reverse=True)
+    quality_pool = deduplicate_and_shuffle(quality_pool)
+    cold_pool    = deduplicate_and_shuffle(cold_pool)
 
     recommendations  = quality_pool[:n_quality]
-    shortfall        = n_quality - len(recommendations)
-    if shortfall > 0:
-        recommendations += quality_pool[n_quality: n_quality + shortfall]
-    recommendations  = quality_pool[:n_quality]
-    shortfall        = n_quality - len(recommendations)
-
-    if shortfall > 0:
-        recommendations += quality_pool[n_quality: n_quality + shortfall]
-
     recommendations += cold_pool[:n_cold]
 
-    # ════════════════════════════════════════════════
-    # 🔥 FALLBACK LOGIC (CORRECTLY INDENTED)
-    # ════════════════════════════════════════════════
+    # ── Fallback: fill remaining slots from full category ─────────────────────
     if len(recommendations) < top_k:
         print("⚠️ Expanding to full category fallback")
 
-        # fetch ALL workers (ignore subcategory)
         fallback_workers = get_workers_by_task(task_type, target_subcat=None)
-
         extra = []
 
         for worker in fallback_workers:
             try:
+                wid = str(worker.get("_id") or worker.get("email", ""))
+                if wid in seen_ids:
+                    continue  # already in recommendations
+
                 score, dist_km = score_worker(
                     worker,
                     task_type,
                     user_lat,
                     user_lon,
-                    target_subcat=None  # 🔥 remove subcat restriction
+                    target_subcat=None,
                 )
 
-                if score < 0:
-                    continue
-
-                if not worker.get("isAvailable", True):
+                if score < 0 or not worker.get("isAvailable", True):
                     continue
 
                 extra.append({
                     **{k: str(v) if k == "_id" else v for k, v in worker.items()},
-                    "_id": str(worker["_id"]),
-                    "_score": round(score, 4),
-                    "_distance_km": round(dist_km, 2) if dist_km else None,
-                    "_is_new": False,
-                    "_subcat_match": "fallback"
+                    "_id":           wid,
+                    "_score":        round(score, 4),
+                    "_distance_km":  round(dist_km, 2) if dist_km is not None else None,
+                    "_is_new":       False,
+                    "_subcat_match": "fallback",
                 })
+                seen_ids.add(wid)
 
             except Exception:
                 continue
 
-        # sort fallback workers
-        extra.sort(key=lambda x: x["_score"], reverse=True)
-
-        # fill remaining slots
+        extra = deduplicate_and_shuffle(extra)
         needed = top_k - len(recommendations)
         recommendations += extra[:needed]
 
     return recommendations[:top_k]
-
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════════════════

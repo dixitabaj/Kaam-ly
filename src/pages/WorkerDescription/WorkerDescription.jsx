@@ -5,7 +5,7 @@ import {
   MapPin, Clock, Award, MessageCircle, ChevronRight,
   TrendingUp, TrendingDown, Filter, Tag
 } from 'lucide-react';
-import { fetchWorkerById, getReviewsById, getPriceByTask, fetchCustomerById } from '../../api/api';
+import { fetchWorkerById, getReviewsById, getPriceByTask, fetchCustomerById, recordWorkerView, getWorkerViewCount } from '../../api/api';
 import FacebookChatBox from '../../components/MessageBox/MessageBox';
 import BookingNavbar from '../../components/Navbar/Navbar';
 import './WorkerDescription.css';
@@ -130,6 +130,9 @@ export default function WorkerDescription() {
 
     if (workerId) fetchWorkerData();
   }, [workerId]);
+  useEffect(() => {
+  if (workerId) recordWorkerView(workerId, currentUser?.id || null);
+}, [workerId]);
 
   /* ── Filter reviews ── */
   useEffect(() => {

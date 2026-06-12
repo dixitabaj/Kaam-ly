@@ -31,7 +31,11 @@ STATUS_MESSAGES = {
     "declined":    ("Task Declined ❌",  "Your task '{name}' was declined by the worker."),
     "cancelled":   ("Task Cancelled ❌", "Your task '{name}' has been cancelled."),
 }
-
+try:
+    from ..router.recommend_router import linucb, TASK_CATEGORIES, build_feature_vector, refresh_global_theta, save_model
+    print(f"[LINUCB IMPORT] ✅ loaded — arms={linucb.n_arms if linucb else 'None'}")
+except Exception as e:
+    print(f"[LINUCB IMPORT] ❌ {e}")
 # ───────── TIME HELPERS ─────────
 
 def _to_mins(t: str) -> int:
@@ -248,6 +252,42 @@ async def _payment_reminder(task_id: str, userId: str, taskName: str, customer: 
     }))
 
 
+# ───────── LINUCB HELPER ─────────
+
+def _linucb_update(worker: dict, task_type: str, reward: float, label: str):
+    """Fire-and-forget LinUCB update. Never raises — always safe to call."""
+    try:
+        from ..router.recommend_router import (
+            linucb, TASK_CATEGORIES, CATEGORY_ALIAS, build_feature_vector,
+            refresh_global_theta, save_model,
+        )
+        normalized = CATEGORY_ALIAS.get(task_type.lower().strip(), task_type)
+        print(f"[LINUCB] '{task_type}' → '{normalized}' | match={normalized in TASK_CATEGORIES}")
+        if linucb and normalized in TASK_CATEGORIES:
+            arm  = TASK_CATEGORIES.index(normalized)
+            x, _ = build_feature_vector(worker, normalized)
+            linucb.update(arm, x, reward)
+            refresh_global_theta()
+            save_model()
+            print(f"✅ LinUCB updated [{label}] — arm={arm} reward={reward}")
+        else:
+            print(f"[LINUCB] ⚠️ Skipped — normalized='{normalized}' not in TASK_CATEGORIES")
+    except Exception as e:
+        print(f"⚠️ LinUCB update failed [{label}]: {e}")
+        import traceback; traceback.print_exc()
+
+
+def _resolve_worker_dict(worker_id: str) -> dict | None:
+    """Try ObjectId first, fall back to email lookup."""
+    worker = None
+    try:
+        worker = collection_worker.find_one({"_id": ObjectId(worker_id)})
+    except Exception:
+        pass
+    if not worker:
+        worker = collection_worker.find_one({"email": worker_id})
+    return worker
+
 
  
 @router.post("/task")
@@ -302,7 +342,7 @@ async def create_task(
     best_prices:   list[float] = []
     selected_name              = (selectedService or taskType or "").strip().lower()
     base_price:    float | None = None
- 
+    
     for skill in getattr(worker, "skills", []) or []:
         if isinstance(skill, dict):
             price = skill.get("price") or skill.get("basePrice")
@@ -353,6 +393,7 @@ async def create_task(
     }
  
     task_id = await taskRepo.insert_task(task_doc)
+
     if serviceDate and serviceTime:
         start_dt = datetime.combine(serviceDate.date(), datetime.strptime(serviceTime, "%H:%M").time())
         end_dt = start_dt + timedelta(hours=2)
@@ -364,6 +405,11 @@ async def create_task(
             "taskId": str(task_id)
         }
         db.worker_calendar.insert_one(slot_entry)
+
+    # ── LinUCB: booking signal ────────────────────────────────────────────────
+    worker_dict = _resolve_worker_dict(assignedWorker)
+    if worker_dict:
+        _linucb_update(worker_dict, taskType, reward=0.6, label="booking")
 
     task_notification = json.dumps({
         "type":        "new_task",
@@ -377,7 +423,11 @@ async def create_task(
         "serviceTime": serviceTime,
     })
     await websocket_manager.manager.send_to_user(assignedWorker, task_notification)
-
+    print(f"[DEBUG] taskType from form = '{taskType}'")
+    worker_dict = _resolve_worker_dict(assignedWorker)
+    print(f"[DEBUG] worker_dict found = {worker_dict is not None}")
+    if worker_dict:
+        _linucb_update(worker_dict, taskType, reward=0.6, label="booking")
     return {
         "message":   "Task created successfully",
         "taskId":    task_id,
@@ -511,6 +561,15 @@ async def update_task_status(task_id: str, status_update: StatusUpdate):
                 asyncio.create_task(
                     _payment_reminder(task_id, userId, taskName, customer)
                 )
+
+            # ── LinUCB: completed signal ──────────────────────────────────────
+            if status == "completed":
+                worker_id = task.get("assignedWorkerId")
+                task_type = task.get("taskType")
+                if worker_id and task_type:
+                    worker_dict = _resolve_worker_dict(str(worker_id))
+                    if worker_dict:
+                        _linucb_update(worker_dict, task_type, reward=0.7, label="completed")
 
         return result
     except ValueError as e:
@@ -787,11 +846,6 @@ def _create_cancellation_review_entry(
     total_cost:    float,
     now:           datetime,
 ) -> str | None:
-    """
-    Instead of inserting a new cancelled_tasks doc, we embed the review
-    data directly onto the task via a $set update.
-    Returns the task_id as the 'review id' (since data lives on the task).
-    """
     try:
         embedded = {
             "cancellationReview": {
@@ -817,13 +871,13 @@ def _create_cancellation_review_entry(
             {"$set": embedded},
         )
         print(f"[CANCEL_REVIEW] Embedded cancellationReview into task {task_id}")
-        # Return task_id so callers still get a non-None 'review id'
         return task_id
 
     except Exception as e:
         print(f"[CANCEL_REVIEW] Failed to embed review (non-critical): {e}")
         traceback.print_exc()
         return None
+
 # ─────────────────────────────────────────────────────────────────────────────
 # ADMIN ENDPOINTS — Cancelled Tasks Review Queue
 # ─────────────────────────────────────────────────────────────────────────────
@@ -922,6 +976,7 @@ def decline_task_route(task_id: str, body: dict):
     if not success:
         raise HTTPException(status_code=404, detail="Task not found")
     return { "message": "Task declined", "task_id": task_id }
+
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN CANCEL ENDPOINT
 # ─────────────────────────────────────────────────────────────────────────────
@@ -949,7 +1004,6 @@ async def cancel_task(task_id: str, body: CancelRequest):
     task = database.collection_task.find_one({"_id": obj_id})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-   
 
     # ── 3. Guard: already in a terminal state ─────────────────────────────────
     task_status = task.get("status", "")
@@ -963,10 +1017,10 @@ async def cancel_task(task_id: str, body: CancelRequest):
     escrow_status = task.get("escrow_status", "pending")
     total_cost    = float(task.get("totalCost") or 0)
     worker_id     = task.get("assignedWorkerId")
+    task_type     = task.get("taskType")
 
     # ── 4a. EASY CANCELLATION PATH for pending escrow ────────────────────────
     if escrow_status == "pending":
-        # Simple cancellation - no refunds/penalties needed since payment wasn't processed
         update_fields = {
             "status":        "cancelled",
             "cancelledBy":   body.cancelled_by,
@@ -982,6 +1036,13 @@ async def cancel_task(task_id: str, body: CancelRequest):
         
         # Restore worker slot
         _restore_worker_slot(task)
+
+        # ── LinUCB: cancellation signal (pending/unpaid) ──────────────────────
+        if worker_id and task_type:
+            worker_dict = _resolve_worker_dict(str(worker_id))
+            if worker_dict:
+                reward = 0.1 if body.cancelled_by == "tasker" else 0.3
+                _linucb_update(worker_dict, task_type, reward=reward, label=f"cancelled-pending-by-{body.cancelled_by}")
         
         # Notify customer
         _, customer = taskRepo.get_task_with_customer(task_id)
@@ -1142,6 +1203,7 @@ async def cancel_task(task_id: str, body: CancelRequest):
     payment_status = task.get("payment_status") or task.get("escrow_status") or ""
     was_paid       = payment_status in ("paid", "released", "escrowed", "held")
     report_id      = None
+    id_refs: dict  = {}
 
     if was_paid and total_cost > 0:
         try:
@@ -1199,18 +1261,15 @@ async def cancel_task(task_id: str, body: CancelRequest):
         except Exception as e:
             print(f"[REPORT] Failed to create auto-report (non-critical): {e}")
             traceback.print_exc()
-    # ── 11b. Create entry in refunds collection ─────────────────────────────
-        # ── 11b. Create entry in refunds collection ─────────────────────────────
+
+        # ── 11b. Create entry in refunds collection ───────────────────────────
         try:
-            # Fetch payment transaction for customer
             payment_tx = database.collection_payment.find_one(
                 {"task_id": str(task_id), "type": "customer_payment", "status": {"$in": ["success", "paid", "pending"]}},
                 sort=[("created_at", -1)],
             )
             print("payment", payment_tx)
 
-
-            # Fetch worker doc for payment details
             worker_doc = None
             if worker_id:
                 try:
@@ -1218,17 +1277,16 @@ async def cancel_task(task_id: str, body: CancelRequest):
                 except Exception:
                     worker_doc = database.collection_worker.find_one({"email": str(worker_id)})
 
-            # Resolve payment method
             payment_method = (task.get("payment_method") or "").lower()
             if payment_method not in ("khalti", "esewa") and payment_tx:
                 payment_method = (payment_tx.get("method") or "").lower()
 
-            worker_payment_method = (worker_doc.get("payment_method") or "").lower() if worker_doc else None
             worker_payment_method = (worker_doc.get("paymentMethod") or "").lower() if worker_doc else None
 
             print(f"[REFUND] worker_doc={worker_doc}")
             print(f"[REFUND] worker_payment_method={worker_payment_method}")
             print(f"[REFUND] worker paymentId={worker_doc.get('paymentId') if worker_doc else None}")
+
             refund_doc = {
                 "task_id":        task_id,
                 "report_id":      report_id,
@@ -1244,13 +1302,9 @@ async def cancel_task(task_id: str, body: CancelRequest):
                 "refundStatus":    "pending" if refund_status == "dispute" else "queued",
                 "created_at":      now,
                 "evidence_files":  [],
-
-                # Customer payment details
                 "payment_method_customer":           payment_tx.get("method") if payment_tx else None,
                 "esewa_transaction_uuid_customer":   payment_tx.get("transaction_uuid") if payment_method == "esewa" else None,
                 "khalti_customer":                   payment_tx.get("transaction_uuid") if payment_method == "khalti" else None,
-
-                # Worker payment details
                 "payment_method_worker":             worker_doc.get("paymentMethod") if worker_doc else None,
                 "esewa_transaction_uuid_worker":     worker_doc.get("paymentId") if worker_doc and worker_payment_method == "esewa" else None,
                 "khalti_worker":                     worker_doc.get("paymentId") if worker_doc and worker_payment_method == "khalti" else None,
@@ -1263,8 +1317,14 @@ async def cancel_task(task_id: str, body: CancelRequest):
         except Exception as e:
             print(f"[REFUND] Failed to create refund record: {e}")
 
-    # ── 12. Store only the IDs back on the task (no embedded details) ─────────
-    id_refs: dict = {}
+    # ── LinUCB: cancellation signal (paid task) ───────────────────────────────
+    if worker_id and task_type:
+        worker_dict = _resolve_worker_dict(str(worker_id))
+        if worker_dict:
+            reward = 0.1 if body.cancelled_by == "tasker" else 0.3
+            _linucb_update(worker_dict, task_type, reward=reward, label=f"cancelled-paid-by-{body.cancelled_by}")
+
+    # ── 12. Store only the IDs back on the task ───────────────────────────────
     if report_id:
         id_refs["report_id"] = report_id
     if review_id:
@@ -1373,8 +1433,8 @@ async def cancel_task(task_id: str, body: CancelRequest):
         "surchargePct":      surcharge_pct,
         "reason":            refund_reason,
         "dispute":           refund_status == "dispute",
-        "report_id":         report_id,          # ← ID only, no embedded doc
-        "cancel_review_id":  review_id,          # ← ID only, no embedded doc
+        "report_id":         report_id,
+        "cancel_review_id":  review_id,
         "workerCancelCount": worker_prev_cancel_count + (
             1 if body.cancelled_by == "tasker" else 0
         ),

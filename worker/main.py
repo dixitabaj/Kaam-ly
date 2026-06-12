@@ -1,7 +1,12 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect, Request
 
 from fastapi.staticfiles import StaticFiles
+from datetime import datetime
+from bson import ObjectId
 
+
+
+from motor.motor_asyncio import AsyncIOMotorClient
 
 from .router import registerCustomer, chatbot, dashboard, khaltiPayment, esewaPayment, availability,fraud_router, refundCustomer,refund, updateProfile, skillVerification, faceVerify, adminPayout, registerWorker, login, otp, createTask, chat, duplicateCheck, faceVerify, recommend_router, esewaVerify, predictTask, review_route, search_router, image_classify_router, report, adminReviewAI, pendingActivities, notifications
 from .schemas.schemas import WorkerCreateSchema, WorkerResponseSchema, WorkerStatsResponse
@@ -23,37 +28,25 @@ from contextlib import asynccontextmanager
 from apscheduler.schedulers.background import BackgroundScheduler
 from .repository.taskRepo import auto_release_job
 
-MONGO_URI = "mongodb+srv://dixita1:Shuvechhya@cluster0.ue3kxzv.mongodb.net/?appName=Cluster0"
 
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
+MONGO_URI = os.getenv("MONGO_URI")
+print("=== main.py loading ===")  # Add as first line
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Starting app...")
-
-    # 1. Initialize DB HERE (not in @on_event)
     app.state.db_client = AsyncIOMotorClient(MONGO_URI)
     app.state.db = app.state.db_client["user"]
-    print("DB initialized ")
-
-    # 2. Start scheduler
+    
     scheduler = BackgroundScheduler()
-    scheduler.add_job(
-        auto_release_job,
-        "interval",
-        hours=1,
-        id="auto_release",
-        max_instances=1
-    )
+    scheduler.add_job(auto_release_job, "interval", hours=1, id="auto_release", max_instances=1)
     scheduler.start()
-    print("Scheduler started ")
-
-    yield  # app runs here
-
-    # 3. Shutdown cleanup
-    print("Shutting down...")
+    
+    yield  # ← port opens HERE, before any ML loading
+    
     scheduler.shutdown()
     app.state.db_client.close()
-    print("Cleanup done ✅")
 
 app = FastAPI(lifespan=lifespan)
 
@@ -62,7 +55,6 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 # Add CORS middleware to allow requests from frontend apps
 app.add_middleware(
@@ -72,26 +64,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-from datetime import datetime
-from bson import ObjectId
-
-
-
-from motor.motor_asyncio import AsyncIOMotorClient
-
-
-@app.on_event("startup")
-async def startup_db_client():
-    print("Starting DB...")
-    app.state.db_client = AsyncIOMotorClient(MONGO_URI)
-    app.state.db = app.state.db_client["user"]  # explicitly set your DB name
-    print("DB initialized ✅")
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    print("Closing DB...")
-    app.state.db_client.close()
 
 @app.get("/api/worker/category/{category}/subcategory/{subcategory}")
 async def get_workers_by_subcategory(category: str, subcategory: str):

@@ -487,3 +487,20 @@ def updateWorkerProfile(worker_id: str, update_data: dict) -> dict:
 
     updated = collection_worker.find_one({"_id": worker_id}, {"password": 0})
     return updated
+
+def recordWorkerView(worker_id: str, viewer_id: str = None):
+    # Don't count own views
+    if viewer_id and viewer_id == worker_id:
+        return {"message": "Own view not counted"}
+
+    collection_worker.update_one(
+        {"_id": worker_id},
+        {"$inc": {"view_count": 1}}
+    )
+    return {"message": "View recorded"}
+
+def getWorkerViewCount(worker_id: str):
+    worker = collection_worker.find_one({"_id": worker_id}, {"view_count": 1})
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    return {"worker_id": worker_id, "view_count": worker.get("view_count", 0)}

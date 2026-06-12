@@ -19,6 +19,9 @@ class SubSkillSchema(BaseModel):
     name:  str
     price: float
 
+class RecordViewSchema(BaseModel):
+    viewer_id: Optional[str] = None
+    
 class SkillSchema(BaseModel):
     name:      str
     subSkills: Optional[List[SubSkillSchema]] = None

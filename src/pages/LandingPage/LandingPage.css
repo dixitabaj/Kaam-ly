@@ -271,6 +271,7 @@ body {
   display: flex;
   gap: 10px;
   flex-wrap: nowrap;
+  justify-content: center;
   align-items: center;
   width: max-content;
   min-width: 100%;
@@ -288,11 +289,11 @@ body {
    WORKERS SECTION
 ══════════════════════════════════════ */
 .workers-section {
-  padding: clamp(40px, 6vw, 72px) 0;
-  background: var(--cream);
+  padding: clamp(40px, 6vw, 22px) 0;
+  background: #FDFBF0;
 }
 .workers-inner {
-  max-width: 1200px;
+  max-width: 90%;
   margin: 0 auto;
   padding: 0 clamp(16px, 4vw, 48px);
 }
