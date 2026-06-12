@@ -911,12 +911,24 @@ const WorkerTaskRequestsPage = () => {
               </div>
 
               {/* Total amount */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "#fffbf2", borderRadius: "10px", border: "1px solid #fde68a", marginBottom: "1.25rem" }}>
-                <span style={{ fontSize: "12px", fontWeight: "700", color: "#a8601a" }}>Total Amount</span>
-                <span style={{ fontSize: "20px", fontWeight: "900", color: "#f6a623" }}>
-                  {selectedRequest.totalCost ? formatCurrency(selectedRequest.totalCost) : "NPR —"}
-                </span>
-              </div>
+             <div style={{ padding: "12px 16px", background: "#fffbf2", borderRadius: "10px", border: "1px solid #fde68a", marginBottom: "1.25rem" }}>
+  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+    <span style={{ fontSize: "12px", fontWeight: "700", color: "#a8601a" }}>Total Amount</span>
+    <span style={{ fontSize: "20px", fontWeight: "900", color: "#f6a623" }}>
+      {selectedRequest.totalCost ? formatCurrency(selectedRequest.totalCost) : "NPR —"}
+    </span>
+  </div>
+  {selectedRequest.totalCost > 0 && (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: "8px", borderTop: "1px dashed #fde68a" }}>
+      <span style={{ fontSize: "11px", color: "#a8601a", fontWeight: "600", display: "flex", alignItems: "center", gap: "4px" }}>
+        <CheckCircle size={11} color="#059669" /> You'll receive (after 5% platform fee)
+      </span>
+      <span style={{ fontSize: "15px", fontWeight: "800", color: "#059669" }}>
+        {formatCurrency(selectedRequest.totalCost - (selectedRequest.platformFee ?? selectedRequest.totalCost * 0.05))}
+      </span>
+    </div>
+  )}
+</div>
 
               {/* Worker earnings */}
               {selectedRequest.workerEarnings > 0 && (
@@ -1035,14 +1047,7 @@ const WorkerTaskRequestsPage = () => {
               )}
 
               {/* COMPLETED actions */}
-              {selectedRequest.status === "completed" && (
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button onClick={handleContactSupport}
-                    style={{ flex: 1, padding: "11px", background: "white", color: "#78716c", border: "1.5px solid #e8dfd0", borderRadius: "10px", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "13px" }}>
-                    <MessageCircle size={14} /> Need Help?
-                  </button>
-                </div>
-              )}
+              
             </div>
           </div>
         );
@@ -1196,9 +1201,9 @@ const RequestCard = ({
           {/* Declined reason */}
           {request.status === "declined" && (
             <>
-              <div style={{ fontSize: "12px", color: "#991b1b", marginBottom: "10px" }}>
-                <span style={{ fontWeight: "700", display: "block", marginBottom: "2px" }}>Decline reason</span>
-                <span style={{ color: "#7f1d1d" }}>{request.declineReason || request.decline_reason || "No reason provided"}</span>
+              <div style={{ fontSize: "13px",  marginBottom: "10px" }}>
+                <span style={{  display: "inline", marginBottom: "2px", color: "rgb(168, 162, 158)" }}>Decline reason: </span>
+                <span style={{ fontWeight: "700",  color: "rgb(153, 27, 27)" }}>{request.declineReason || request.decline_reason || "No reason provided"}</span>
               </div>
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                 <Btn onClick={e => { e.stopPropagation(); handleViewDetails(request); }} variant="default">View more <ChevronRight size={12}/></Btn>
@@ -1290,28 +1295,39 @@ const RequestCard = ({
         </div>
 
         {/* RIGHT */}
-        <div className="card-right">
-          <div style={{ marginBottom: "12px" }}>
-            <div className="price-label" style={{ fontSize: "10px", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: "2px", fontWeight: "700" }}>Estimated price</div>
-            <div className="price-value" style={{ fontSize: "15px", fontWeight: "700", color: "#1c1008" }}>{formatCurrency(request.workerEarnings || request.totalCost)}</div>
-          </div>
-          <div style={{ marginBottom: "12px" }}>
-            <div className="price-label" style={{ fontSize: "10px", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: "2px", fontWeight: "700" }}>Estimated hours</div>
-            <div className="price-value" style={{ fontSize: "13px", fontWeight: "600", color: request.estimatedHours ? "#374151" : "#f6a623" }}>
-              {request.estimatedHours || "Not set yet"}
-            </div>
-          </div>
-          <div style={{ borderTop: "1px dashed #e8dfd0", paddingTop: "12px" }}>
-            <div className="price-label" style={{ fontSize: "10px", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: "2px", fontWeight: "700" }}>Total cost</div>
-            <div className="total-value" style={{ fontSize: "17px", fontWeight: "900", color: request.totalCost ? "#f6a623" : "#c4bab0" }}>
-              {request.totalCost ? formatCurrency(request.totalCost) : "Pending"}
-            </div>
-          </div>
-          <button onClick={e => { e.stopPropagation(); handleViewDetails(request); }}
-            style={{ display: "flex", alignItems: "center", gap: "3px", marginTop: "20px", fontSize: "12px", fontWeight: "600", color: hovered ? "#f6a623" : "#a8a29e", background: "none", border: "none", cursor: "pointer", transition: "color 0.15s", padding: 0, alignSelf: "flex-end" }}>
-            View Details <ChevronRight size={13}/>
-          </button>
-        </div>
+        {/* RIGHT */}
+<div className="card-right">
+  <div style={{ marginBottom: "12px" }}>
+    <div className="price-label" style={{ fontSize: "10px", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: "2px", fontWeight: "700" }}>You'll receive</div>
+    <div className="price-value" style={{ fontSize: "15px", fontWeight: "700", color: "#059669" }}>
+      {request.totalCost
+        ? formatCurrency(request.totalCost - request.platformFee)
+        : formatCurrency(request.workerEarnings || 0)}
+    </div>
+    <div style={{ fontSize: "10px", color: "#a8a29e", marginTop: "2px", fontWeight: "500" }}>after 5% platform fee</div>
+  </div>
+  <div style={{ marginBottom: "12px" }}>
+    <div className="price-label" style={{ fontSize: "10px", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: "2px", fontWeight: "700" }}>Estimated hours</div>
+    <div className="price-value" style={{ fontSize: "13px", fontWeight: "600", color: request.estimatedHours ? "#374151" : "#f6a623" }}>
+      {request.estimatedHours || "Not set yet"}
+    </div>
+  </div>
+  <div style={{ borderTop: "1px dashed #e8dfd0", paddingTop: "12px" }}>
+    <div className="price-label" style={{ fontSize: "10px", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: "2px", fontWeight: "700" }}>Total cost</div>
+    <div className="total-value" style={{ fontSize: "17px", fontWeight: "900", color: request.totalCost ? "#f6a623" : "#c4bab0" }}>
+      {request.totalCost ? formatCurrency(request.totalCost) : "Pending"}
+    </div>
+    {request.totalCost > 0 && (
+      <div style={{ fontSize: "10px", color: "#a8a29e", marginTop: "3px", fontWeight: "500" }}>
+        Customer pays this amount
+      </div>
+    )}
+  </div>
+  <button onClick={e => { e.stopPropagation(); handleViewDetails(request); }}
+    style={{ display: "flex", alignItems: "center", gap: "3px", marginTop: "20px", fontSize: "12px", fontWeight: "600", color: hovered ? "#f6a623" : "#a8a29e", background: "none", border: "none", cursor: "pointer", transition: "color 0.15s", padding: 0, alignSelf: "flex-end" }}>
+    View Details <ChevronRight size={13}/>
+  </button>
+</div>
 
       </div>
     </div>
