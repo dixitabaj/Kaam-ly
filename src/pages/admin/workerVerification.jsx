@@ -69,7 +69,7 @@ const Avatar = ({ worker, size = 44 }) => {
   const initials    = displayName.split(" ").map(p => p[0]).join("").toUpperCase().slice(0, 2) || "?";
   const colors      = ["#E8843A", "#3D9E6E", "#3D7EC9", "#9B59B6", "#D94F3D"];
   const color       = colors[(displayName.charCodeAt(0) ?? 0) % colors.length];
-  if (worker.profilePhoto?.startsWith("http"))
+  if (worker.profilePhoto?.startsWith("http") || worker.profilePhoto?.startsWith("data"))
     return <img src={worker.profilePhoto} alt={displayName} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", border: `2px solid ${T.border}` }} />;
   return (
     <div style={{ width: size, height: size, borderRadius: "50%", background: `linear-gradient(135deg,${color},${color}bb)`, color: "white", fontWeight: 700, fontSize: size * 0.35, display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid white", boxShadow: "0 2px 8px rgba(0,0,0,0.12)", flexShrink: 0 }}>

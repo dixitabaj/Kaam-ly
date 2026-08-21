@@ -3,6 +3,7 @@ import { getSearchRecommendations, classifyImage, predictTask } from "../../api/
 import camera from "../../images/camera.png";
 import { useNavigate } from "react-router-dom";
 import FeedbackNudge from "../FeedbackNudge/FeedbackNudge";
+import "./SearchBar.css";
 
 // ── Gibberish detection helper ─────────────────────────────────────────────
 const isGibberish = (text) => {
@@ -222,127 +223,126 @@ export default function SearchBar({ onItemSelect, onImageClassified }) {
   };
 
   // Handle file selection
-  // Handle file selection - FIXED VERSION (without axios)
-const handleFileSelect = async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
+  const handleFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  try {
-    setLoading(true);
-    setIsDropdownOpen(false);
-    setClassifiedLabel(null);
-    setInputError(null);
+    try {
+      setLoading(true);
+      setIsDropdownOpen(false);
+      setClassifiedLabel(null);
+      setInputError(null);
 
-    const result = await classifyImage(file);
-    console.log("Raw classification result:", result);
+      const result = await classifyImage(file);
+      console.log("Raw classification result:", result);
 
-    // ── Parse the result correctly ─────────────────────────────────────────
-    let parsedResult = result;
-    
-    // If result has a 'label' field that's a string, parse it
-    if (result.label && typeof result.label === 'string') {
-      try {
-        // Replace Python-style quotes with JSON quotes
-        const jsonStr = result.label
-          .replace(/'/g, '"')
-          .replace(/False/g, 'false')
-          .replace(/True/g, 'true');
-        parsedResult = JSON.parse(jsonStr);
-        console.log("Parsed result:", parsedResult);
-      } catch (parseError) {
-        console.error("Failed to parse result:", parseError);
-        // Try regex extraction as fallback
-        const classMatch = result.label.match(/'class_name':\s*'([^']+)'/);
-        const rejectedMatch = result.label.match(/'rejected':\s*(True|False)/i);
-        const confMatch = result.label.match(/'confidence':\s*([0-9.]+)/);
-        if (classMatch) {
-          parsedResult = {
-            class_name: classMatch[1],
-            rejected: rejectedMatch ? rejectedMatch[1] === 'True' : false,
-            confidence: confMatch ? parseFloat(confMatch[1]) : 0
-          };
+      // ── Parse the result correctly ─────────────────────────────────────────
+      let parsedResult = result;
+
+      // If result has a 'label' field that's a string, parse it
+      if (result.label && typeof result.label === 'string') {
+        try {
+          // Replace Python-style quotes with JSON quotes
+          const jsonStr = result.label
+            .replace(/'/g, '"')
+            .replace(/False/g, 'false')
+            .replace(/True/g, 'true');
+          parsedResult = JSON.parse(jsonStr);
+          console.log("Parsed result:", parsedResult);
+        } catch (parseError) {
+          console.error("Failed to parse result:", parseError);
+          // Try regex extraction as fallback
+          const classMatch = result.label.match(/'class_name':\s*'([^']+)'/);
+          const rejectedMatch = result.label.match(/'rejected':\s*(True|False)/i);
+          const confMatch = result.label.match(/'confidence':\s*([0-9.]+)/);
+          if (classMatch) {
+            parsedResult = {
+              class_name: classMatch[1],
+              rejected: rejectedMatch ? rejectedMatch[1] === 'True' : false,
+              confidence: confMatch ? parseFloat(confMatch[1]) : 0
+            };
+          }
         }
       }
-    }
 
-    // ── CHECK REJECTION PROPERLY ──────────────────────────────────────────
-    const isRejected = parsedResult.rejected === true || 
-                       parsedResult.rejected === 'true' ||
-                       parsedResult.class_name === "Couldn't Classify" ||
-                       parsedResult.class_index === -1;
+      // ── CHECK REJECTION PROPERLY ──────────────────────────────────────────
+      const isRejected = parsedResult.rejected === true ||
+                         parsedResult.rejected === 'true' ||
+                         parsedResult.class_name === "Couldn't Classify" ||
+                         parsedResult.class_index === -1;
 
-    if (isRejected) {
-      let errorMessage = "Couldn't classify this image. Please use the search bar.";
-      
-      // Check for specific rejection reasons
-      if (parsedResult.rejection_reason === "image_quality_check") {
-        errorMessage = "Image quality too low. Please upload a clearer photo of the service issue.";
-      } else if (parsedResult.rejection_reason === "low_confidence") {
-        errorMessage = "Could not identify the service with confidence. Please use the search bar or upload a clearer photo.";
-      } else if (parsedResult.message) {
-        errorMessage = parsedResult.message;
+      if (isRejected) {
+        let errorMessage = "Couldn't classify this image. Please use the search bar.";
+
+        // Check for specific rejection reasons
+        if (parsedResult.rejection_reason === "image_quality_check") {
+          errorMessage = "Image quality too low. Please upload a clearer photo of the service issue.";
+        } else if (parsedResult.rejection_reason === "low_confidence") {
+          errorMessage = "Could not identify the service with confidence. Please use the search bar or upload a clearer photo.";
+        } else if (parsedResult.message) {
+          errorMessage = parsedResult.message;
+        }
+
+        setQuery("");
+        setInputError(errorMessage);
+        setClassifiedLabel(null);
+        setSuggestions([]);
+        setIsDropdownOpen(false);
+        return;
       }
-      
+
+      // ── Get the classified service name ────────────────────────────────────
+      let className = parsedResult.class_name;
+
+      // Also check top_predictions if available
+      if (!className && parsedResult.top_predictions && parsedResult.top_predictions.length > 0) {
+        className = parsedResult.top_predictions[0].class_name;
+      }
+
+      if (!className || className === "Couldn't Classify") {
+        setQuery("");
+        setInputError("Could not identify the service. Please use the search bar.");
+        return;
+      }
+
+      // ── SUCCESS - Set the classified service ───────────────────────────────
+      setQuery(className);
+      setClassifiedLabel(className);
+      setInputError(null);
+
+      // Notify parent component
+      if (onImageClassified) {
+        onImageClassified(className);
+      }
+
+      // Get search recommendations for the classified service
+      const searchResults = await getSearchRecommendations(className);
+      const transformedResults = searchResults.map(item => ({
+        id: item.id,
+        label: item.name,
+        category: item.category,
+        keywords: item.keywords
+      }));
+      setSuggestions(transformedResults);
+      setIsDropdownOpen(true);
+
+      // Optional: Show success feedback
+      const confidence = parsedResult.confidence ? Math.round(parsedResult.confidence * 100) : null;
+      if (confidence) {
+        console.log(`✅ Classified as: ${className} (${confidence}% confidence)`);
+      }
+
+    } catch (error) {
+      console.error('Image classification failed:', error);
       setQuery("");
-      setInputError(errorMessage);
-      setClassifiedLabel(null);
+      setInputError("Failed to analyze image. Please use the search bar or try again.");
       setSuggestions([]);
       setIsDropdownOpen(false);
-      return;
+    } finally {
+      setLoading(false);
+      e.target.value = '';
     }
-
-    // ── Get the classified service name ────────────────────────────────────
-    let className = parsedResult.class_name;
-    
-    // Also check top_predictions if available
-    if (!className && parsedResult.top_predictions && parsedResult.top_predictions.length > 0) {
-      className = parsedResult.top_predictions[0].class_name;
-    }
-
-    if (!className || className === "Couldn't Classify") {
-      setQuery("");
-      setInputError("Could not identify the service. Please use the search bar.");
-      return;
-    }
-
-    // ── SUCCESS - Set the classified service ───────────────────────────────
-    setQuery(className);
-    setClassifiedLabel(className);
-    setInputError(null);
-    
-    // Notify parent component
-    if (onImageClassified) {
-      onImageClassified(className);
-    }
-
-    // Get search recommendations for the classified service
-    const searchResults = await getSearchRecommendations(className);
-    const transformedResults = searchResults.map(item => ({
-      id: item.id,
-      label: item.name,
-      category: item.category,
-      keywords: item.keywords
-    }));
-    setSuggestions(transformedResults);
-    setIsDropdownOpen(true);
-
-    // Optional: Show success feedback
-    const confidence = parsedResult.confidence ? Math.round(parsedResult.confidence * 100) : null;
-    if (confidence) {
-      console.log(`✅ Classified as: ${className} (${confidence}% confidence)`);
-    }
-
-  } catch (error) {
-    console.error('Image classification failed:', error);
-    setQuery("");
-    setInputError("Failed to analyze image. Please use the search bar or try again.");
-    setSuggestions([]);
-    setIsDropdownOpen(false);
-  } finally {
-    setLoading(false);
-    e.target.value = '';
-  }
-};
+  };
 
   return (
     <div className="search-container" ref={searchRef}>
@@ -430,206 +430,6 @@ const handleFileSelect = async (e) => {
           </div>
         )}
       </div>
-
-      <style jsx>{`
-        .search-container {
-          position: relative;
-          width: 100%;
-          max-width: 100%;
-          margin-top: 50px;
-          padding: 0 16px;
-        }
-        .cameraImg {
-          width: 40px;
-          height: 40px;
-          object-fit: contain;
-          pointer-events: none;
-        }
-        .search-box {
-          position: relative;
-          width: 100%;
-        }
-        .search-input-wrapper {
-          position: relative;
-          display: flex;
-          align-items: center;
-          width: 100%;
-        }
-        .search-input {
-          width: 100%;
-          max-width: 900px;
-          padding: 20px 80px 20px 64px;
-          font-size: 18px;
-          border: 2px solid #e0e0e0;
-          border-radius: 12px;
-          outline: none;
-          box-sizing: border-box;
-          background: white;
-          height: 64px;
-          transition: border-color 0.3s ease, box-shadow 0.3s ease;
-        }
-        .search-input:focus {
-          border-color: #4a90e2;
-          box-shadow: 0 4px 20px rgba(74, 144, 226, 0.15);
-        }
-        .search-input::placeholder {
-          color: #aaa;
-        }
-        /* Error state for input border */
-        .search-input--error {
-          border-color: #e53935 !important;
-          box-shadow: 0 4px 20px rgba(229, 57, 53, 0.12) !important;
-        }
-        /* Error message box */
-        .input-error {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          margin-top: 8px;
-          padding: 10px 14px;
-          background: #fff5f5;
-          border: 1px solid #fcc;
-          border-radius: 8px;
-          color: #c0392b;
-          font-size: 14px;
-          animation: errorSlideIn 0.2s ease-out;
-        }
-        .input-error__icon {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 18px;
-          height: 18px;
-          min-width: 18px;
-          background: #e53935;
-          color: white;
-          border-radius: 50%;
-          font-size: 12px;
-          font-weight: 700;
-          line-height: 1;
-        }
-        @keyframes errorSlideIn {
-          from { opacity: 0; transform: translateY(-4px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        .clear-button {
-          position: absolute;
-          right: 16px;
-          background: none;
-          border: none;
-          cursor: pointer;
-          z-index: 3;
-          padding: 8px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 50%;
-          transition: background 0.2s ease;
-        }
-        .clear-button:hover:not(:disabled) {
-          background: #f5f5f5;
-        }
-        .clear-button:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-        .loading-spinner-small {
-          width: 32px;
-          height: 32px;
-          border: 3px solid #f3f3f3;
-          border-top: 3px solid #4a90e2;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-        }
-        .camera-menu {
-          position: absolute;
-          top: calc(100% + 8px);
-          right: 0;
-          background: white;
-          border: 2px solid #e0e0e0;
-          border-radius: 12px;
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-          z-index: 1001;
-          overflow: hidden;
-          min-width: 220px;
-          animation: slideDown 0.2s ease-out;
-        }
-        .camera-menu button {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          width: 100%;
-          padding: 16px 20px;
-          background: white;
-          border: none;
-          cursor: pointer;
-          text-align: left;
-          font-size: 15px;
-          color: #333;
-          transition: background 0.2s ease;
-        }
-        .camera-menu button:hover {
-          background-color: #f8fafd;
-        }
-        .camera-menu button:not(:last-child) {
-          border-bottom: 1px solid #f0f0f0;
-        }
-        .dropdown {
-          position: absolute;
-          top: calc(100% + 8px);
-          left: 0;
-          right: 0;
-          background: white;
-          border: 2px solid #e0e0e0;
-          border-radius: 12px;
-          max-height: 500px;
-          overflow-y: auto;
-          box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
-          z-index: 1000;
-        }
-        .dropdown-item {
-          padding: 18px 24px;
-          cursor: pointer;
-          border-bottom: 1px solid #f0f0f0;
-          transition: background 0.2s ease;
-        }
-        .dropdown-item:last-child {
-          border-bottom: none;
-        }
-        .dropdown-item.selected,
-        .dropdown-item:hover {
-          background-color: #f8fafd;
-        }
-        .dropdown-empty {
-          padding: 32px;
-          text-align: center;
-          color: #666;
-        }
-        .dropdown-loading {
-          padding: 32px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 12px;
-          color: #666;
-        }
-        .loading-spinner {
-          width: 20px;
-          height: 20px;
-          border: 3px solid #f3f3f3;
-          border-top: 3px solid #4a90e2;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        @keyframes slideDown {
-          from { opacity: 0; transform: translateY(-8px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
     </div>
   );
 }

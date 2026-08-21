@@ -8,10 +8,12 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 
 from dotenv import load_dotenv
-load_dotenv()
+_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-GOOGLE_API_KEY  = os.getenv("GOOGLE_API_KEY")
+load_dotenv(os.path.join(_dir, ".env"))  # ← explicit path
 
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+print("DEBUG KEY:", GOOGLE_API_KEY)  # ← add this
 
 router = APIRouter()
 

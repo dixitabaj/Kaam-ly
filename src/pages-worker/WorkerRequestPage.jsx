@@ -296,6 +296,10 @@ const WorkerTaskRequestsPage = () => {
   const storedUser = localStorage.getItem("user") || sessionStorage.getItem("user");
   const workerId   = storedUser ? JSON.parse(storedUser).id : null;
   const wsRef      = useRef(null);
+  const requestsRef = useRef([]);
+  useEffect(() => {
+  requestsRef.current = requests;
+}, [requests]);
 
   const getTaskPaymentStatus = async (taskId) => {
     try { const data = await getPaymentStatus(taskId); return data?.task_status || "pending"; }
@@ -372,12 +376,12 @@ const WorkerTaskRequestsPage = () => {
         }
 
         if (data.type === "task_status") {
-          setRequests(prev => prev.map(r => String(r._id || r.id) === String(data.taskId) ? { ...r, status: data.status } : r));
-          setSelectedRequest(prev => prev && String(prev._id || prev.id) === String(data.taskId) ? { ...prev, status: data.status } : prev);
-          const task  = requests.find(r => String(r._id || r.id) === String(data.taskId));
-          const toast = makeToast(data.status, task?.taskName);
-          if (toast) addToast(toast);
-        }
+  setRequests(prev => prev.map(r => String(r._id || r.id) === String(data.taskId) ? { ...r, status: data.status } : r));
+  setSelectedRequest(prev => prev && String(prev._id || prev.id) === String(data.taskId) ? { ...prev, status: data.status } : prev);
+  const task  = requestsRef.current.find(r => String(r._id || r.id) === String(data.taskId)); // was: requests.find(...)
+  const toast = makeToast(data.status, task?.taskName);
+  if (toast) addToast(toast);
+}
 
         if (data.type === "offer_updated") {
           setRequests(prev => prev.map(r => String(r._id || r.id) === String(data.taskId)
@@ -394,7 +398,10 @@ const WorkerTaskRequestsPage = () => {
               ? { ...prev, paymentStatus: newPaymentStatus } : prev
           );
           if (newPaymentStatus === "paid") {
-            const task = requests.find(r => String(r._id || r.id) === String(data.taskId));
+            const task = requestsRef.current.find(
+  r => String(r._id || r.id) === String(data.taskId)
+);
+
             addToast({ color: "#059669", message: `Payment received for "${task?.taskName || "a task"}" — you can now start work!` });
           }
         }
@@ -672,7 +679,7 @@ const WorkerTaskRequestsPage = () => {
       <GlobalStyles />
       <BookingNavbar/>
       <ChatWidget/>
-      <ToastContainer toasts={toasts} removeToast={removeToast}/>
+    
 
       <main className="tv-main" style={{ maxWidth: "1280px", margin: "0 auto", padding: "2rem 1.5rem" }}>
 
@@ -705,7 +712,7 @@ const WorkerTaskRequestsPage = () => {
           <Search size={13} className="search-icon" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#a8a29e" }}/>
           <input type="text" placeholder="Search by task or customer name…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
             className="search-input"
-            style={{ width: "100%", padding: "9px 14px 9px 34px", borderRadius: "9999px", border: "1.5px solid #e8dfd0", fontSize: "13px", outline: "none", background: "white", boxSizing: "border-box", color: "#1c1008", transition: "border-color 0.2s" }}
+            style={{ width: "100%", padding: "9px 14px 9px 34px", borderRadius: "9999px", border: "1.5px solid #e8dfd0", fontSize: "13px", outline: "none", background: "white", boxSizing: "border-box", color: "#1c1008", transition: "border-color 0.2s", height: "3.0 vw" }}
             onFocus={e => e.target.style.borderColor = "#f6a623"} onBlur={e => e.target.style.borderColor = "#e8dfd0"}
           />
         </div>
@@ -876,7 +883,7 @@ const WorkerTaskRequestsPage = () => {
                 <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", padding: "10px 14px", marginBottom: "1.25rem", fontSize: "12px", color: "#991b1b" }}>
                   <XCircle size={14} color="#ef4444" style={{ flexShrink: 0, marginTop: "1px" }} />
                   <div>
-                    <span style={{ fontWeight: "700", display: "block", marginBottom: "2px" }}>Decline reason</span>
+                    <span style={{ fontWeight: "700", display: "block", marginBottom: "2px" }}>Declined reason</span>
                     <span style={{ color: "#7f1d1d" }}>{selectedRequest.declineReason}</span>
                   </div>
                 </div>
@@ -1202,10 +1209,10 @@ const RequestCard = ({
           {request.status === "declined" && (
             <>
               <div style={{ fontSize: "13px",  marginBottom: "10px" }}>
-                <span style={{  display: "inline", marginBottom: "2px", color: "rgb(168, 162, 158)" }}>Decline reason: </span>
+                <span style={{  display: "inline", marginBottom: "2px", color: "rgb(168, 162, 158)" }}>Declined reason: </span>
                 <span style={{ fontWeight: "700",  color: "rgb(153, 27, 27)" }}>{request.declineReason || request.decline_reason || "No reason provided"}</span>
               </div>
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "20px" }}>
                 <Btn onClick={e => { e.stopPropagation(); handleViewDetails(request); }} variant="default">View more <ChevronRight size={12}/></Btn>
                 <Btn variant="red" onClick={e => { e.stopPropagation(); onReport(request); }}><Flag size={11}/> Report</Btn>
               </div>
@@ -1219,7 +1226,9 @@ const RequestCard = ({
                 <span style={{ color: "#a8a29e" }}>Cancelled: </span>
                 <span style={{ fontWeight: "600", color: "#991b1b" }}>{request.cancelReason || request.cancel_reason || "No reason provided"}</span>
               </div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "20px" }}>
               <Btn variant="red" onClick={e => { e.stopPropagation(); onReport(request); }}><Flag size={11}/> Report</Btn>
+              </div>
             </>
           )}
 
@@ -1242,7 +1251,7 @@ const RequestCard = ({
           )}
 
           {/* Action buttons */}
-          <div style={{ display: "flex", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: "8px", marginTop: "20px", flexWrap: "wrap" }}>
 
             {/* PENDING */}
             {isPending && (
@@ -1294,7 +1303,6 @@ const RequestCard = ({
           </div>
         </div>
 
-        {/* RIGHT */}
         {/* RIGHT */}
 <div className="card-right">
   <div style={{ marginBottom: "12px" }}>

@@ -14,7 +14,7 @@ import json
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Form
 from bson import ObjectId, errors as bson_errors
-
+from worker.repository.taskRepo import _send_email
 from worker.config.database import (
     collection,
     collection_task,
@@ -37,7 +37,56 @@ ESEWA_DISBURSE_URL  = "https://rc-epay.esewa.com.np/api/epay/merchant-api/v2/dis
 KHALTI_SECRET_KEY   = "39a74e06a31f4c99abf2bcaf061c190d"
 KHALTI_DISBURSE_URL = "https://khalti.com/api/v2/disbursement/"
 # Sandbox: "https://dev.khalti.com/api/v2/disbursement/"
-
+def send_worker_payment_email(worker_email: str, worker_name: str,
+                               task_name: str, amount: float, 
+                               method: str, transaction_uuid: str):
+    subject = "💰 Payment Received — Kaamly"
+    html = f"""
+    <html>
+      <body style="margin:0;padding:32px;background:#f9f6ef;
+                   font-family:'Segoe UI',Arial,sans-serif;">
+        <div style="max-width:520px;margin:0 auto;background:white;
+                    border-radius:16px;overflow:hidden;
+                    box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+          <div style="background:linear-gradient(135deg,#059669,#047857);
+                      padding:28px 32px;">
+            <h1 style="margin:0;color:white;font-size:20px;font-weight:800;
+                       letter-spacing:-0.02em;">💰 Payment Received</h1>
+          </div>
+          <div style="padding:28px 32px;">
+            <p style="color:#1c1008;font-size:15px;margin:0 0 16px;">
+              Hi <strong>{worker_name}</strong>,
+            </p>
+            <p style="color:#57534e;font-size:14px;line-height:1.75;margin:0 0 20px;">
+              Your payment for <strong>"{task_name}"</strong> has been successfully
+              sent to your <strong>{method.upper()}</strong> account.
+            </p>
+            <div style="background:#f0fdf4;border:1px solid #a7f3d0;
+                        border-radius:12px;padding:18px 24px;margin-bottom:24px;">
+              <span style="font-size:13px;font-weight:700;color:#065f46;">
+                Amount Received:
+              </span>
+              <span style="font-size:20px;font-weight:900;color:#059669;margin-left:12px;">
+                NPR {amount:,.2f}
+              </span>
+            </div>
+            <p style="color:#a8a29e;font-size:12px;margin:0;">
+              Transaction ID:&nbsp;
+              <code style="background:#f5efe6;padding:2px 8px;
+                           border-radius:4px;font-size:11px;">{transaction_uuid}</code>
+            </p>
+          </div>
+          <div style="background:#faf7f2;padding:14px 32px;
+                      border-top:1px solid #f0ebe2;text-align:center;">
+            <p style="margin:0;font-size:11px;color:#a8a29e;">
+              This is an automated message — please do not reply.
+            </p>
+          </div>
+        </div>
+      </body>
+    </html>
+    """
+    _send_email(worker_email, subject, html)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # GATEWAY HELPERS
@@ -475,6 +524,14 @@ async def bulk_payout(sandbox: bool = True):
                     is_worker=True,
                     data={"event_type": "payout_sent", "task_id": task_id, "amount": str(amount)},
                     ws_payload={"type": "payout_sent", "taskId": task_id, "taskName": task_name, "amount": amount},
+                )
+                send_worker_payment_email(
+                    worker_email     = worker["email"],
+                    worker_name      = f"{worker.get('firstName','')} {worker.get('lastName','')}".strip() or "there",
+                    task_name        = task_name,
+                    amount           = amount,
+                    method           = disburse_result["method"],
+                    transaction_uuid = disburse_result["transaction_uuid"],
                 )
                 succeeded += 1
             else:

@@ -37,13 +37,14 @@ import FraudDashboard from './pages/admin/FraudDetectionBoard';
 import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute';
 import SenderProtectedRoute from './components/ProtectedRoute/SenderProtectedRoute';
 import TermsAndCondition from './components/TermsAndCondition/TermsAndCondition'
-
+import GlobalTaskListener from "./components/Toast/GlobalToast";
 initForegroundListener();
 function App() {
   return (
     <div>
       <Notification /> {/* Mount the notification handler once at the app level */}
     <Router>
+      <GlobalTaskListener /> 
 
       <div className="App">
         <Routes>
@@ -172,6 +173,7 @@ function App() {
       <WorkerSettings />
     </ProtectedRoute>
   }/>
+  
 {/*<Route path="/admin/settings"                 element={<AdminSettings />} /> */}
         </Routes>
       </div>
@@ -179,5 +181,6 @@ function App() {
     </div>
   );
 }
+
 
 export default App;

@@ -359,7 +359,8 @@ const td = { padding: "14px 16px", color: "#374151", fontSize: 13, wordBreak: "b
 
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 export default function FraudDashboard() {
-  const [users,        setUsers]        = useState([]);
+  const [allUsers,     setAllUsers]     = useState([]);   // ← all levels, for stats
+  const [users,        setUsers]        = useState([]);   // ← filtered by active tab
   const [selectedUser, setSelectedUser] = useState(null);
   const [loading,      setLoading]      = useState(true);
   const [rescanning,   setRescanning]   = useState(null);
@@ -370,7 +371,6 @@ export default function FraudDashboard() {
   const [confirm,      setConfirm]      = useState(null);
   const [scanInterval, setScanInterval] = useState(15 * 60 * 1000);
 
-  // ── Background worker — keeps scanning even when you navigate away ─────────
   const {
     isScanning, progress, total, lastScanAt, nextScanIn,
     scanNow, setWorkerInterval,
@@ -378,19 +378,32 @@ export default function FraudDashboard() {
 
   const showToast = (msg, type = "success") => setToast({ msg, type });
 
+  // ── Fetch all three risk levels in parallel so stat cards are always correct
   const fetchFlaggedUsers = useCallback(async (level) => {
     setLoading(true); setError(null);
     try {
-      const res  = await fetch(`${API_BASE}/fraud/flagged?level=${level}`, { headers: authHeaders() });
-      const data = await res.json();
-      // ✅ Filter client-side too in case backend ignores the param
-      const all = data.users || [];
+      const [mon, res, sus] = await Promise.all([
+        fetch(`${API_BASE}/fraud/flagged?level=monitor`,  { headers: authHeaders() }).then(r => r.json()),
+        fetch(`${API_BASE}/fraud/flagged?level=restrict`, { headers: authHeaders() }).then(r => r.json()),
+        fetch(`${API_BASE}/fraud/flagged?level=suspend`,  { headers: authHeaders() }).then(r => r.json()),
+      ]);
+      const all = [
+        ...(mon.users || []),
+        ...(res.users || []),
+        ...(sus.users || []),
+      ];
+      setAllUsers(all);
       setUsers(all.filter(u => u.risk_level === level));
     } catch { setError("Failed to load fraud reports."); }
     finally  { setLoading(false); }
-}, []);
+  }, []);
 
   useEffect(() => { fetchFlaggedUsers(filterLevel); }, [fetchFlaggedUsers, filterLevel]);
+
+  // When tab changes, re-filter from allUsers without a new fetch
+  useEffect(() => {
+    setUsers(allUsers.filter(u => u.risk_level === filterLevel));
+  }, [filterLevel, allUsers]);
 
   // Auto-refresh table when background scan completes
   useEffect(() => {
@@ -467,11 +480,12 @@ export default function FraudDashboard() {
     if (type === "activate") await handleStatusUpdate(userId, "active");
   };
 
+  // ── Stats always from allUsers so counts are correct across all tabs ────────
   const stats = {
-    monitor:  users.filter(u => u.risk_level === "monitor").length,
-    restrict: users.filter(u => u.risk_level === "restrict").length,
-    suspend:  users.filter(u => u.risk_level === "suspend").length,
-    avgScore: users.length ? Math.round(users.reduce((s, u) => s + (u.total_score || 0), 0) / users.length) : 0,
+    monitor:  allUsers.filter(u => u.risk_level === "monitor").length,
+    restrict: allUsers.filter(u => u.risk_level === "restrict").length,
+    suspend:  allUsers.filter(u => u.risk_level === "suspend").length,
+    avgScore: allUsers.length ? Math.round(allUsers.reduce((s, u) => s + (u.total_score || 0), 0) / allUsers.length) : 0,
   };
 
   const TABS = [
@@ -512,7 +526,7 @@ export default function FraudDashboard() {
             <StatCard label="Monitor"        value={stats.monitor}  sub="Needs observation"              accent={C.yellow} />
             <StatCard label="Restrict"       value={stats.restrict} sub="Limited access"                  accent={C.orange} />
             <StatCard label="Suspend"        value={stats.suspend}  sub="Account frozen"                  accent={C.red}    />
-            <StatCard label="Avg Risk Score" value={stats.avgScore} sub={`Out of ${users.length} users`}  accent={C.amber}  />
+            <StatCard label="Avg Risk Score" value={stats.avgScore} sub={`Out of ${allUsers.length} users`} accent={C.amber} />
           </div>
 
           {error && <div style={{ background: C.redLight, border: `1px solid ${C.redBorder}`, borderRadius: 12, padding: "12px 16px", marginBottom: 16, fontSize: 13, color: C.red }}>❌ {error}</div>}
@@ -561,9 +575,6 @@ export default function FraudDashboard() {
                       <td style={{ ...td, whiteSpace: "nowrap" }}>
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                           <button onClick={() => fetchUserDetail(user.user_id)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer", color: C.text, display: "flex", alignItems: "center", gap: 4 }}><Eye size={12} /> Details</button>
-                          <button onClick={() => handleRescan(user.user_id)} disabled={rescanning === user.user_id} style={{ background: C.amberLight, border: `1px solid ${C.amberBorder}`, borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer", color: C.amber, display: "flex", alignItems: "center", gap: 6 }}>
-                            {rescanning === user.user_id ? <Spinner size={12} /> : <RefreshCw size={12} />} Rescan
-                          </button>
                           <button onClick={() => handleConfirmAction("suspend", user.user_id)} style={{ background: C.redLight, border: `1px solid ${C.redBorder}`, borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer", color: C.red, display: "flex", alignItems: "center", gap: 4 }}><UserX size={12} /> Suspend</button>
                           <button onClick={() => handleConfirmAction("delete", user.user_id)} style={{ background: "none", border: `1px solid ${C.redBorder}`, borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer", color: C.red, display: "flex", alignItems: "center", gap: 4 }}><Trash2 size={12} /> Delete</button>
                         </div>
@@ -575,7 +586,7 @@ export default function FraudDashboard() {
             </div>
           )}
 
-          {users.length > 0 && (
+          {allUsers.length > 0 && (
             <div style={{ marginTop: 14, padding: "10px 16px", background: C.grayLight, borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 12, color: C.muted, display: "flex", gap: 24, flexWrap: "wrap" }}>
               <span><strong>Risk Scoring:</strong></span>
               <span>• 0–24: Clean</span><span>• 25–49: Monitor</span><span>• 50–79: Restrict</span><span>• 80+: Suspend</span>

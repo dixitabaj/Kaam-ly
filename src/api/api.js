@@ -298,11 +298,11 @@ export const updateWorkerProfile = async (workerId, payload) => {
   return res.json();
 };
 
-export const uploadSkillEvidence = async (email, skill, file) => {
+export const uploadSkillEvidence = async (id, skill, file) => {
   const fd = new FormData();
   fd.append('file', file);
-  fd.append('worker_id', email);
-  fd.append('skill', skill);
+  fd.append('worker_id', id);
+  fd.append('skill_name', skill);  // ← was 'skill'
   const res = await fetch(`${BASE_URL}/upload/skill-evidence`, {
     method: 'POST',
     body: fd,

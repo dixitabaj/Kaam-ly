@@ -367,7 +367,10 @@ const TaskDescriptionPage = ({ worker }) => {
   });
 
   const [editableTask, setEditableTask] = useState({
-    taskType: taskDetails.taskType || selectedTasker?.taskType || '',
+    taskType: selectedTasker?.taskType?.predicted_label 
+              || taskDetails.taskType 
+              || selectedTasker?.taskType 
+              || '',
     taskName: taskDetails.taskName || '',
     address:  taskDetails.address  || '',
   });
@@ -1189,7 +1192,7 @@ const TaskDescriptionPage = ({ worker }) => {
 
   return (
     <div style={styles.container}>
-      <ToastContainer toasts={toasts} removeToast={removeToast} />
+     
       <BookingNavbar />
       <ChatWidget/>
       <span style={styles.backButton} onClick={() => navigate(-1)}></span>

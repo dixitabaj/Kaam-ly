@@ -59,7 +59,7 @@ def compare_images(img1_path: str, img2_path: str) -> dict:
     # 1. INCREASE THIS VALUE
     # Your distance was 0.326. Setting this to 0.45 gives a safe margin.
     CUSTOM_THRESHOLD = 0.45 
-
+    from deepface import DeepFace
     match = DeepFace.verify(
         img1_path         = img1_path,
         img2_path         = img2_path,
@@ -186,6 +186,7 @@ async def compare_faces(
     selfie:          UploadFile = File(...),
     reference_photo: UploadFile = File(...),
 ):
+    from deepface import DeepFace
     """
     Dev/testing utility — upload two images as multipart and get a match result.
     Not called by the frontend; useful for testing DeepFace directly.

@@ -133,6 +133,7 @@ const useProfilePhoto = (id, type) => {
     apiCall(endpoint).then(async res => {
       if (!res.ok) { photoCache[id] = null; setPhoto(null); setName(null); return; }
       const d = await res.json();
+      console.log("profile fetch:", id, type, d); 
       const p = d.profilePhoto || d.profile_picture || d.photo || d.image || null;
       let n = null;
       if (type === "worker") {
@@ -313,6 +314,7 @@ const CustomerHistoryPanel = ({ customerId, customerEmail }) => {
       } catch (err) { setError(err.message); }
       finally { setLoading(false); }
     };
+    console.log("customer data:", loadData);
     loadData();
   }, [customerId, customerEmail]);
 
@@ -1304,6 +1306,7 @@ const RefundAmountModal = ({ report, onClose, onConfirm, onShowToast, onShowActi
             setCustomerPct(((doc.amount_customer / totalAmount) * 100).toFixed(1));
             setWorkerPct((((doc.amount_worker ?? 0) / totalAmount) * 100).toFixed(1));
           }
+          
         }
         const taskId = doc?.task_id || report.taskId;
         if (taskId) { const taskRes = await apiCall(`${BASE}/task/${taskId}`); if (taskRes.ok) setTaskDoc(await taskRes.json()); }
@@ -1576,6 +1579,8 @@ const ReportDetailModal = ({ report, onClose, onResolve, onDecline, onDelete, on
     const load = async () => {
       try {
         let res = await apiCall(`${BASE}/refunds?report_id=${report.id}&limit=1`);
+        // Temporarily in useProfilePhoto, after res.json():
+        
         if (res.ok) { const d = await res.json(); if ((d.total ?? 0) > 0) { setRefundCount(d.total); setRefundData(d.refunds?.[0]); return; } }
         if (report.taskId) { res = await apiCall(`${BASE}/refunds?task_id=${report.taskId}&limit=1`); if (res.ok) { const d = await res.json(); setRefundCount(d.total ?? 0); setRefundData(d.refunds?.[0]); } }
       } catch {}

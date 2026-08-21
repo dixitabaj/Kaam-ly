@@ -31,7 +31,6 @@ const WORKER_CODE = `
     if (isScanning) return;
     isScanning = true;
     post("SCAN_START");
-    console.log("[FraudWorker] Scan started, token:", token ? "present" : "MISSING");
 
     try {
       const res = await fetch(API_BASE + "/fraud/scan-all", {
@@ -42,32 +41,35 @@ const WORKER_CODE = `
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
       const job_id = data.job_id;
-      console.log("[FraudWorker] Job started:", job_id);
 
       await new Promise((resolve) => {
         const poll = setInterval(async () => {
           try {
-            const p   = await fetch(API_BASE + "/fraud/scan-progress/" + job_id, { headers: authHeaders() });
+            const p = await fetch(API_BASE + "/fraud/scan-progress/" + job_id, { headers: authHeaders() });
+
+            if (p.status === 404) {
+              clearInterval(poll);
+              resolve();
+              return;
+            }
+
             const job = await p.json();
-            console.log("[FraudWorker] Poll:", job);
             post("SCAN_PROGRESS", { progress: job.progress || 0, total: job.total || 0 });
+
             if (job.status === "done" || job.status === "error") {
               clearInterval(poll);
               resolve();
             }
           } catch(e) {
-            console.error("[FraudWorker] Poll error:", e.message);
             clearInterval(poll);
             resolve();
           }
         }, 2000);
-      });
+      });                                          // ← this was missing
 
       post("SCAN_DONE", { lastScanAt: new Date().toISOString() });
-      console.log("[FraudWorker] Scan done");
 
     } catch (e) {
-      console.error("[FraudWorker] Scan error:", e.message);
       post("SCAN_ERROR", { message: e.message });
     } finally {
       isScanning = false;
@@ -79,22 +81,18 @@ const WORKER_CODE = `
     clearTimeout(scanTimer);
     const nextFireAt = Date.now() + scanInterval;
     post("SCHEDULED", { nextFireAt });
-    console.log("[FraudWorker] Next scan in", Math.round(scanInterval / 60000), "min");
     scanTimer = setTimeout(runScan, scanInterval);
   }
 
   self.onmessage = (e) => {
     const { type, payload } = e.data;
-    console.log("[FraudWorker] Received:", type, payload);
     switch (type) {
       case "INIT":
         token        = payload.token;
         scanInterval = payload.interval || scanInterval;
         runScan();
         break;
-      case "SET_TOKEN":
-        token = payload.token;
-        break;
+      case "SET_TOKEN":    token = payload.token; break;
       case "SET_INTERVAL":
         scanInterval = payload.interval;
         clearTimeout(scanTimer);
@@ -109,8 +107,6 @@ const WORKER_CODE = `
         break;
     }
   };
-
-  console.log("[FraudWorker] Worker thread ready");
 `;
 
 // ── Singleton state (outside React — survives navigation) ─────────────────────

@@ -1,5 +1,9 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Body
 from ..repository import chatRepo
+import json
+from ..manager import websocket_manager
+from ..config import database
+from bson import ObjectId
 
 router = APIRouter(tags=["Chat"])
 
@@ -23,6 +27,33 @@ def disconnect(room_id: str, websocket: WebSocket):
         active_connections[room_id].remove(websocket)
         if not active_connections[room_id]:
             del active_connections[room_id]
+
+def _resolve_chat_user_name(user_id: str) -> str:
+    customer = database.collection.find_one({"_id": user_id})
+    if not customer:
+        try:
+            customer = database.collection.find_one({"_id": ObjectId(user_id)})
+        except Exception:
+            pass
+    if not customer:
+        customer = database.collection.find_one({"email": user_id})
+    if customer:
+        name = f"{customer.get('first_name','')} {customer.get('last_name','')}".strip()
+        if name:
+            return name
+
+    worker = None
+    try:
+        worker = database.collection_worker.find_one({"_id": ObjectId(user_id)})
+    except Exception:
+        pass
+    if not worker:
+        worker = database.collection_worker.find_one({"email": user_id})
+    if worker:
+        name = f"{worker.get('firstName','')} {worker.get('lastName','')}".strip()
+        if name:
+            return name
+    return "Someone"
 
 # -----------------------------
 # WEBSOCKET
@@ -62,6 +93,18 @@ async def websocket_endpoint(
             # broadcast to everyone in the room
             for conn in active_connections.get(room_id, []):
                 await conn.send_json(payload)
+
+            # ── push toast notification to receiver (separate channel) ──────
+            try:
+                preview = message_text if len(message_text) <= 90 else message_text[:90] + "…"
+                await websocket_manager.manager.send_to_user(receiver_id, json.dumps({
+                    "type":       "new_message",
+                    "senderId":   sender_id,
+                    "senderName": _resolve_chat_user_name(sender_id),
+                    "preview":    preview,
+                }))
+            except Exception as e:
+                print(f"[CHAT] push to task-updates failed: {e}")
 
     except WebSocketDisconnect:
         disconnect(room_id, websocket)

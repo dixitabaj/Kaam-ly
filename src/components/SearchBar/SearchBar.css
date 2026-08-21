@@ -1,0 +1,240 @@
+/* =====================================
+   SEARCH BAR — responsive (vw-based)
+   ===================================== */
+
+.search-container {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  margin-top: clamp(2rem, 4vw, 3.125rem);
+  padding: 0 clamp(0.75rem, 2vw, 1rem);
+}
+
+.search-box {
+  position: relative;
+  width: 100%;
+}
+
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 56.25vw;
+}
+
+.search-input {
+  width: 100%;
+  padding: clamp(1rem, 2vw, 1.25rem) clamp(4rem, 6vw, 5rem) clamp(1rem, 2vw, 1.25rem) clamp(3rem, 5vw, 4rem);
+  font-size: clamp(0.9375rem, 1.4vw, 1.125rem);
+  border: 0.125rem solid #e0e0e0;
+  border-radius: 0.75rem;
+  outline: none;
+  box-sizing: border-box;
+  background: white;
+  height: clamp(3.25rem, 6vw, 4rem);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.search-input:focus {
+  border-color: #4a90e2;
+  box-shadow: 0 0.25rem 1.25rem rgba(74, 144, 226, 0.15);
+}
+
+.search-input::placeholder {
+  color: #aaa;
+}
+
+/* Error state for input border */
+.search-input--error {
+  border-color: #e53935 !important;
+  box-shadow: 0 0.25rem 1.25rem rgba(229, 57, 53, 0.12) !important;
+}
+
+/* Error message box */
+.input-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5vw;
+  margin-top: 0.5vw;
+  padding: 0.6vw 0.875vw;
+  background: #fff5f5;
+  border: 0.0625rem solid #fcc;
+  border-radius: 0.5rem;
+  color: #c0392b;
+  font-size: clamp(0.8125rem, 1vw, 0.875rem);
+  animation: errorSlideIn 0.2s ease-out;
+}
+
+.input-error__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  min-width: 1.125rem;
+  background: #e53935;
+  color: white;
+  border-radius: 50%;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+@keyframes errorSlideIn {
+  from { opacity: 0; transform: translateY(-0.25rem); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Camera button — vertically centered INSIDE the input box ── */
+.clear-button {
+  position: absolute;
+  top: 50%;
+  right: clamp(1rem, 2vw, 1.5rem);
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  z-index: 3;
+  padding: 0;
+  width: clamp(1.75rem, 2.8vw, 2.25rem);
+  height: clamp(1.75rem, 2.8vw, 2.25rem);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background 0.2s ease;
+}
+
+.clear-button:hover:not(:disabled) {
+  background: #f5f5f5;
+}
+
+.clear-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cameraImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.loading-spinner-small {
+  width: 60%;
+  height: 60%;
+  border: 0.1875rem solid #f3f3f3;
+  border-top: 0.1875rem solid #4a90e2;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.camera-menu {
+  position: absolute;
+  top: calc(100% + 0.5vw);
+  right: 0;
+  background: white;
+  border: 0.125rem solid #e0e0e0;
+  border-radius: 0.75rem;
+  box-shadow: 0 0.5vw 1.5vw rgba(0, 0, 0, 0.15);
+  z-index: 1001;
+  overflow: hidden;
+  min-width: clamp(12rem, 18vw, 14rem);
+  animation: slideDown 0.2s ease-out;
+}
+
+.camera-menu button {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: clamp(0.875rem, 1.6vw, 1rem) clamp(1rem, 2vw, 1.25rem);
+  background: white;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: clamp(0.875rem, 1.2vw, 0.9375rem);
+  color: #333;
+  transition: background 0.2s ease;
+}
+
+.camera-menu button:hover {
+  background-color: #f8fafd;
+}
+
+.camera-menu button:not(:last-child) {
+  border-bottom: 0.0625rem solid #f0f0f0;
+}
+
+.dropdown {
+  position: absolute;
+  top: calc(100% + 0.5vw);
+  left: 0;
+  right: 0;
+  background: white;
+  border: 0.125rem solid #e0e0e0;
+  border-radius: 0.75rem;
+  max-height: 31.25rem;
+  overflow-y: auto;
+  box-shadow: 0 0.5vw 2vw rgba(0, 0, 0, 0.12);
+  z-index: 1000;
+}
+
+.dropdown-item {
+  padding: clamp(0.875rem, 1.8vw, 1.125rem) clamp(1rem, 2.4vw, 1.5rem);
+  cursor: pointer;
+  border-bottom: 0.0625rem solid #f0f0f0;
+  transition: background 0.2s ease;
+}
+
+.dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.dropdown-item.selected,
+.dropdown-item:hover {
+  background-color: #f8fafd;
+}
+
+.dropdown-empty {
+  padding: 2vw;
+  text-align: center;
+  color: #666;
+}
+
+.dropdown-loading {
+  padding: 2vw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: #666;
+}
+
+.loading-spinner {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 0.1875rem solid #f3f3f3;
+  border-top: 0.1875rem solid #4a90e2;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-0.5rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Responsive tweaks for small screens */
+@media (max-width: 48rem) {
+  .search-input-wrapper {
+    max-width: 100%;
+  }
+}

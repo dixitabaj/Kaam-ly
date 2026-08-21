@@ -10,6 +10,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from bson import ObjectId
 from dotenv import load_dotenv
+from ..manager import websocket_manager 
 
 from worker.config.database import (
     collection,
@@ -99,6 +100,7 @@ def save_payment(
         "created_at":       datetime.utcnow(),
     }
     result = collection_payment.insert_one(doc)
+    
     return str(result.inserted_id)
 
 
@@ -300,7 +302,7 @@ def pay_via_khalti(task_id: str):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/payment/verify/khalti/{task_id}", tags=["payment"])
-def verify_khalti_redirect(
+async def verify_khalti_redirect(
     task_id:             str,
     pidx:                Optional[str] = Query(None),
     status:              Optional[str] = Query(None),
@@ -368,6 +370,12 @@ def verify_khalti_redirect(
 
     task    = collection_task.find_one({"_id": ObjectId(task_id)})
     user_id = str(task.get("userId", "unknown"))
+    await websocket_manager.manager.send_to_user(task.get("assignedWorkerId"), json.dumps({
+    "type":          "payment_status",
+    "taskId":        task_id,
+    "paymentStatus": "paid",
+    "taskName":      task.get("taskName"),
+}))
 
     return RedirectResponse(
         url=f"{BASE_URL}/customer/pay/{task_id}/{user_id}/customer?payment=success"
@@ -423,6 +431,7 @@ def verify_khalti_manual(body: VerifyKhalti):
             "paid_at":        datetime.utcnow(),
         }}
     )
+
 
     return {
         "message":        "Payment verified. Funds held in escrow.",

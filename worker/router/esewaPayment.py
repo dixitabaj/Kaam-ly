@@ -15,6 +15,7 @@ import json
 import requests
 from datetime import datetime
 from typing import Optional
+from ..manager import websocket_manager
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import RedirectResponse
@@ -162,7 +163,7 @@ def pay_via_esewa(task_id: str):
 
 
 @router.get("/payment/verify/esewa/{task_id}")
-def verify_esewa_redirect(
+async def verify_esewa_redirect(
     task_id: str,
     data:    Optional[str] = Query(None),
 ):
@@ -222,6 +223,12 @@ def verify_esewa_redirect(
             "payment_method": "esewa",
         }}
     )
+    await websocket_manager.manager.send_to_user(task.get("assignedWorkerId"), json.dumps({
+    "type":          "payment_status",
+    "taskId":        task_id,
+    "paymentStatus": "paid",
+    "taskName":      task.get("taskName"),
+}))
 
     user_id = str(task.get("userId", ""))
     return RedirectResponse(
@@ -540,3 +547,4 @@ def get_task_payments(task_id: str):
         "count":    len(result),
         "payments": result,
     }
+

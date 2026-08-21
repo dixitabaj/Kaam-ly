@@ -7,13 +7,11 @@ import { ToastProvider } from "./components/Toast/ToastContext";
 import GlobalTaskListener from "./components/Toast/GlobalToast";
 const CLIENT_ID = "982291267319-3r75l64uqv29e1pkh3qi9ekc8690bla3.apps.googleusercontent.com"
 createRoot(document.getElementById('root')).render(
-    <ToastProvider>
-    <GlobalTaskListener />
+  <ToastProvider>
     <GoogleOAuthProvider clientId={CLIENT_ID}>
-    <App />
+      <App />
     </GoogleOAuthProvider>
-    </ToastProvider>
-,
+  </ToastProvider>
 )
 
 

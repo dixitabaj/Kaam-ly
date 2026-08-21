@@ -307,7 +307,12 @@ export default function WorkerSettings() {
   const setError     = (k, m) => setErrors(p => ({ ...p, [k]: m }));
   const clearErr     = (k)    => setErrors(p => ({ ...p, [k]: "" }));
   const authH        = (t)    => ({ "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) });
-
+  useEffect(() => {
+  if (worker?.skills) {
+    console.log("Raw skills from API:", worker.skills);
+    console.log("Parsed skills:", parseApiSkills(worker.skills, worker.skillVerify));
+  }
+}, [worker]);
   // ── Load all data on mount ──────────────────────────────────────────────────
   useEffect(() => {
     const loadAllData = async () => {

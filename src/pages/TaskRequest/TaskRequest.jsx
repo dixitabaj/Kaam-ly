@@ -56,8 +56,11 @@ const ErrorMsg = ({ message }) => {
 const TaskBookingPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const predictedUserService = localStorage.getItem('predictedCategory');
+  const predictedService = predictedUserService? JSON.parse(predictedUserService).predicted_label
+ : null;
 
-  const preSelectedService = location.state?.taskCategory || '';
+  const preSelectedService =  predictedService || location.state?.taskCategory || '';
 
   const [currentStep,        setCurrentStep]        = useState(1);
   const [taskDescription,    setTaskDescription]    = useState('');

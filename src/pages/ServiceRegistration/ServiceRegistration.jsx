@@ -766,7 +766,7 @@ const ServiceRegistration = () => {
               <div className="reg-verified-info">
                 <span className="reg-verified-label">Identity confirmed</span>
                 {faceVerifyResult?.confidence && (
-                  <span className="reg-verified-conf">{faceVerifyResult.confidence}% match</span>
+                  <span className="reg-verified-conf">Matched</span>
                 )}
               </div>
               <button type="button" className="reg-text-btn"

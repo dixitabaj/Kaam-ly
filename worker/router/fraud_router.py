@@ -13,7 +13,6 @@ router = APIRouter(prefix="/fraud", tags=["fraud"])
 # In-memory job store — swap for Redis in production
 _scan_jobs: Dict[str, Any] = {}
 
-
 class ReviewAction(BaseModel):
     action: str
     note: str = ""
@@ -100,7 +99,6 @@ async def rescan_user(user_id: str, db=Depends(get_db)):
 
 
 # ── OPTIMIZED scan-all endpoints ──────────────────────────────────────────────
-# ── OPTIMIZED scan-all endpoints (FIXED VERSION) ──────────────────────────────
 
 @router.post("/scan-all")
 async def scan_all(request: Request, db=Depends(get_db)):
