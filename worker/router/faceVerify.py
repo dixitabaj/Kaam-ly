@@ -14,7 +14,7 @@ import os
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
 from pydantic import BaseModel
 
 
@@ -25,6 +25,8 @@ DEEPFACE_MODEL   = "Facenet512"
 DEEPFACE_BACKEND = "mtcnn"
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+from ..services.auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/face", tags=["Face Verification"])
 
@@ -144,15 +146,14 @@ class FaceVerifyRequest(BaseModel):
 
 
 @router.post("/verify")
-def verify_face(request: FaceVerifyRequest):
+def verify_face(request: FaceVerifyRequest, current_user: dict = Depends(get_current_user)):
     """
     Main verification endpoint called by the frontend after liveness check.
     """
-    # Print 1: Log the initiation of the request
-    from deepface import DeepFace
-    print(f"\n--- [Face Verification Started] ---")
-    print(f"Worker ID: {request.worker_id}")
-    
+    # Authorization: only the worker themselves or admin may run verification
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(request.worker_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     try:
         result = run_face_verification(
             worker_id           = request.worker_id,
@@ -160,14 +161,8 @@ def verify_face(request: FaceVerifyRequest):
             reference_photo_b64 = request.reference_photo,
             liveness_proof      = request.liveness_proof or {},
         )
-        
-        # Print 2: Log the metrics and result
-        status = "MATCH" if result['verified'] else "NO MATCH"
-        print(f"Result: {status}")
-        print(f"Distance: {result['distance']} | Threshold: {result['threshold']}")
-        print(f"Confidence: {result['confidence']}%")
-        print(f"--- [Verification Complete] ---\n")
-        
+        # Minimal logging (no secrets)
+        # e.g. logging.info("face verification completed")
         return result
 
     except ValueError as e:
@@ -185,6 +180,7 @@ def verify_face(request: FaceVerifyRequest):
 async def compare_faces(
     selfie:          UploadFile = File(...),
     reference_photo: UploadFile = File(...),
+    admin: dict = Depends(require_admin),
 ):
     from deepface import DeepFace
     """

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends, UploadFile, File
 from pydantic import BaseModel
 from typing import List, Optional
 from ..schemas import schemas
@@ -8,6 +8,7 @@ from ..repository import workerRepo
 from worker.config.database import collection_worker
 import string, secrets
 from passlib.context import CryptContext
+from ..services.auth import get_current_user, require_admin, require_worker
 
 router = APIRouter(tags=["worker"])
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -49,7 +50,7 @@ def get_worker_by_category(category: str):
 
 
 @router.delete("/worker/delete/{id}")
-def delete_worker(id: str):
+def delete_worker(id: str, admin: dict = Depends(require_admin)):
     result = workerRepo.deleteWorkerById(id)
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Worker not found")
@@ -57,7 +58,7 @@ def delete_worker(id: str):
 
 
 @router.patch("/worker/status/{id}")
-def update_worker_status(id: str, body: schemas.StatusUpdate):
+def update_worker_status(id: str, body: schemas.StatusUpdate, admin: dict = Depends(require_admin)):
     if body.status not in ("active", "suspended", "inactive", "pending"):
         raise HTTPException(status_code=400, detail="Invalid status value")
     result = workerRepo.updateWorkerAccountStatus(id, body.status)
@@ -67,7 +68,7 @@ def update_worker_status(id: str, body: schemas.StatusUpdate):
 
 
 @router.patch("/worker/verify-skill/{id}")
-def verify_skill(id: str):
+def verify_skill(id: str, admin: dict = Depends(require_admin)):
     result = workerRepo.verifyWorkerSkill(id)
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Worker not found")
@@ -75,7 +76,7 @@ def verify_skill(id: str):
 
 
 @router.patch("/worker/verify-face/{id}")
-def verify_face(id: str):
+def verify_face(id: str, admin: dict = Depends(require_admin)):
     result = workerRepo.verifyWorkerFace(id)
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Worker not found")
@@ -83,7 +84,7 @@ def verify_face(id: str):
 
 
 @router.patch("/worker/reset-password/{id}")
-def reset_password(id: str):
+def reset_password(id: str, admin: dict = Depends(require_admin)):
     alphabet      = string.ascii_letters + string.digits
     temp_password = "".join(secrets.choice(alphabet) for _ in range(10))
     hashed        = pwd_context.hash(temp_password)
@@ -181,27 +182,36 @@ def get_availability(worker_id: str):
 
 # PUT /worker/{worker_id}/availability/hours  — replace full weekly schedule
 @router.put("/worker/{worker_id}/availability/hours")
-def update_weekly_hours(worker_id: str, body: WeeklyHoursSchema):
+def update_weekly_hours(worker_id: str, body: WeeklyHoursSchema, current_user: dict = Depends(get_current_user)):
+    # allow worker owner or admin
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(worker_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     hours = {day: [s.dict() for s in slots] for day, slots in body.dict().items()}
     return workerRepo.updateWeeklyHours(worker_id, hours)
 
 
 # PATCH /worker/{worker_id}/availability/hours/day  — update one day
 @router.patch("/worker/{worker_id}/availability/hours/day")
-def update_day_hours(worker_id: str, body: DayHoursSchema):
+def update_day_hours(worker_id: str, body: DayHoursSchema, current_user: dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(worker_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     slots = [s.dict() for s in body.slots]
     return workerRepo.updateDayHours(worker_id, body.day, slots)
 
 
 # POST /worker/{worker_id}/availability/unavailable-dates  — add dates
 @router.post("/worker/{worker_id}/availability/unavailable-dates")
-def add_unavailable_dates(worker_id: str, body: UnavailableDatesSchema):
+def add_unavailable_dates(worker_id: str, body: UnavailableDatesSchema, current_user: dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(worker_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     return workerRepo.addUnavailableDates(worker_id, body.dates)
 
 
 # DELETE /worker/{worker_id}/availability/unavailable-dates  — remove dates
 @router.delete("/worker/{worker_id}/availability/unavailable-dates")
-def remove_unavailable_dates(worker_id: str, body: UnavailableDatesSchema):
+def remove_unavailable_dates(worker_id: str, body: UnavailableDatesSchema, current_user: dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(worker_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     return workerRepo.removeUnavailableDates(worker_id, body.dates)
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -222,7 +232,9 @@ from typing import List
 
 # PATCH /worker/{id}  — partial profile update
 @router.patch("/worker/{id}")
-def update_worker_profile(id: str, body: schemas.WorkerProfileUpdateSchema):
+def update_worker_profile(id: str, body: schemas.WorkerProfileUpdateSchema, current_user: dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     # Convert Pydantic model to dict, excluding None values
     update_data = body.dict(exclude_none=True)
     
@@ -244,12 +256,16 @@ import cloudinary.uploader
 # cloudinary.config(cloud_name=..., api_key=..., api_secret=...)
 
 @router.post("/worker/upload-photo/{id}")
-async def upload_worker_photo(id: str, photo: UploadFile = File(...)):
+async def upload_worker_photo(id: str, photo: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     worker = collection_worker.find_one({"_id": id})
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
 
     contents = await photo.read()
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 5MB)")
     result   = cloudinary.uploader.upload(
         contents,
         folder=f"worker_photos/{id}",
@@ -272,7 +288,9 @@ def check_availability_on_date(worker_id: str, date: str):
     return workerRepo.checkAvailabilityOnDate(worker_id, date)
 
 @router.patch("/worker/{id}/availability/toggle")
-def toggle_worker_availability(id: str, body: AvailabilityToggleSchema):
+def toggle_worker_availability(id: str, body: AvailabilityToggleSchema, current_user: dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     return workerRepo.toggleWorkerAvailability(id, body.isAvailable)
 
 

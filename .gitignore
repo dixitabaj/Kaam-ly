@@ -18,8 +18,27 @@ kaam-ly-firebase.json
 worker/model/
 __pycache__/
 *.pyc
+# Model weights / generated ML artifacts
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.joblib
+*.pkl
 
-worker/model/
+# Hugging Face generated/cache files
+tokenizer.json
+tokenizer_config.json
+special_tokens_map.json
+vocab.json
+merges.txt
+
+
+worker/model/ml_models
+worker/model/task1
+worker/model/recommendation_system
+worker/model/task_classification
 *.safetensors
 __pycache__/
 *.pyc

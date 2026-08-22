@@ -1,10 +1,12 @@
 import cloudinary
 import cloudinary.uploader
 from ..config.cloudinary_config import cloudinary
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 from ..config.database import collection_worker
+from ..services.auth import get_current_user, require_admin
+from typing import Dict
 from datetime import datetime
 
 router = APIRouter(prefix="/upload", tags=["Upload"])
@@ -50,6 +52,7 @@ async def upload_skill_evidence(
     file:       UploadFile = File(...),
     worker_id:  str        = Form(...),
     skill_name: str        = Form(...),   # can be a sub-skill OR category name
+    current_user: Dict = Depends(get_current_user),
 ):
     ALLOWED_TYPES = {
         "image/jpeg", "image/png", "image/webp", "image/gif",
@@ -64,6 +67,10 @@ async def upload_skill_evidence(
     contents = await file.read()
     if len(contents) > 50 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large. Max 50 MB.")
+
+    # Only the worker themselves or admin may upload evidence
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(worker_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     category = resolve_category(skill_name)
     if not category:
@@ -128,7 +135,13 @@ def get_all_skill_evidence(
     status: Optional[str] = None,
     skip:   int = 0,
     limit:  int = 50,
+    admin: dict = Depends(require_admin),
 ):
+    # Admin only
+    from fastapi import Depends
+    from ..services.auth import require_admin
+    # note: use dependency inside function to avoid changing global router behavior
+    admin = Depends(require_admin)
     query = {"skillVerify": {"$exists": True, "$ne": {}}}
     if status:
         # Match workers where at least one category has the given status
@@ -178,7 +191,7 @@ def get_all_skill_evidence(
 # ─── Get single worker's category evidence ────────────────────────────────────
 
 @router.get("/skill-evidence/{worker_id}")
-def get_worker_evidence(worker_id: str):
+def get_worker_evidence(worker_id: str, current_user: Dict = Depends(get_current_user)):
     w = collection_worker.find_one({"_id": worker_id}, {"password": 0})
     if not w:
         raise HTTPException(status_code=404, detail="Worker not found")
@@ -210,7 +223,7 @@ def get_worker_evidence(worker_id: str):
 # ─── Admin reviews a category ─────────────────────────────────────────────────
 
 @router.patch("/skill-evidence/{worker_id}/review")
-def review_skill_evidence(worker_id: str, body: SkillVerifyDecision):
+def review_skill_evidence(worker_id: str, body: SkillVerifyDecision, admin: Dict = Depends(require_admin)):
     if body.decision not in ("accepted", "rejected"):
         raise HTTPException(status_code=400, detail="decision must be 'accepted' or 'rejected'")
 
@@ -241,7 +254,7 @@ def review_skill_evidence(worker_id: str, body: SkillVerifyDecision):
 # ─── Delete evidence for a category ──────────────────────────────────────────
 
 @router.delete("/skill-evidence/{worker_id}")
-def delete_skill_evidence(worker_id: str, category: str):
+def delete_skill_evidence(worker_id: str, category: str, admin: Dict = Depends(require_admin)):
     if category not in CATEGORY_SKILLS_MAP:
         raise HTTPException(status_code=400, detail=f"Unknown category '{category}'")
 

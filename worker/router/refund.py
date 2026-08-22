@@ -11,6 +11,8 @@ import asyncio, json
 from ..services.emailUtil import send_action_email
 from ..router import notifications
 from ..manager import websocket_manager
+from fastapi import Depends
+from ..services.auth import get_current_user, require_admin
 
 router = APIRouter(tags=["refunds"])
 
@@ -42,7 +44,7 @@ class CreateRefundBody(BaseModel):
 # POST /api/refunds - Create new refund
 # ─────────────────────────────────────────────────────────────
 @router.post("/refunds")
-def create_refund(body: CreateRefundBody):
+def create_refund(body: CreateRefundBody, current_user: dict = Depends(get_current_user)):
     try:
         report = collection_reports.find_one({"_id": ObjectId(body.reportId)})
     except bson_errors.InvalidId:
@@ -70,10 +72,12 @@ def create_refund(body: CreateRefundBody):
             {"$set": {"taskStatus": "dispute", "disputedAt": datetime.utcnow()}},
         )
 
+    # Derive requester identity from authenticated user (prevent impersonation)
+    requester_id = str(current_user.get("user_id"))
     refund_doc = {
         "task_id":         body.taskId,
         "report_id":       body.reportId,
-        "requester_id":    report.get("reporterId"),
+        "requester_id":    requester_id,
         "reported_id":     report.get("reportedId"),
         "requester_type":  report.get("reporterType", "customer"),
         "reported_type":   report.get("reportedType", "worker"),
@@ -120,12 +124,19 @@ def get_refunds(
     task_id:   Optional[str] = None,
     skip:      int = 0,
     limit:     int = 50,
+    current_user: dict = Depends(get_current_user),
 ):
     query = {}
     if report_id:
         query["report_id"] = report_id
     if task_id:
         query["task_id"] = task_id
+
+    # Only admin may list all refunds. Non-admins may list refunds only related to them.
+    if current_user.get("user_type") != "admin":
+        # restrict to refunds where requester_id or reported_id matches current user
+        uid = str(current_user.get("user_id"))
+        query["$or"] = [{"requester_id": uid}, {"reported_id": uid}]
 
     docs  = list(refund_collection.find(query).skip(skip).limit(limit).sort("created_at", -1))
     total = refund_collection.count_documents(query)
@@ -141,7 +152,9 @@ def get_refunds(
 # GET /api/refunds/pending
 # ─────────────────────────────────────────────────────────────
 @router.get("/refunds/pending")
-async def list_pending_refunds():
+async def list_pending_refunds(current_user: dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin":
+        raise HTTPException(status_code=403, detail="Admins only")
     docs = list(database.refund_collection.find(
         {"status": "pending"}
     ).sort("created_at", -1))
@@ -165,7 +178,9 @@ async def list_pending_refunds():
 # GET /api/refunds/approved
 # ─────────────────────────────────────────────────────────────
 @router.get("/refunds/approved")
-async def list_approved_refunds():
+async def list_approved_refunds(current_user: dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin":
+        raise HTTPException(status_code=403, detail="Admins only")
     # FIX: include refund_in_progress since that is the approved-but-not-yet-paid state
     docs = list(database.refund_collection.find(
         {"status": {"$in": ["refund_in_progress", "refunded"]}}
@@ -189,7 +204,9 @@ async def list_approved_refunds():
 # GET /api/refunds/rejected
 # ─────────────────────────────────────────────────────────────
 @router.get("/refunds/rejected")
-async def list_rejected_refunds():
+async def list_rejected_refunds(current_user: dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin":
+        raise HTTPException(status_code=403, detail="Admins only")
     docs = list(database.refund_collection.find(
         {"status": {"$in": ["rejected", "declined"]}}
     ).sort("resolved_at", -1))
@@ -212,7 +229,9 @@ async def list_rejected_refunds():
 # GET /api/refunds/in-progress
 # ─────────────────────────────────────────────────────────────
 @router.get("/refunds/in-progress")
-async def list_in_progress_refunds():
+async def list_in_progress_refunds(current_user: dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin":
+        raise HTTPException(status_code=403, detail="Admins only")
     """
     Refunds where admin has set amounts but eSewa disbursement hasn't happened yet.
     These are ready for Pay All processing.
@@ -432,7 +451,7 @@ async def list_in_progress_refunds():
 # POST /api/refunds/pay-all-in-progress
 # ─────────────────────────────────────────────────────────────
 @router.post("/refunds/pay-all-in-progress")
-async def pay_all_in_progress_refunds(sandbox: bool = True):
+async def pay_all_in_progress_refunds(sandbox: bool = True, admin: dict = Depends(require_admin)):
     """
     Process all in-progress refunds.
     sandbox=True: Mock eSewa responses (for testing)
@@ -673,15 +692,15 @@ async def pay_all_in_progress_refunds(sandbox: bool = True):
 
 # ── Kept for compatibility ──
 @router.post("/refunds/bulk-process")
-async def bulk_process_refunds(sandbox: bool = True):
-    return await pay_all_in_progress_refunds(sandbox=sandbox)
+async def bulk_process_refunds(sandbox: bool = True, admin: dict = Depends(require_admin)):
+    return await pay_all_in_progress_refunds(sandbox=sandbox, admin=admin)
 
 
 # ─────────────────────────────────────────────────────────────
 # Existing legacy endpoints
 # ─────────────────────────────────────────────────────────────
 @router.patch("/{refund_id}/approve")
-async def approve_refund(refund_id: str, admin_note: str = ""):
+async def approve_refund(refund_id: str, admin_note: str = "", admin: dict = Depends(require_admin)):
     from ..repository.refundRepo import update_refund_status
     result = await update_refund_status(refund_id, "approved", admin_note)
     if not result:
@@ -690,7 +709,7 @@ async def approve_refund(refund_id: str, admin_note: str = ""):
 
 
 @router.patch("/{refund_id}/reject")
-async def reject_refund(refund_id: str, admin_note: str):
+async def reject_refund(refund_id: str, admin_note: str, admin: dict = Depends(require_admin)):
     from ..repository.refundRepo import update_refund_status
     result = await update_refund_status(refund_id, "rejected", admin_note)
     if not result:
@@ -711,7 +730,7 @@ class RefundUpdateSchema(BaseModel):
 # PATCH /api/refunds/upsert/{task_id}
 # ─────────────────────────────────────────────────────────────
 @router.patch("/refunds/upsert/{task_id}")
-async def upsert_refund(task_id: str, data: RefundUpdateSchema):
+async def upsert_refund(task_id: str, data: RefundUpdateSchema, admin: dict = Depends(require_admin)):
     from pymongo import ReturnDocument
 
     now = datetime.now(timezone.utc)

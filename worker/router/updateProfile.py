@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Depends
+from ..services.auth import get_current_user
 from pydantic import BaseModel
 from typing import Optional
 from bson import ObjectId
@@ -41,7 +42,10 @@ class UpdateBioSchema(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.patch("/update-name")
-async def update_name(data: UpdateNameSchema):
+async def update_name(data: UpdateNameSchema, current_user: dict = Depends(get_current_user)):
+    # Only owner or admin may update name
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(data.customer_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     result = collection.update_one(
         {"_id": to_object_id(data.customer_id)},
         {"$set": {
@@ -55,7 +59,9 @@ async def update_name(data: UpdateNameSchema):
 
 
 @router.patch("/update-address")
-async def update_address(data: UpdateAddressSchema):
+async def update_address(data: UpdateAddressSchema, current_user: dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(data.customer_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     result = collection.update_one(
         {"_id": to_object_id(data.customer_id)},
         {"$set": {"address": data.address.strip()}}
@@ -66,7 +72,9 @@ async def update_address(data: UpdateAddressSchema):
 
 
 @router.patch("/update-dob")
-async def update_dob(data: UpdateDOBSchema):
+async def update_dob(data: UpdateDOBSchema, current_user: dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(data.customer_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     result = collection.update_one(
         {"_id": to_object_id(data.customer_id)},
         {"$set": {"date_of_birth": data.date_of_birth}}
@@ -77,7 +85,9 @@ async def update_dob(data: UpdateDOBSchema):
 
 
 @router.patch("/update-gender")
-async def update_gender(data: UpdateGenderSchema):
+async def update_gender(data: UpdateGenderSchema, current_user: dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(data.customer_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     allowed = {"male", "female", "other", "non-binary", "prefer not to say"}
     if data.gender.lower() not in allowed:
         raise HTTPException(status_code=400, detail="Invalid gender value")
@@ -91,7 +101,9 @@ async def update_gender(data: UpdateGenderSchema):
 
 
 @router.patch("/update-bio")
-async def update_bio(data: UpdateBioSchema):
+async def update_bio(data: UpdateBioSchema, current_user: dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(data.customer_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     if len(data.bio) > 300:
         raise HTTPException(status_code=400, detail="Bio must be under 300 characters")
     result = collection.update_one(
@@ -104,7 +116,11 @@ async def update_bio(data: UpdateBioSchema):
 
 
 @router.patch("/{customer_id}/photo")
-async def update_photo(customer_id: str, file: UploadFile = File(...)):
+async def update_photo(customer_id: str, file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    # Only owner or admin may update photo
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(customer_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     allowed_types = {"image/jpeg", "image/png", "image/webp"}
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail="Only JPEG, PNG or WebP images allowed")
@@ -114,6 +130,10 @@ async def update_photo(customer_id: str, file: UploadFile = File(...)):
         raise HTTPException(status_code=404, detail="Customer not found")
 
     contents = await file.read()  # UploadFile.read() is still async
+    # Enforce a 5MB file size limit
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 5MB)")
+
     upload = cloudinary.uploader.upload(
         contents,
         folder=f"profile_photos/{customer_id}",

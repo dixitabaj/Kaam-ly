@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Form, File, UploadFile, HTTPException, Query
+from fastapi import APIRouter, Form, File, UploadFile, HTTPException, Query, Depends
 from typing import List, Optional
 from ..repository import taskRepo, workerRepo
 import os
@@ -21,6 +21,9 @@ UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 router = APIRouter(tags=["Task"])
+
+# Authentication helpers
+from ..services.auth import get_current_user, require_customer, require_worker, require_admin
 
 # ── Status messages map ───────────────────────────────────────────────────────
 STATUS_MESSAGES = {
@@ -306,7 +309,11 @@ async def create_task(
     serviceDate:     datetime                   = Form(...),
     note:            str                        = Form(...),
     serviceTime:     str                        = Form(...),
+    current_user:    dict                       = Depends(require_customer),
 ):
+    # Enforce: userId must be derived from authenticated customer
+    userId = str(current_user.get("user_id"))
+
     # ── Upload images to Cloudinary ───────────────────────────────────────────
     uploaded_image_urls: list[str] = []
     if taskImg:
@@ -437,19 +444,32 @@ async def create_task(
 
 # ── Get all tasks for a user ──────────────────────────────────────────────────
 @router.get("/tasks/user/{user_id}")
-async def get_tasks_by_user(user_id: str):
+async def get_tasks_by_user(user_id: str, current_user: dict = Depends(get_current_user)):
+    # allow admin or the owner only
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(user_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     tasks = taskRepo.get_tasks_by_user(user_id)
     return {"tasks": tasks}
 
 
 @router.get("/notifications")
-async def get_notifications(userId: str):
+async def get_notifications(userId: str, current_user: dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(userId):
+        raise HTTPException(status_code=403, detail="Forbidden")
     notifs = taskRepo.get_user_notifications(userId)
     return {"notifications": notifs}
 
 
 @router.post("/tasks/{task_id}/assign/{worker_id}")
-async def assign_worker(task_id: str, worker_id: str):
+async def assign_worker(task_id: str, worker_id: str, current_user: dict = Depends(get_current_user)):
+    # Only admin or the customer who created the task may assign a worker
+    task = taskRepo.get_task_by_id(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    is_admin = current_user.get("user_type") == "admin"
+    is_owner = str(current_user.get("user_id")) == str(task.get("userId"))
+    if not (is_admin or is_owner):
+        raise HTTPException(status_code=403, detail="Forbidden")
     success = taskRepo.assign_worker(task_id, worker_id)
     if not success:
         raise HTTPException(status_code=400, detail="Failed to assign worker")
@@ -457,21 +477,34 @@ async def assign_worker(task_id: str, worker_id: str):
 
 
 @router.get("/tasks/worker/{worker_id}")
-async def getTaskByWorkerId(worker_id: str):
+async def getTaskByWorkerId(worker_id: str, current_user: dict = Depends(get_current_user)):
+    # allow admin or the worker themselves
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(worker_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     tasks = taskRepo.get_tasks_by_worker(worker_id)
     return {"tasks": tasks}
 
 
 @router.get("/task/{task_id}")
-async def get_task_by_id(task_id: str):
+async def get_task_by_id(task_id: str, current_user: dict = Depends(get_current_user)):
     task = taskRepo.get_task_by_id(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    # allow admin, owner (customer), or assigned worker
+    is_admin = current_user.get("user_type") == "admin"
+    is_owner = str(current_user.get("user_id")) == str(task.get("userId"))
+    is_worker = str(current_user.get("user_id")) == str(task.get("assignedWorkerId"))
+    if not (is_admin or is_owner or is_worker):
+        raise HTTPException(status_code=403, detail="Forbidden")
     return task
 
 
 @router.get("/tasks/between/{user1}/{user2}")
-def get_tasks_between(user1: str, user2: str):
+def get_tasks_between(user1: str, user2: str, current_user: dict = Depends(get_current_user)):
+    # allow admin or either of the two users
+    uid = str(current_user.get("user_id"))
+    if current_user.get("user_type") != "admin" and uid not in (str(user1), str(user2)):
+        raise HTTPException(status_code=403, detail="Forbidden")
     tasks = taskRepo.get_tasks_by_worker_and_customer(user1, user2)
     if not tasks:
         tasks = taskRepo.get_tasks_by_worker_and_customer(user2, user1)
@@ -479,13 +512,23 @@ def get_tasks_between(user1: str, user2: str):
 
 
 @router.get("/tasks/all")
-async def get_all_tasks():
+async def get_all_tasks(current_user: dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
     tasks = taskRepo.get_all_tasks()
     return {"tasks": tasks}
 
 
 @router.patch("/tasks/{task_id}/offer")
-async def update_task_offer(task_id: str, offer: TaskOfferUpdate):
+async def update_task_offer(task_id: str, offer: TaskOfferUpdate, current_user: dict = Depends(get_current_user)):
+    # Only assigned worker or admin may update an offer
+    task = taskRepo.get_task_by_id(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    is_admin = current_user.get("user_type") == "admin"
+    is_worker = current_user.get("user_type") == "worker" and str(current_user.get("user_id")) == str(task.get("assignedWorkerId"))
+    if not (is_admin or is_worker):
+        raise HTTPException(status_code=403, detail="Forbidden")
     success = taskRepo.update_task_offer(task_id, offer)
     if not success:
         raise HTTPException(status_code=400, detail="Failed to update task offer")
@@ -493,27 +536,43 @@ async def update_task_offer(task_id: str, offer: TaskOfferUpdate):
 
 
 @router.get("/tasks/count")
-async def count_tasks_by_customer():
+async def count_tasks_by_customer(current_user: dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
     count = taskRepo.no_of_task_assigned_by_each_customer()
     return {"task_counts": count}
 
 
 @router.patch("/tasks/auto-cancel-expired")
-async def auto_cancel_expired():
+async def auto_cancel_expired(current_user: dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
     count = taskRepo.auto_cancel_expired_pending_tasks()
     return {"cancelled_count": count}
 
 
 @router.patch("/tasks/auto-cancel-confirmed-unpaid")
-async def auto_cancel_confirmed_unpaid():
+async def auto_cancel_confirmed_unpaid(current_user: dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
     count = taskRepo.auto_cancel_confirmed_unpaid_tasks()
     return {"cancelled_count": count}
 
 
 # ── Update task status ────────────────────────────────────────────────────────
 @router.patch("/task/{task_id}/status")
-async def update_task_status(task_id: str, status_update: StatusUpdate):
+async def update_task_status(task_id: str, status_update: StatusUpdate, current_user: dict = Depends(get_current_user)):
     try:
+        # Authorization: only admin, task owner or assigned worker may change status
+        task = taskRepo.get_task_by_id(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        is_admin = current_user.get("user_type") == "admin"
+        is_owner = str(current_user.get("user_id")) == str(task.get("userId"))
+        is_worker = str(current_user.get("user_id")) == str(task.get("assignedWorkerId"))
+        if not (is_admin or is_owner or is_worker):
+            raise HTTPException(status_code=403, detail="Forbidden")
+
         result = taskRepo.updateTaskStatus(task_id, status_update.status)
         status = status_update.status
 

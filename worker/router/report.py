@@ -3,7 +3,7 @@ from uuid import uuid4
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Form, File, UploadFile, HTTPException, Query
+from fastapi import APIRouter, Form, File, UploadFile, HTTPException, Query, Depends
 from bson import ObjectId, errors as bson_errors
 from ..repository.reportRepo import ReportRepo, _serialize
 from ..config.database import (
@@ -12,6 +12,8 @@ from ..config.database import (
 )
 from .notifications import notify_with_fallback
 from ..services.emailUtil import send_refund_email, send_declined_refund_email
+from ..services.auth import get_current_user, require_admin
+from typing import Dict
 
 router = APIRouter(tags=["reports"])
 reportRepo = ReportRepo(collection_reports)
@@ -49,8 +51,8 @@ def _find_worker(worker_id: str):
 # ─────────────────────────────────────────────────────────────
 @router.post("/reports")
 async def create_report(
-    reporterId:       str                  = Form(...),
-    reporterType:     str                  = Form(...),
+    reporterId:       str                  = Form(None),
+    reporterType:     str                  = Form(None),
     reportedId:       str                  = Form(...),
     reportedType:     str                  = Form(...),
     reason:           str                  = Form(...),
@@ -59,6 +61,7 @@ async def create_report(
     taskId:           Optional[str]        = Form(None),
     requestForRefund: bool                 = Form(False),
     esewaId:          Optional[str]        = Form(None),
+    current_user:     Dict                = Depends(get_current_user),
 ):
     evidence_url = None
 
@@ -82,9 +85,13 @@ async def create_report(
         evidence_url = f"/uploads/reports/{unique_filename}"
 
     # ── 2. Prepare report data ─────────────────────────────────────────────────
+    # Do not trust client-supplied reporter identity — derive from authenticated token
+    reporter_id = str(current_user.get("user_id"))
+    reporter_type = current_user.get("user_type")
+
     data = {
-        "reporterId":       reporterId,
-        "reporterType":     reporterType,
+        "reporterId":       reporter_id,
+        "reporterType":     reporter_type,
         "reportedId":       reportedId,
         "reportedType":     reportedType,
         "reason":           reason,
@@ -195,6 +202,11 @@ async def create_report(
 
     if create_refund_doc:
         worker_payment_method = worker.get("payment_method") if worker else None
+        # requester is the task's customer — double-check it matches authenticated user
+        task_user_id = str(task.get("userId")) if task else None
+        if task_user_id and task_user_id != reporter_id and current_user.get("user_type") != "admin":
+            # Prevent customers from filing refunds on behalf of others
+            raise HTTPException(status_code=403, detail="Not authorized to request refund for this task")
 
         refund_doc = {
             "task_id":                         taskId,
@@ -247,7 +259,9 @@ async def create_report(
 # GET /reports/stats
 # ─────────────────────────────────────────────────────────────
 @router.get("/reports/stats")
-def get_report_stats():
+def get_report_stats(current_user: Dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin":
+        raise HTTPException(status_code=403, detail="Admins only")
     return reportRepo.getStats()
 
 
@@ -255,7 +269,9 @@ def get_report_stats():
 # GET /reports/user/{userId}
 # ─────────────────────────────────────────────────────────────
 @router.get("/reports/user/{userId}")
-def get_reports_by_user(userId: str):
+def get_reports_by_user(userId: str, current_user: Dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(userId):
+        raise HTTPException(status_code=403, detail="Forbidden")
     reports = reportRepo.getReportsByUserId(userId)
     return {
         "reports": reports,
@@ -267,7 +283,9 @@ def get_reports_by_user(userId: str):
 # GET /reports/reported/{userId}
 # ─────────────────────────────────────────────────────────────
 @router.get("/reports/reported/{userId}")
-def get_reports_against_user(userId: str):
+def get_reports_against_user(userId: str, current_user: Dict = Depends(get_current_user)):
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(userId):
+        raise HTTPException(status_code=403, detail="Forbidden")
     reports    = reportRepo.col.find({"reportedId": userId}).sort("createdAt", -1)
     serialized = [_serialize(r) for r in reports]
 
@@ -305,7 +323,11 @@ def get_reports(
     reporterType: str = Query("all"),
     reportedType: str = Query("all"),
     search:       str = Query(""),
+    current_user: Dict = Depends(get_current_user),
 ):
+    if current_user.get("user_type") != "admin":
+        raise HTTPException(status_code=403, detail="Admins only")
+
     return reportRepo.getReports(
         skip=skip,
         limit=limit,
@@ -326,6 +348,7 @@ async def update_status(
     adminNote:            str             = Form(""),
     customerRefundAmount: Optional[float] = Form(None),
     workerRefundAmount:   Optional[float] = Form(None),
+    admin: Dict = Depends(require_admin),
 ):
     VALID_STATUS = {"resolved", "declined"}
 
@@ -517,10 +540,14 @@ async def update_status(
 # GET /reports/{id}           ← Catch-all — keep at the bottom
 # ─────────────────────────────────────────────────────────────
 @router.get("/reports/{id}")
-def get_report_by_id(id: str):
+def get_report_by_id(id: str, current_user: Dict = Depends(get_current_user)):
     report = reportRepo.getReportById(id)
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
+    # allow admin, reporter, or reported user
+    uid = str(current_user.get("user_id"))
+    if current_user.get("user_type") != "admin" and uid not in (str(report.get("reporterId")), str(report.get("reportedId"))):
+        raise HTTPException(status_code=403, detail="Forbidden")
     return report
 
 
@@ -528,7 +555,7 @@ def get_report_by_id(id: str):
 # DELETE /reports/{id}
 # ─────────────────────────────────────────────────────────────
 @router.delete("/reports/{id}")
-def delete_report(id: str):
+def delete_report(id: str, admin: Dict = Depends(require_admin)):
     try:
         obj_id = ObjectId(id)
     except bson_errors.InvalidId:

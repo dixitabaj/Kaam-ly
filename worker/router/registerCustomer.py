@@ -1,5 +1,6 @@
 # routers/registerCustomer.py
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from ..services.auth import get_current_user, require_admin
 from datetime import timedelta
 from ..schemas import schemas
 from ..schemas.schemas import GoogleLogin, GoogleLoginResponse, StatusUpdate
@@ -14,11 +15,14 @@ def addCustomer(request: schemas.CustomerSchema):
     return customerRepo.addCustomer(request)
 
 @router.get('/customer/all', tags=['customer'])
-def showCustomer():
+def showCustomer(current_user: dict = Depends(require_admin)):
     return customerRepo.showCustomer()
 
 @router.get('/customer/{id}', tags=['customer'])
-def showCustomerById(id: str):
+def showCustomerById(id: str, current_user: dict = Depends(get_current_user)):
+    # allow admin or the owner
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     return customerRepo.showCustomerByID(id)
 
 @router.post("/google-login")
@@ -26,21 +30,25 @@ def google_login(data: GoogleLogin):
     return GoogleLoginRepo(data)
 
 @router.delete("/customer/{id}")
-async def delete_customer(id: str):
+async def delete_customer(id: str, current_user: dict = Depends(get_current_user)):
+    # allow admin or the owner
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(id):
+        raise HTTPException(status_code=403, detail="Forbidden")
     success = customerRepo.deleteCustomerByID(id)
     if not success:
         raise HTTPException(status_code=404, detail="Customer not found")
     return {"message": "Customer deleted successfully"}
 
 @router.patch("/customer/{id}/status")
-async def update_customer_status(id: str, body: StatusUpdate):
+async def update_customer_status(id: str, body: StatusUpdate, current_user: dict = Depends(require_admin)):
+    # admin-only
     success = customerRepo.updateCustomerByID(id, body.status)
     if not success:
         raise HTTPException(status_code=404, detail="Customer not found")
     return {"message": "Status updated successfully"}
 
 @router.patch('/customer/{id}/phone')
-def update_phone(id: str, body: dict):
+def update_phone(id: str, body: dict, current_user: dict = Depends(get_current_user)):
     phone = body.get("phoneNo")
     if not phone:
         raise HTTPException(status_code=400, detail="Phone number is required")
@@ -60,6 +68,10 @@ def update_phone(id: str, body: dict):
     existing_worker = collection_worker.find_one({"phoneNo": phone})
     if existing_worker:
         raise HTTPException(status_code=400, detail="This phone number is already registered")
+
+    # only owner or admin may update phone
+    if current_user.get("user_type") != "admin" and str(current_user.get("user_id")) != str(id):
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     success = customerRepo.update_phone(id, body)
     if not success:

@@ -27,7 +27,8 @@ from worker.config.database import (
     collection_worker,
     collection_payment,
 )
-from ..services.OAuth2 import get_current_user
+from ..services.auth import get_current_user, require_admin
+from typing import Dict
 
 router = APIRouter(tags=["payment"])
 
@@ -111,9 +112,12 @@ def save_payment(
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.post("/task/{task_id}/pay/esewa")
-def pay_via_esewa(task_id: str):
+def pay_via_esewa(task_id: str, current_user: Dict = Depends(get_current_user)):
     """Initiate eSewa payment — returns form data for frontend to submit."""
     task = get_task_or_404(task_id)
+    # Only the customer who owns the task can initiate payment
+    if str(current_user.get("user_id")) != str(task.get("userId")) and current_user.get("user_type") != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to pay for this task")
 
     if task.get("payment_status") == "paid":
         raise HTTPException(status_code=400, detail="Task already paid")
@@ -237,7 +241,7 @@ async def verify_esewa_redirect(
 
 
 @router.post("/payment/verify/esewa")
-def verify_esewa_manual(body: VerifyEsewa):
+def verify_esewa_manual(body: VerifyEsewa, admin: Dict = Depends(require_admin)):
     """Manual eSewa verification for Swagger/Postman testing."""
     resp = requests.get(
         f"{ESEWA_BASE_URL}/api/epay/transaction/status/",
@@ -283,9 +287,12 @@ def verify_esewa_manual(body: VerifyEsewa):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.post("/task/{task_id}/pay/khalti")
-def pay_via_khalti(task_id: str):
+def pay_via_khalti(task_id: str, current_user: Dict = Depends(get_current_user)):
     """Initiate Khalti payment — returns pidx for frontend."""
     task = get_task_or_404(task_id)
+    # Only the customer who owns the task can initiate payment
+    if str(current_user.get("user_id")) != str(task.get("userId")) and current_user.get("user_type") != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to pay for this task")
 
     if task.get("payment_status") == "paid":
         raise HTTPException(status_code=400, detail="Task already paid")
@@ -522,8 +529,13 @@ def release_to_worker(
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/payments/task/{task_id}")
-def get_task_payments(task_id: str):
+def get_task_payments(task_id: str, current_user: Dict = Depends(get_current_user)):
     """Get all payment records for a specific task."""
+    task = get_task_or_404(task_id)
+    # Only admin or the task owner may view payment records
+    if str(current_user.get("user_id")) != str(task.get("userId")) and current_user.get("user_type") != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     payments = list(collection_payment.find({"task_id": task_id}).sort("created_at", 1))
     result   = []
     for p in payments:
